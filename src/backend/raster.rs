@@ -71,7 +71,7 @@ impl RasterBackend {
         for elem in &scene.elements {
             match elem {
                 Primitive::Circle { cx, cy, r, fill } => {
-                    if let Some(color) = parse_color(fill) {
+                    if let Some(color) = color_to_skia(fill) {
                         let mut paint = Paint::default();
                         paint.set_color(color);
                         paint.anti_alias = true;
@@ -95,7 +95,7 @@ impl RasterBackend {
                     if let Some(rect) =
                         Rect::from_xywh(*x as f32, *y as f32, *width as f32, *height as f32)
                     {
-                        if let Some(mut color) = parse_color(fill) {
+                        if let Some(mut color) = color_to_skia(fill) {
                             if let Some(op) = opacity {
                                 let a = (*op as f32).clamp(0.0, 1.0) * color.alpha();
                                 color = Color::from_rgba(
@@ -107,7 +107,7 @@ impl RasterBackend {
                             pixmap.fill_rect(rect, &paint, transform, None);
                         }
                         if let Some(ref stroke_color) = stroke {
-                            if let Some(color) = parse_color(stroke_color) {
+                            if let Some(color) = color_to_skia(stroke_color) {
                                 let mut paint = Paint::default();
                                 paint.set_color(color);
                                 paint.anti_alias = true;
@@ -138,7 +138,7 @@ impl RasterBackend {
                     stroke_width,
                     ..
                 } => {
-                    if let Some(color) = parse_color(stroke) {
+                    if let Some(color) = color_to_skia(stroke) {
                         let mut paint = Paint::default();
                         paint.set_color(color);
                         paint.anti_alias = true;
@@ -155,7 +155,7 @@ impl RasterBackend {
                 Primitive::Path(pd) => {
                     if let Some(path) = parse_svg_path(&pd.d) {
                         if let Some(ref fill_str) = pd.fill {
-                            if let Some(mut color) = parse_color(fill_str) {
+                            if let Some(mut color) = color_to_skia(fill_str) {
                                 if let Some(op) = pd.opacity {
                                     let a = (op as f32).clamp(0.0, 1.0) * color.alpha();
                                     color = Color::from_rgba(
@@ -174,8 +174,8 @@ impl RasterBackend {
                                 );
                             }
                         }
-                        if pd.stroke != "none" {
-                            if let Some(color) = parse_color(&pd.stroke) {
+                        if !matches!(pd.stroke, crate::render::color::Color::None) {
+                            if let Some(color) = color_to_skia(&pd.stroke) {
                                 let mut paint = Paint::default();
                                 paint.set_color(color);
                                 paint.anti_alias = true;
@@ -194,6 +194,35 @@ impl RasterBackend {
                 }
                 Primitive::Text { .. } => {
                     text_primitives.push(elem);
+                }
+                Primitive::CircleBatch { cx, cy, r, fill } => {
+                    if let Some(color) = color_to_skia(fill) {
+                        let mut paint = Paint::default();
+                        paint.set_color(color);
+                        paint.anti_alias = true;
+                        for i in 0..cx.len() {
+                            if let Some(path) =
+                                PathBuilder::from_circle(cx[i] as f32, cy[i] as f32, *r as f32)
+                            {
+                                pixmap.fill_path(
+                                    &path, &paint, FillRule::Winding, transform, None,
+                                );
+                            }
+                        }
+                    }
+                }
+                Primitive::RectBatch { x, y, w, h, fills } => {
+                    let mut paint = Paint::default();
+                    for i in 0..x.len() {
+                        if let Some(rect) =
+                            Rect::from_xywh(x[i] as f32, y[i] as f32, w[i] as f32, h[i] as f32)
+                        {
+                            if let Some(color) = color_to_skia(&fills[i]) {
+                                paint.set_color(color);
+                                pixmap.fill_rect(rect, &paint, transform, None);
+                            }
+                        }
+                    }
                 }
                 Primitive::GroupStart { .. } | Primitive::GroupEnd => {}
             }
@@ -277,6 +306,15 @@ fn write_escaped(buf: &mut String, s: &str) {
             b'"' => buf.push_str("&quot;"),
             _ => buf.push(b as char),
         }
+    }
+}
+
+/// Convert a kuva Color to a tiny_skia Color without string round-tripping.
+fn color_to_skia(c: &crate::render::color::Color) -> Option<Color> {
+    match c {
+        crate::render::color::Color::Rgb(r, g, b) => Some(Color::from_rgba8(*r, *g, *b, 255)),
+        crate::render::color::Color::None => None,
+        crate::render::color::Color::Css(s) => parse_color(s),
     }
 }
 
