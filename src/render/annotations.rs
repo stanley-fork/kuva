@@ -272,13 +272,13 @@ pub fn add_text_annotations(annotations: &[TextAnnotation], scene: &mut Scene, c
                     x2: tip_x,
                     y2: tip_y,
                     stroke: Color::from(&ann.color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
 
                 // Draw arrowhead at the padded tip
-                let arrow_len = 8.0;
-                let arrow_half_w = 4.0;
+                let arrow_len = computed.annotation_arrow_len;
+                let arrow_half_w = computed.annotation_arrow_half_w;
 
                 let base_x = tip_x - ux * arrow_len;
                 let base_y = tip_y - uy * arrow_len;
@@ -291,7 +291,7 @@ pub fn add_text_annotations(annotations: &[TextAnnotation], scene: &mut Scene, c
                     d: format!("M{tip_x},{tip_y} L{left_x},{left_y} L{right_x},{right_y} Z"),
                     fill: Some(Color::from(&ann.color)),
                     stroke: Color::from(&ann.color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     opacity: None,
                     stroke_dasharray: None,
                 })));

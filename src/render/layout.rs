@@ -191,6 +191,10 @@ pub struct Layout {
     /// Pixel offset applied to the y2-axis label after auto-positioning: `(dx, dy)`.
     /// Positive dx shifts right (further from the right axis); positive dy shifts down.
     pub y2_label_offset: (f64, f64),
+    /// Uniform scale factor for all plot chrome (font sizes, margins, tick marks,
+    /// legend geometry, arrow sizes). Canvas `width`/`height` are not affected.
+    /// Default: 1.0. Set via `with_scale(f)`.
+    pub scale: f64,
 }
 
 impl Layout {
@@ -258,6 +262,7 @@ impl Layout {
             x_label_offset: (0.0, 0.0),
             y_label_offset: (0.0, 0.0),
             y2_label_offset: (0.0, 0.0),
+            scale: 1.0,
         }
     }
 
@@ -754,6 +759,25 @@ impl Layout {
         self
     }
 
+    /// Set a uniform scale factor for all plot chrome.
+    ///
+    /// Multiplies font sizes, margins, tick mark lengths, legend padding and swatch
+    /// geometry, and annotation arrow sizes.  Canvas `width`/`height` are **not**
+    /// scaled — the user controls those independently (or relies on auto-sizing).
+    ///
+    /// Useful for producing large SVG exports without manually adjusting every size
+    /// parameter.  For raster PNG output at higher DPI, use `PngBackend`'s DPI scale
+    /// instead.
+    ///
+    /// `TextAnnotation::font_size` and `ReferenceLine::stroke_width` are user-set
+    /// and are **not** auto-scaled; set them explicitly if needed.
+    ///
+    /// Clamped to a minimum of 0.1 to prevent degenerate sub-pixel rendering.
+    pub fn with_scale(mut self, f: f64) -> Self {
+        self.scale = f.max(0.1);
+        self
+    }
+
     pub fn with_log_x(mut self) -> Self {
         self.log_x = true;
         self
@@ -1027,6 +1051,23 @@ pub struct ComputedLayout {
     /// Common bin width when all histograms share the same bin size.
     /// When set, x-axis ticks are generated to fall exactly on bin edges.
     pub x_bin_width: Option<f64>,
+    /// Scaled pixel constants for rendering, derived from `layout.scale`.
+    /// Avoids threading the scale factor through every render function.
+    pub tick_mark_major: f64,       // 5.0 * scale — major tick mark extension
+    pub tick_mark_minor: f64,       // 3.0 * scale — minor tick mark extension
+    pub tick_label_margin: f64,     // 8.0 * scale — gap from axis line to tick label text
+    pub axis_stroke_width: f64,     // 1.0 * scale — axis, grid, and tick stroke width
+    pub legend_padding: f64,        // 10.0 * scale — legend box internal padding
+    pub legend_inset: f64,          // 8.0 * scale — Inside legend inset from plot edge
+    pub legend_swatch_size: f64,    // 12.0 * scale — Rect/Line swatch length and height
+    pub legend_swatch_x: f64,       // 5.0 * scale — swatch left inset within legend box
+    pub legend_text_x: f64,         // 25.0 * scale — label text left inset within legend box
+    pub legend_swatch_r: f64,       // 5.0 * scale — Circle swatch radius
+    pub legend_swatch_half: f64,    // 8.0 * scale — CircleSize cap radius
+    pub annotation_arrow_len: f64,  // 8.0 * scale — annotation arrowhead length
+    pub annotation_arrow_half_w: f64, // 4.0 * scale — annotation arrowhead half-width
+    pub colorbar_bar_width: f64,    // 20.0 * scale — colorbar bar rect width
+    pub colorbar_x_inset: f64,      // 70.0 * scale — colorbar position from canvas right
 
     // Pre-computed linear transform coefficients for map_x / map_y.
     // map_x(x) = x_offset + x * x_scale  (linear)
@@ -1039,22 +1080,23 @@ pub struct ComputedLayout {
 
 impl ComputedLayout {
     pub fn from_layout(layout: &Layout) -> Self {
-        let title_size = layout.title_size as f64;
-        let label_size = layout.label_size as f64;
-        let tick_size = layout.tick_size as f64;
+        let s = layout.scale.max(0.1);
+        let title_size = layout.title_size as f64 * s;
+        let label_size = layout.label_size as f64 * s;
+        let tick_size = layout.tick_size as f64 * s;
 
         // Top: title height + padding, or small padding if no title
         let mut margin_top = if layout.title.is_some() {
-            title_size + label_size + 12.0
+            title_size + label_size + 12.0 * s
         } else {
-            10.0
+            10.0 * s
         };
         // Bottom: tick mark (5) + gap (5) + tick label + gap (5) + axis label + padding
         // When ticks are suppressed AND no rotation is requested (e.g. pure numeric axes),
         // keep only minimal space. When rotation IS set (e.g. Manhattan chromosome labels drawn
         // by the renderer itself), compute space for the rotated custom labels.
         let mut margin_bottom = if layout.suppress_x_ticks && layout.x_tick_rotate.is_none() {
-            tick_size + 15.0
+            tick_size + 15.0 * s
         } else if let Some(angle) = layout.x_tick_rotate {
             // Rotated labels extend below their anchor point by label_px * sin(|angle|).
             let char_w = tick_size * 0.6;
@@ -1063,10 +1105,10 @@ impl ComputedLayout {
                 .unwrap_or(10) as f64;
             let label_px = max_chars * char_w;
             let angle_rad = angle.abs() * std::f64::consts::PI / 180.0;
-            let needed = label_px * angle_rad.sin() + tick_size + 15.0;
-            needed.max(tick_size + label_size + 25.0)
+            let needed = label_px * angle_rad.sin() + tick_size + 15.0 * s;
+            needed.max(tick_size + label_size + 25.0 * s)
         } else {
-            tick_size + label_size + 25.0
+            tick_size + label_size + 25.0 * s
         };
         // Left: axis label + y tick label text width + gaps.
         // Compute the actual maximum tick label pixel width from real tick strings so the
@@ -1107,14 +1149,14 @@ impl ComputedLayout {
             (max_chars * tick_size * 0.6).max(tick_size * 2.0)
         };
         let mut margin_left = if layout.suppress_y_ticks {
-            10.0
+            10.0 * s
         } else {
-            label_size + y_tick_label_px + 21.0
+            label_size + y_tick_label_px + 21.0 * s
         };
         let mut margin_right = label_size;
 
         let y2_axis_width = if layout.y2_range.is_some() && !layout.suppress_y2_ticks {
-            label_size + tick_size * 3.0 + 15.0
+            label_size + tick_size * 3.0 + 15.0 * s
         } else {
             0.0
         };
@@ -1122,24 +1164,25 @@ impl ComputedLayout {
 
         if layout.show_legend {
             // Estimate legend height for OutsideTop/Bottom margin adjustments.
+            let legend_line_h = 18.0 * s;
             let legend_h_estimate = if let Some(ref groups) = layout.legend_groups {
                 let n = groups.iter().map(|g| g.entries.len() + 1).sum::<usize>();
-                n as f64 * 18.0 + 20.0
+                n as f64 * legend_line_h + 20.0 * s
             } else if let Some(ref entries) = layout.legend_entries {
-                entries.len() as f64 * 18.0 + 20.0
+                entries.len() as f64 * legend_line_h + 20.0 * s
             } else {
-                80.0 // conservative default for auto-collected entries
+                80.0 * s // conservative default for auto-collected entries
             };
             match layout.legend_position {
                 LegendPosition::OutsideRightTop
                 | LegendPosition::OutsideRightMiddle
                 | LegendPosition::OutsideRightBottom => {
-                    margin_right += layout.legend_width;
+                    margin_right += layout.legend_width * s;
                 }
                 LegendPosition::OutsideLeftTop
                 | LegendPosition::OutsideLeftMiddle
                 | LegendPosition::OutsideLeftBottom => {
-                    margin_left += layout.legend_width;
+                    margin_left += layout.legend_width * s;
                 }
                 LegendPosition::OutsideTopLeft
                 | LegendPosition::OutsideTopCenter
@@ -1156,7 +1199,7 @@ impl ComputedLayout {
             }
         }
         if layout.show_colorbar {
-            margin_right += 85.0; // 20px bar + 50px labels + 15px gap
+            margin_right += 85.0 * s; // 20px bar + 50px labels + 15px gap
         }
         let plot_width = 600.0;
         let plot_height = 450.0;
@@ -1218,10 +1261,10 @@ impl ComputedLayout {
         // every legend entry maps to a distinct row without gaps.
         let legend_line_height = if let Some(tr) = layout.term_rows {
             let cell_h = height / tr as f64;
-            let rows_per_entry = (18.0_f64 / cell_h).round().max(1.0);
+            let rows_per_entry = ((18.0 * s) / cell_h).round().max(1.0);
             rows_per_entry * cell_h
         } else {
-            18.0
+            18.0 * s
         };
 
         let mut s = Self {
@@ -1236,18 +1279,18 @@ impl ComputedLayout {
             x_ticks,
             y_ticks,
             legend_position: layout.legend_position,
-            legend_width: layout.legend_width,
-            legend_height_override: layout.legend_height,
+            legend_width: layout.legend_width * s,
+            legend_height_override: layout.legend_height.map(|h| h * s),
             y_tick_label_px,
             log_x: layout.log_x,
             log_y: layout.log_y,
             font_family: layout.font_family.clone()
                 .or(layout.theme.font_family.clone())
                 .or(Some(DEFAULT_FONT_FAMILY.to_string())),
-            title_size: layout.title_size,
-            label_size: layout.label_size,
-            tick_size: layout.tick_size,
-            body_size: layout.body_size,
+            title_size: (layout.title_size as f64 * s).round().max(1.0) as u32,
+            label_size: (layout.label_size as f64 * s).round().max(1.0) as u32,
+            tick_size:  (layout.tick_size  as f64 * s).round().max(1.0) as u32,
+            body_size:  (layout.body_size  as f64 * s).round().max(1.0) as u32,
             theme: layout.theme.clone(),
             x_tick_format: layout.x_tick_format.clone(),
             y_tick_format: layout.y_tick_format.clone(),
@@ -1262,6 +1305,21 @@ impl ComputedLayout {
             minor_ticks: layout.minor_ticks,
             show_minor_grid: layout.show_minor_grid,
             x_bin_width: layout.x_bin_width,
+            tick_mark_major: 5.0 * s,
+            tick_mark_minor: 3.0 * s,
+            tick_label_margin: 8.0 * s,
+            axis_stroke_width: s,
+            legend_padding: 10.0 * s,
+            legend_inset: 8.0 * s,
+            legend_swatch_size: 12.0 * s,
+            legend_swatch_x: 5.0 * s,
+            legend_text_x: 25.0 * s,
+            legend_swatch_r: 5.0 * s,
+            legend_swatch_half: 8.0 * s,
+            annotation_arrow_len: 8.0 * s,
+            annotation_arrow_half_w: 4.0 * s,
+            colorbar_bar_width: 20.0 * s,
+            colorbar_x_inset: 70.0 * s,
             x_scale: 0.0,
             x_offset: 0.0,
             y_scale: 0.0,

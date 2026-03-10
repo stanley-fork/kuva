@@ -63,6 +63,11 @@ pub struct BaseArgs {
     /// Override terminal height in rows (default: $LINES or 24).
     #[arg(long, requires = "terminal", help_heading = "Terminal")]
     pub term_height: Option<u16>,
+
+    /// Uniform scale factor for all plot chrome: fonts, margins, tick marks, legend geometry.
+    /// Canvas size is unchanged. Values > 1.0 make everything larger. Default: 1.0.
+    #[arg(long)]
+    pub scale: Option<f64>,
 }
 
 #[derive(Args, Debug)]
@@ -178,6 +183,9 @@ pub fn apply_base_args(mut layout: Layout, args: &BaseArgs) -> Layout {
         if let Some(pal) = colourblind_palette(condition) {
             layout = layout.with_palette(pal);
         }
+    }
+    if let Some(f) = args.scale {
+        layout = layout.with_scale(f);
     }
     layout
 }

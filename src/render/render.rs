@@ -1561,13 +1561,13 @@ fn add_waterfall(waterfall: &WaterfallPlot, scene: &mut Scene, computed: &Comput
 }
 
 fn render_legend_entry(entry: &LegendEntry, scene: &mut Scene, legend_x: f64, cur_y: f64, computed: &ComputedLayout) {
-    // Swatch center: rect top is cur_y - 1, height 12 → center at cur_y + 5.
+    // Swatch center: rect top is cur_y - 1, height swatch_size → center at cur_y + swatch_size/2 - 1.
     // Text baseline must be placed so the cap midpoint (baseline - body_size * 0.35)
-    // lands at cur_y + 5.  All other swatches center on the same point.
-    let swatch_cy = cur_y + 5.0;
+    // lands at swatch_cy.  All other swatches center on the same point.
+    let swatch_cy = cur_y + computed.legend_swatch_size / 2.0 - 1.0;
     let text_baseline = swatch_cy + computed.body_size as f64 * 0.35;
     scene.add(Primitive::Text {
-        x: legend_x + 25.0,
+        x: legend_x + computed.legend_text_x,
         y: text_baseline,
         content: entry.label.clone(),
         anchor: TextAnchor::Start,
@@ -1577,38 +1577,37 @@ fn render_legend_entry(entry: &LegendEntry, scene: &mut Scene, legend_x: f64, cu
     });
     match entry.shape {
         LegendShape::Rect => scene.add(Primitive::Rect {
-            x: legend_x + 5.0,
-            y: cur_y - 1.0,
-            width: 12.0,
-            height: 12.0,
+            x: legend_x + computed.legend_swatch_x,
+            y: cur_y - computed.axis_stroke_width,
+            width: computed.legend_swatch_size,
+            height: computed.legend_swatch_size,
             fill: Color::from(&entry.color),
             stroke: None,
             stroke_width: None,
             opacity: None,
         }),
         LegendShape::Line => scene.add(Primitive::Line {
-            x1: legend_x + 5.0,
+            x1: legend_x + computed.legend_swatch_x,
             y1: swatch_cy,
-            x2: legend_x + 5.0 + 12.0,
+            x2: legend_x + computed.legend_swatch_x + computed.legend_swatch_size,
             y2: swatch_cy,
             stroke: Color::from(&entry.color),
-            stroke_width: 2.0,
+            stroke_width: computed.axis_stroke_width * 2.0,
             stroke_dasharray: entry.dasharray.clone(),
         }),
         LegendShape::Circle => scene.add(Primitive::Circle {
-            cx: legend_x + 5.0 + 6.0,
+            cx: legend_x + computed.legend_swatch_x + computed.legend_swatch_r,
             cy: swatch_cy,
-            r: 5.0,
+            r: computed.legend_swatch_r,
             fill: Color::from(&entry.color),
         }),
         LegendShape::Marker(marker) => {
-            draw_marker(scene, marker, legend_x + 5.0 + 6.0, swatch_cy, 5.0, &entry.color);
+            draw_marker(scene, marker, legend_x + computed.legend_swatch_x + computed.legend_swatch_r, swatch_cy, computed.legend_swatch_r, &entry.color);
         }
         LegendShape::CircleSize(r) => {
-            let swatch_half = 8.0;
-            let draw_r = r.min(swatch_half);
+            let draw_r = r.min(computed.legend_swatch_half);
             scene.add(Primitive::Circle {
-                cx: legend_x + 5.0 + 6.0,
+                cx: legend_x + computed.legend_swatch_x + computed.legend_swatch_r,
                 cy: swatch_cy,
                 r: draw_r,
                 fill: Color::from(&entry.color),
@@ -1621,7 +1620,7 @@ fn add_legend(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout) {
     let theme = &computed.theme;
 
     let legend_width = computed.legend_width;
-    let legend_padding = 10.0;
+    let legend_padding = computed.legend_padding;
     let line_height = computed.legend_line_height;
 
     // Height depends on groups (each group adds a title row) + optional top title.
@@ -1648,7 +1647,7 @@ fn add_legend(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout) {
     // Right-align the left legend flush with the Y axis (same ~5px gap as OutsideRight).
     // Box right edge = left_x - legend_padding + legend_width = plot_left - 5.
     let left_x      = plot_left - legend_width;
-    let inset       = 8.0;
+    let inset       = computed.legend_inset;
 
     let (legend_x, legend_y) = match computed.legend_position {
         // Inside (overlay, inset from axes).
@@ -1705,7 +1704,7 @@ fn add_legend(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout) {
             height: legend_height,
             fill: "none".into(),
             stroke: Some(Color::from(&theme.legend_border)),
-            stroke_width: Some(1.0),
+            stroke_width: Some(computed.axis_stroke_width),
             opacity: None,
         });
     }
@@ -1756,9 +1755,9 @@ fn add_legend(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout) {
 
 fn add_colorbar(info: &ColorBarInfo, scene: &mut Scene, computed: &ComputedLayout) {
     let theme = &computed.theme;
-    let bar_width = 20.0;
+    let bar_width = computed.colorbar_bar_width;
     let bar_height = computed.plot_height() * 0.8;
-    let bar_x = computed.width - 70.0; // rightmost area
+    let bar_x = computed.width - computed.colorbar_x_inset; // rightmost area
     let bar_y = computed.margin_top + computed.plot_height() * 0.1; // vertically centered
 
     let num_slices = 50;
@@ -1791,7 +1790,7 @@ fn add_colorbar(info: &ColorBarInfo, scene: &mut Scene, computed: &ComputedLayou
         height: bar_height,
         fill: "none".into(),
         stroke: Some(Color::from(&theme.colorbar_border)),
-        stroke_width: Some(1.0),
+        stroke_width: Some(computed.axis_stroke_width),
         opacity: None,
     });
 
@@ -1809,16 +1808,16 @@ fn add_colorbar(info: &ColorBarInfo, scene: &mut Scene, computed: &ComputedLayou
         scene.add(Primitive::Line {
             x1: bar_x + bar_width,
             y1: y,
-            x2: bar_x + bar_width + 4.0,
+            x2: bar_x + bar_width + computed.tick_mark_major * 0.8,
             y2: y,
             stroke: Color::from(&theme.colorbar_border),
-            stroke_width: 1.0,
+            stroke_width: computed.axis_stroke_width,
             stroke_dasharray: None,
         });
 
         // tick label
         scene.add(Primitive::Text {
-            x: bar_x + bar_width + 6.0,
+            x: bar_x + bar_width + computed.tick_mark_major,
             y: y + 4.0,
             content: format!("{:.1}", tick),
             size: computed.tick_size,
@@ -2500,7 +2499,7 @@ fn add_dot_stacked_legends(
     let legend_x = computed.width - computed.margin_right + computed.y2_axis_width + 10.0;
     let legend_width = computed.legend_width;
     let line_height = computed.legend_line_height;
-    let legend_padding = 10.0;
+    let legend_padding = computed.legend_padding;
 
     // --- Size legend (top) ---
     // Title text sits above the box; the box starts below the title baseline
@@ -2529,7 +2528,7 @@ fn add_dot_stacked_legends(
         height: size_legend_height,
         fill: "none".into(),
         stroke: Some(Color::from(&theme.legend_border)),
-        stroke_width: Some(1.0),
+        stroke_width: Some(computed.axis_stroke_width),
         opacity: None,
     });
     // Title drawn after the rects so it paints on top of them
@@ -2545,10 +2544,10 @@ fn add_dot_stacked_legends(
 
     let mut legend_y = box_top;
     for entry in size_entries {
-        let swatch_cy = legend_y + 5.0;
+        let swatch_cy = legend_y + computed.legend_swatch_size / 2.0 - 1.0;
         let text_baseline = swatch_cy + computed.body_size as f64 * 0.35;
         scene.add(Primitive::Text {
-            x: legend_x + 25.0,
+            x: legend_x + computed.legend_text_x,
             y: text_baseline,
             content: entry.label.clone(),
             size: computed.body_size,
@@ -2558,9 +2557,9 @@ fn add_dot_stacked_legends(
         });
         if let LegendShape::CircleSize(r) = entry.shape {
             scene.add(Primitive::Circle {
-                cx: legend_x + 5.0 + 6.0,
+                cx: legend_x + computed.legend_swatch_x + computed.legend_swatch_r,
                 cy: swatch_cy,
-                r: r.min(8.0),
+                r: r.min(computed.legend_swatch_half),
                 fill: Color::from(&entry.color),
             });
         }
@@ -2570,7 +2569,7 @@ fn add_dot_stacked_legends(
     // --- Colorbar (bottom) ---
     let gap = 15.0;
     let bar_x = legend_x;
-    let bar_width = 20.0;
+    let bar_width = computed.colorbar_bar_width;
     let colorbar_top = box_top - legend_padding + size_legend_height + gap;
 
     // Colorbar label/title
@@ -2616,7 +2615,7 @@ fn add_dot_stacked_legends(
         height: bar_height,
         fill: "none".into(),
         stroke: Some(Color::from(&theme.colorbar_border)),
-        stroke_width: Some(1.0),
+        stroke_width: Some(computed.axis_stroke_width),
         opacity: None,
     });
 
@@ -2630,14 +2629,14 @@ fn add_dot_stacked_legends(
         scene.add(Primitive::Line {
             x1: bar_x + bar_width,
             y1: y,
-            x2: bar_x + bar_width + 4.0,
+            x2: bar_x + bar_width + computed.tick_mark_major * 0.8,
             y2: y,
             stroke: Color::from(&theme.colorbar_border),
-            stroke_width: 1.0,
+            stroke_width: computed.axis_stroke_width,
             stroke_dasharray: None,
         });
         scene.add(Primitive::Text {
-            x: bar_x + bar_width + 6.0,
+            x: bar_x + bar_width + computed.tick_mark_major,
             y: y + 4.0,
             content: format!("{:.1}", tick),
             size: computed.tick_size,

@@ -20,7 +20,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
         x2: computed.width - computed.margin_right,
         y2: computed.height - computed.margin_bottom,
         stroke: Color::from(&theme.axis_color),
-        stroke_width: 1.0,
+        stroke_width: computed.axis_stroke_width,
         stroke_dasharray: None,
     });
 
@@ -31,7 +31,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
         x2: computed.margin_left,
         y2: computed.height - computed.margin_bottom,
         stroke: Color::from(&theme.axis_color),
-        stroke_width: 1.0,
+        stroke_width: computed.axis_stroke_width,
         stroke_dasharray: None,
     });
 
@@ -70,7 +70,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     x1: x, y1: computed.margin_top,
                     x2: x, y2: computed.height - computed.margin_bottom,
                     stroke: Color::from(&theme.grid_color),
-                    stroke_width: 0.5,
+                    stroke_width: computed.axis_stroke_width * 0.5,
                     stroke_dasharray: None,
                 });
             }
@@ -82,7 +82,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     x1: computed.margin_left, y1: y,
                     x2: computed.width - computed.margin_right, y2: y,
                     stroke: Color::from(&theme.grid_color),
-                    stroke_width: 0.5,
+                    stroke_width: computed.axis_stroke_width * 0.5,
                     stroke_dasharray: None,
                 });
             }
@@ -104,7 +104,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     x2: x,
                     y2: computed.height - computed.margin_bottom,
                     stroke: Color::from(&theme.grid_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
             }
@@ -120,7 +120,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     x2: computed.width - computed.margin_right,
                     y2: y,
                     stroke: Color::from(&theme.grid_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
             }
@@ -135,7 +135,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                 let y_pos = computed.map_y(y_val);
 
                 scene.add(Primitive::Text {
-                    x: computed.margin_left - 10.0,
+                    x: computed.margin_left - computed.tick_label_margin,
                     y: y_pos + computed.tick_size as f64 * 0.35,
                     content: label.clone(),
                     size: computed.tick_size,
@@ -145,12 +145,12 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                 });
 
                 scene.add(Primitive::Line {
-                    x1: computed.margin_left - 5.0,
+                    x1: computed.margin_left - computed.tick_mark_major,
                     y1: y_pos,
                     x2: computed.margin_left,
                     y2: y_pos,
                     stroke: Color::from(&theme.tick_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
             }
@@ -168,7 +168,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
 
                     scene.add(Primitive::Text {
                         x: x_pos,
-                        y: computed.height - computed.margin_bottom + 5.0 + computed.tick_size as f64,
+                        y: computed.height - computed.margin_bottom + computed.tick_mark_major + computed.tick_size as f64,
                         content: label.clone(),
                         size: computed.tick_size,
                         anchor,
@@ -180,9 +180,9 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                         x1: x_pos,
                         y1: computed.height - computed.margin_bottom,
                         x2: x_pos,
-                        y2: computed.height - computed.margin_bottom + 5.0,
+                        y2: computed.height - computed.margin_bottom + computed.tick_mark_major,
                         stroke: Color::from(&theme.tick_color),
-                        stroke_width: 1.0,
+                        stroke_width: computed.axis_stroke_width,
                         stroke_dasharray: None,
                     });
                 }
@@ -194,9 +194,9 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                         x1: x,
                         y1: computed.height - computed.margin_bottom,
                         x2: x,
-                        y2: computed.height - computed.margin_bottom + 5.0,
+                        y2: computed.height - computed.margin_bottom + computed.tick_mark_major,
                         stroke: Color::from(&theme.tick_color),
-                        stroke_width: 1.0,
+                        stroke_width: computed.axis_stroke_width,
                         stroke_dasharray: None,
                     });
 
@@ -213,7 +213,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     };
                     scene.add(Primitive::Text {
                         x,
-                        y: computed.height - computed.margin_bottom + 5.0 + computed.tick_size as f64,
+                        y: computed.height - computed.margin_bottom + computed.tick_mark_major + computed.tick_size as f64,
                         content: label,
                         size: computed.tick_size,
                         anchor,
@@ -235,7 +235,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                 };
                 scene.add(Primitive::Text {
                     x: x_pos,
-                    y: computed.height - computed.margin_bottom + 5.0 + computed.tick_size as f64,
+                    y: computed.height - computed.margin_bottom + computed.tick_mark_major + computed.tick_size as f64,
                     content: label.clone(),
                     size: computed.tick_size,
                     anchor,
@@ -247,9 +247,9 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     x1: x_pos,
                     y1: computed.height - computed.margin_bottom,
                     x2: x_pos,
-                    y2: computed.height - computed.margin_bottom + 5.0,
+                    y2: computed.height - computed.margin_bottom + computed.tick_mark_major,
                     stroke: Color::from(&theme.tick_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
             }
@@ -259,12 +259,12 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
             for ty in y_ticks.iter() {
                 let y = map_y(*ty);
                 scene.add(Primitive::Line {
-                    x1: computed.margin_left - 5.0,
+                    x1: computed.margin_left - computed.tick_mark_major,
                     y1: y,
                     x2: computed.margin_left,
                     y2: y,
                     stroke: Color::from(&theme.tick_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
 
@@ -276,7 +276,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     computed.y_tick_format.format(*ty)
                 };
                 scene.add(Primitive::Text {
-                    x: computed.margin_left - 8.0,
+                    x: computed.margin_left - computed.tick_label_margin,
                     y: y + computed.tick_size as f64 * 0.35,
                     content: label,
                     size: computed.tick_size,
@@ -297,9 +297,9 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     x1: x,
                     y1: computed.height - computed.margin_bottom,
                     x2: x,
-                    y2: computed.height - computed.margin_bottom + 5.0,
+                    y2: computed.height - computed.margin_bottom + computed.tick_mark_major,
                     stroke: Color::from(&theme.tick_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
 
@@ -316,7 +316,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                 };
                 scene.add(Primitive::Text {
                     x,
-                    y: computed.height - computed.margin_bottom + 5.0 + computed.tick_size as f64,
+                    y: computed.height - computed.margin_bottom + computed.tick_mark_major + computed.tick_size as f64,
                     content: label,
                     size: computed.tick_size,
                     anchor,
@@ -331,12 +331,12 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                 let y = map_y(*ty);
 
                 scene.add(Primitive::Line {
-                    x1: computed.margin_left - 5.0,
+                    x1: computed.margin_left - computed.tick_mark_major,
                     y1: y,
                     x2: computed.margin_left,
                     y2: y,
                     stroke: Color::from(&theme.tick_color),
-                    stroke_width: 1.0,
+                    stroke_width: computed.axis_stroke_width,
                     stroke_dasharray: None,
                 });
 
@@ -348,7 +348,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                     computed.y_tick_format.format(*ty)
                 };
                 scene.add(Primitive::Text {
-                    x: computed.margin_left - 8.0,
+                    x: computed.margin_left - computed.tick_label_margin,
                     y: y + computed.tick_size as f64 * 0.35,
                     content: label,
                     size: computed.tick_size,
@@ -359,7 +359,7 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
             }
         }
 
-        // Minor tick marks (3px, no label)
+        // Minor tick marks (no label)
         if !layout.suppress_x_ticks {
             if let Some(ref mx) = x_minor {
                 for tx in mx {
@@ -368,9 +368,9 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                         x1: x,
                         y1: computed.height - computed.margin_bottom,
                         x2: x,
-                        y2: computed.height - computed.margin_bottom + 3.0,
+                        y2: computed.height - computed.margin_bottom + computed.tick_mark_minor,
                         stroke: Color::from(&theme.tick_color),
-                        stroke_width: 1.0,
+                        stroke_width: computed.axis_stroke_width,
                         stroke_dasharray: None,
                     });
                 }
@@ -381,12 +381,12 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
                 for ty in my {
                     let y = map_y(*ty);
                     scene.add(Primitive::Line {
-                        x1: computed.margin_left - 3.0,
+                        x1: computed.margin_left - computed.tick_mark_minor,
                         y1: y,
                         x2: computed.margin_left,
                         y2: y,
                         stroke: Color::from(&theme.tick_color),
-                        stroke_width: 1.0,
+                        stroke_width: computed.axis_stroke_width,
                         stroke_dasharray: None,
                     });
                 }
@@ -404,7 +404,7 @@ pub fn add_y2_axis(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout
     scene.add(Primitive::Line {
         x1: axis_x, y1: computed.margin_top,
         x2: axis_x, y2: computed.height - computed.margin_bottom,
-        stroke: Color::from(&theme.axis_color), stroke_width: 1.0, stroke_dasharray: None,
+        stroke: Color::from(&theme.axis_color), stroke_width: computed.axis_stroke_width, stroke_dasharray: None,
     });
 
     if layout.suppress_y2_ticks { return; }
@@ -419,8 +419,8 @@ pub fn add_y2_axis(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout
         let y = computed.map_y2(*ty);
 
         scene.add(Primitive::Line {
-            x1: axis_x, y1: y, x2: axis_x + 5.0, y2: y,
-            stroke: Color::from(&theme.tick_color), stroke_width: 1.0, stroke_dasharray: None,
+            x1: axis_x, y1: y, x2: axis_x + computed.tick_mark_major, y2: y,
+            stroke: Color::from(&theme.tick_color), stroke_width: computed.axis_stroke_width, stroke_dasharray: None,
         });
 
         let label = if layout.log_y2 && matches!(computed.y2_tick_format, TickFormat::Auto) {
@@ -429,7 +429,7 @@ pub fn add_y2_axis(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout
             computed.y2_tick_format.format(*ty)
         };
         scene.add(Primitive::Text {
-            x: axis_x + 8.0,
+            x: axis_x + computed.tick_label_margin,
             y: y + computed.tick_size as f64 * 0.35,
             content: label,
             size: computed.tick_size,
