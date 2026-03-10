@@ -86,14 +86,15 @@ let sa = StackedAreaPlot::new()
 
 ## Legend position
 
-`.with_legend_position(pos)` controls which corner of the plot area the legend occupies. Four positions are available from [`LegendPosition`](../reference/palettes.md):
+`.with_legend_position(pos)` accepts any [`LegendPosition`](../reference/layout.md#legend) variant. The most useful choices for stacked-area plots:
 
 | Variant | Description |
 |---------|-------------|
-| `TopRight` | Upper-right corner (default) |
-| `TopLeft` | Upper-left corner |
-| `BottomRight` | Lower-right corner |
-| `BottomLeft` | Lower-left corner |
+| `OutsideRightTop` | Right margin, top-aligned *(default)* |
+| `InsideTopRight` | Overlay — upper-right of the data area |
+| `InsideTopLeft` | Overlay — upper-left of the data area |
+| `InsideBottomRight` | Overlay — lower-right of the data area |
+| `InsideBottomLeft` | Overlay — lower-left of the data area |
 
 ```rust,no_run
 use kuva::plot::{StackedAreaPlot, LegendPosition};
@@ -101,7 +102,7 @@ use kuva::plot::{StackedAreaPlot, LegendPosition};
 let sa = StackedAreaPlot::new()
     .with_x(months)
     // ... add series ...
-    .with_legend_position(LegendPosition::BottomLeft);
+    .with_legend_position(LegendPosition::InsideBottomLeft);
 ```
 
 <img src="../assets/stacked_area/legend_position.svg" alt="Stacked area plot with legend at bottom left" width="560">
@@ -160,4 +161,4 @@ let sa = StackedAreaPlot::new()
 | `.with_stroke_width(px)` | Top-edge stroke thickness (default `1.5`) |
 | `.with_strokes(bool)` | Show/hide top-edge strokes (default `true`) |
 | `.with_normalized()` | Enable 100 % percent-stacking |
-| `.with_legend_position(pos)` | Legend corner: `TopRight`, `TopLeft`, `BottomRight`, `BottomLeft` |
+| `.with_legend_position(pos)` | Any [`LegendPosition`](../reference/layout.md#legend) variant (default `OutsideRightTop`) |

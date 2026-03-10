@@ -70,7 +70,7 @@ pub struct StackedAreaPlot {
     pub show_strokes: bool,
     /// When `true`, each column is rescaled to sum to 100 %; the y-axis spans 0–100 %.
     pub normalized: bool,
-    /// Corner of the plot area where the legend box is placed (default `TopRight`).
+    /// Position of the legend (default `OutsideRightTop`).
     pub legend_position: LegendPosition,
 }
 

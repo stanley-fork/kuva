@@ -333,20 +333,49 @@ These can also be set via a `Theme` — see the [Themes](./themes.md) reference.
 | Method | Description |
 |--------|-------------|
 | `.with_legend_entries(Vec<LegendEntry>)` | Supply entries directly, bypassing auto-collection; auto-sizes `legend_width` |
-| `.with_legend_at(x, y)` | Place legend at absolute SVG pixel coordinates; no right-margin reserved |
+| `.with_legend_at(x, y)` | Place legend at absolute SVG pixel coordinates (`Custom` variant); no margin reserved |
+| `.with_legend_at_data(x, y)` | Place legend at data-space coordinates, mapped through axes at render time |
 | `.with_legend_position(LegendPosition)` | Choose a preset legend placement |
+| `.with_legend_box(bool)` | Show or hide the legend background and border box (default `true`) |
+| `.with_legend_title(s)` | Render a bold title row above all legend entries |
+| `.with_legend_group(title, entries)` | Add a labelled group of entries; multiple calls stack |
 
-`LegendPosition` variants:
+`LegendPosition` variants (grouped by placement zone):
+
+**Inside the plot axes** — overlaid on the data area, 8 px inset from the axis edges:
+
+| Variant | Corner |
+|---------|--------|
+| `InsideTopRight` | Upper-right |
+| `InsideTopLeft` | Upper-left |
+| `InsideBottomRight` | Lower-right |
+| `InsideBottomLeft` | Lower-left |
+| `InsideTopCenter` | Top edge, centred |
+| `InsideBottomCenter` | Bottom edge, centred |
+
+**Outside the plot axes** — placed in a margin; the canvas expands to accommodate:
 
 | Variant | Placement |
 |---------|-----------|
-| `TopRight` *(default)* | Top of the right margin |
-| `BottomRight` | Bottom of the right margin |
-| `TopLeft` | Top-left inside the plot area |
-| `BottomLeft` | Bottom-left inside the plot area |
-| `RightTop` | Right margin — top edge aligned with the plot-area top |
-| `RightMiddle` | Right margin — vertically centred on the plot area |
-| `RightBottom` | Right margin — bottom edge aligned with the plot-area bottom |
+| `OutsideRightTop` *(default)* | Right margin, top-aligned |
+| `OutsideRightMiddle` | Right margin, vertically centred |
+| `OutsideRightBottom` | Right margin, bottom-aligned |
+| `OutsideLeftTop` | Left margin, top-aligned |
+| `OutsideLeftMiddle` | Left margin, vertically centred |
+| `OutsideLeftBottom` | Left margin, bottom-aligned |
+| `OutsideTopLeft` | Top margin, left-aligned |
+| `OutsideTopCenter` | Top margin, centred |
+| `OutsideTopRight` | Top margin, right-aligned |
+| `OutsideBottomLeft` | Bottom margin, left-aligned |
+| `OutsideBottomCenter` | Bottom margin, centred |
+| `OutsideBottomRight` | Bottom margin, right-aligned |
+
+**Freeform** — no margin change; you control the position:
+
+| Variant | Placement |
+|---------|-----------|
+| `Custom(x, y)` | Absolute SVG canvas pixel coordinates |
+| `DataCoords(x, y)` | Data-space coordinates mapped through `map_x`/`map_y` at render time |
 
 ### Typography
 

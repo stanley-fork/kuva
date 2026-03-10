@@ -24,6 +24,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.4] — 2026-03-10
+
+### Added
+
+- **`LegendPosition` expanded** — the 7 old variants are replaced by 20 new ones grouped by placement zone. All names are now prefixed with `Inside` or `Outside`:
+  - *Inside* (overlaid on the data area, 8 px inset): `InsideTopRight`, `InsideTopLeft`, `InsideBottomRight`, `InsideBottomLeft`, `InsideTopCenter`, `InsideBottomCenter`
+  - *Outside right margin*: `OutsideRightTop` *(new default)*, `OutsideRightMiddle`, `OutsideRightBottom`
+  - *Outside left margin*: `OutsideLeftTop`, `OutsideLeftMiddle`, `OutsideLeftBottom`
+  - *Outside top margin*: `OutsideTopLeft`, `OutsideTopCenter`, `OutsideTopRight`
+  - *Outside bottom margin*: `OutsideBottomLeft`, `OutsideBottomCenter`, `OutsideBottomRight`
+  - `Custom(f64, f64)` — absolute SVG canvas pixel coordinates (what `with_legend_at` now sets internally)
+  - `DataCoords(f64, f64)` — data-space coordinates mapped through `map_x`/`map_y` at render time
+- **`Layout::with_legend_box(bool)`** — suppress the legend background and border rects; entries and swatches still render (fixes: legend box could not previously be hidden)
+- **`Layout::with_legend_title(s)`** — renders a bold title row above all legend entries
+- **`Layout::with_legend_group(title, entries)`** — adds a labelled group of entries; multiple calls stack and take priority over `with_legend_entries`
+- **`Layout::with_legend_at_data(x, y)`** — places the legend at data-space coordinates (`DataCoords` variant); no right-margin reserved
+- **`LegendGroup` struct** — `{ title: String, entries: Vec<LegendEntry> }`; exported from `kuva::plot`
+
+### Changed
+
+- `Layout::with_legend_at(x, y)` now sets `legend_position = Custom(x, y)` instead of writing a separate `legend_xy` field; behaviour is unchanged
+- `Layout` field `legend_xy: Option<(f64, f64)>` removed — superseded by `Custom(x, y)` in the enum
+- Margin calculation in `ComputedLayout::from_layout` is now position-aware: `Inside*`, `Custom`, and `DataCoords` variants add no margin; the 12 `Outside*` variants expand the appropriate edge (right/left/top/bottom)
+- `render_legend_at` signature extended with `groups`, `title`, and `show_box` parameters (used by `Figure` shared-legend rendering)
+
+### Fixed
+
+- Legend background and border rects could not be suppressed — now controlled via `with_legend_box(false)`
+
+---
+
 ## [0.1.3] — 2026-03-04
 
 ### Added

@@ -1561,9 +1561,14 @@ fn add_waterfall(waterfall: &WaterfallPlot, scene: &mut Scene, computed: &Comput
 }
 
 fn render_legend_entry(entry: &LegendEntry, scene: &mut Scene, legend_x: f64, cur_y: f64, computed: &ComputedLayout) {
+    // Swatch center: rect top is cur_y - 1, height 12 → center at cur_y + 5.
+    // Text baseline must be placed so the cap midpoint (baseline - body_size * 0.35)
+    // lands at cur_y + 5.  All other swatches center on the same point.
+    let swatch_cy = cur_y + 5.0;
+    let text_baseline = swatch_cy + computed.body_size as f64 * 0.35;
     scene.add(Primitive::Text {
         x: legend_x + 25.0,
-        y: cur_y + 5.0,
+        y: text_baseline,
         content: entry.label.clone(),
         anchor: TextAnchor::Start,
         size: computed.body_size,
@@ -1583,28 +1588,28 @@ fn render_legend_entry(entry: &LegendEntry, scene: &mut Scene, legend_x: f64, cu
         }),
         LegendShape::Line => scene.add(Primitive::Line {
             x1: legend_x + 5.0,
-            y1: cur_y + 2.0,
+            y1: swatch_cy,
             x2: legend_x + 5.0 + 12.0,
-            y2: cur_y + 2.0,
+            y2: swatch_cy,
             stroke: Color::from(&entry.color),
             stroke_width: 2.0,
             stroke_dasharray: entry.dasharray.clone(),
         }),
         LegendShape::Circle => scene.add(Primitive::Circle {
             cx: legend_x + 5.0 + 6.0,
-            cy: cur_y + 1.0,
+            cy: swatch_cy,
             r: 5.0,
             fill: Color::from(&entry.color),
         }),
         LegendShape::Marker(marker) => {
-            draw_marker(scene, marker, legend_x + 5.0 + 6.0, cur_y + 1.0, 5.0, &entry.color);
+            draw_marker(scene, marker, legend_x + 5.0 + 6.0, swatch_cy, 5.0, &entry.color);
         }
         LegendShape::CircleSize(r) => {
             let swatch_half = 8.0;
             let draw_r = r.min(swatch_half);
             scene.add(Primitive::Circle {
                 cx: legend_x + 5.0 + 6.0,
-                cy: cur_y + 1.0,
+                cy: swatch_cy,
                 r: draw_r,
                 fill: Color::from(&entry.color),
             });
@@ -2522,9 +2527,11 @@ fn add_dot_stacked_legends(
 
     let mut legend_y = box_top;
     for entry in size_entries {
+        let swatch_cy = legend_y + 5.0;
+        let text_baseline = swatch_cy + computed.body_size as f64 * 0.35;
         scene.add(Primitive::Text {
             x: legend_x + 25.0,
-            y: legend_y + 5.0,
+            y: text_baseline,
             content: entry.label.clone(),
             size: computed.body_size,
             anchor: TextAnchor::Start,
@@ -2534,7 +2541,7 @@ fn add_dot_stacked_legends(
         if let LegendShape::CircleSize(r) = entry.shape {
             scene.add(Primitive::Circle {
                 cx: legend_x + 5.0 + 6.0,
-                cy: legend_y + 1.0,
+                cy: swatch_cy,
                 r: r.min(8.0),
                 fill: Color::from(&entry.color),
             });
@@ -3002,9 +3009,11 @@ pub fn render_legend_at(
 
     // Helper: inline entry rendering (avoids needing a full ComputedLayout)
     let render_entry = |entry: &LegendEntry, scene: &mut Scene, cur_y: f64| {
+        let swatch_cy = cur_y + 5.0;
+        let text_baseline = swatch_cy + body_size as f64 * 0.35;
         scene.add(Primitive::Text {
             x: x + 25.0,
-            y: cur_y + 5.0,
+            y: text_baseline,
             content: entry.label.clone(),
             anchor: TextAnchor::Start,
             size: body_size,
@@ -3024,28 +3033,28 @@ pub fn render_legend_at(
             }),
             LegendShape::Line => scene.add(Primitive::Line {
                 x1: x + 5.0,
-                y1: cur_y + 2.0,
+                y1: swatch_cy,
                 x2: x + 5.0 + 12.0,
-                y2: cur_y + 2.0,
+                y2: swatch_cy,
                 stroke: Color::from(&entry.color),
                 stroke_width: 2.0,
                 stroke_dasharray: entry.dasharray.clone(),
             }),
             LegendShape::Circle => scene.add(Primitive::Circle {
                 cx: x + 5.0 + 6.0,
-                cy: cur_y + 1.0,
+                cy: swatch_cy,
                 r: 5.0,
                 fill: Color::from(&entry.color),
             }),
             LegendShape::Marker(marker) => {
-                draw_marker(scene, marker, x + 5.0 + 6.0, cur_y + 1.0, 5.0, &entry.color);
+                draw_marker(scene, marker, x + 5.0 + 6.0, swatch_cy, 5.0, &entry.color);
             }
             LegendShape::CircleSize(r) => {
                 let swatch_half = 8.0;
                 let draw_r = r.min(swatch_half);
                 scene.add(Primitive::Circle {
                     cx: x + 5.0 + 6.0,
-                    cy: cur_y + 1.0,
+                    cy: swatch_cy,
                     r: draw_r,
                     fill: Color::from(&entry.color),
                 });
