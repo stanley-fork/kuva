@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Legend background and border rects could not be suppressed — now controlled via `with_legend_box(false)`
+- Y axis label x-position was a fixed pixel offset from the canvas left edge, ignoring actual tick label widths — now computed dynamically as `margin_left − 8 − y_tick_label_px − 5 − label_size/2`, placing the label consistently close to the axis regardless of tick label width; clamped to 8 px from canvas edge
+- `margin_left` computation replaced the 6-char heuristic with actual tick string generation (`generate_ticks` / `generate_ticks_log` / `generate_ticks_with_step` + `TickFormat::format`); `ComputedLayout` carries the result as `y_tick_label_px` for use in `axis.rs`
 
 ---
 
