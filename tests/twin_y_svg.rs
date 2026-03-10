@@ -106,3 +106,24 @@ fn test_twin_y_log_y2() {
     assert!(svg.contains(">1<"), "SVG should contain log tick '1'");
     assert!(svg.contains(">100<"), "SVG should contain log tick '100'");
 }
+
+
+#[test]
+fn test_twin_y_multiplot() {
+    let primary = vec![make_temperature_line()];
+    let secondary = vec![make_rainfall_line()];
+
+    let layout = Layout::auto_from_twin_y_plots(&primary, &secondary)
+        .with_title("rainfall and temperature twin y multiplot")
+        .with_legend_position(kuva::plot::LegendPosition::RightTop);
+    let scene = render_twin_y(primary, secondary, layout);
+    let svg = SvgBackend.render_scene(&scene);
+    std::fs::write("test_outputs/twin_y_multiplot.svg", svg.clone()).unwrap();
+
+    assert!(svg.contains("<svg"), "SVG should contain an <svg element");
+    assert!(svg.contains("rainfall and temperature twin y multiplot"), "SVG should contain the title");
+    assert!(svg.contains("Temperature"), "SVG should contain the primary series legend label");
+    assert!(svg.contains("Rainfall"), "SVG should contain the secondary series legend label");
+    // RightTop legend is placed in the right margin — it should appear after the plot area elements
+    assert!(svg.contains("x1="), "SVG should contain axis line elements");
+}
