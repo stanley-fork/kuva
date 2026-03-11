@@ -896,6 +896,10 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
     for (i, group) in boxplot.groups.iter().enumerate() {
         if group.values.is_empty() { continue; }
 
+        let color = boxplot.group_colors.as_ref()
+            .and_then(|c| c.get(i).map(|s| s.as_str()))
+            .unwrap_or(&boxplot.color);
+
         let mut sorted = group.values.clone();
         sorted.sort_by(|a, b| a.total_cmp(b));
 
@@ -924,7 +928,7 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             y: yq3.min(yq1),
             width: (x1 - x0).abs(),
             height: (yq1 - yq3).abs(),
-            fill: Color::from(&boxplot.color),
+            fill: Color::from(color),
             stroke: None,
             stroke_width: None,
             opacity: None,
@@ -947,7 +951,7 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             y1: ylow,
             x2: xmid,
             y2: yq1,
-            stroke: Color::from(&boxplot.color),
+            stroke: Color::from(color),
             stroke_width: 1.0,
             stroke_dasharray: None,
         });
@@ -956,7 +960,7 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             y1: yq3,
             x2: xmid,
             y2: yhigh,
-            stroke: Color::from(&boxplot.color),
+            stroke: Color::from(color),
             stroke_width: 1.0,
             stroke_dasharray: None,
         });
@@ -968,7 +972,7 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
                 x2: computed.map_x(x + w / 2.0),
                 y1: y,
                 y2: y,
-                stroke: Color::from(&boxplot.color),
+                stroke: Color::from(color),
                 stroke_width: 1.0,
                 stroke_dasharray: None,
             });
@@ -1000,6 +1004,9 @@ fn add_violin(violin: &ViolinPlot, scene: &mut Scene, computed: &ComputedLayout)
 
     for (i, group) in violin.groups.iter().enumerate() {
         if group.values.is_empty() { continue; }
+        let color = violin.group_colors.as_ref()
+            .and_then(|c| c.get(i).map(|s| s.as_str()))
+            .unwrap_or(&violin.color);
         let x_center = computed.map_x((i + 1) as f64);
 
         // Compute KDE with auto or manual bandwidth
@@ -1039,7 +1046,7 @@ fn add_violin(violin: &ViolinPlot, scene: &mut Scene, computed: &ComputedLayout)
 
         scene.add(Primitive::Path(Box::new(PathData {
             d: path_data,
-            fill: Some(Color::from(&violin.color)),
+            fill: Some(Color::from(color)),
             stroke: Color::from(&theme.violin_border),
             stroke_width: 0.5,
             opacity: None,

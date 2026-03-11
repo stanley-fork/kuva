@@ -134,6 +134,11 @@ check "box overlay-swarm" \
     "$BIN" box "$DATA/samples.tsv" --group-col group --value-col expression --overlay-swarm \
         --title "Expression by Group" --x-label "Group" --y-label "Expression"
 
+check "box group-colors" \
+    "$BIN" box "$DATA/samples.tsv" --group-col group --value-col expression \
+        --group-colors "steelblue,tomato,seagreen,goldenrod,mediumpurple" \
+        --title "Expression by Group (colored)" --x-label "Group" --y-label "Expression"
+
 # ── violin ────────────────────────────────────────────────────────────────────
 check "violin basic" \
     "$BIN" violin "$DATA/samples.tsv" --group-col group --value-col expression \
@@ -142,6 +147,11 @@ check "violin basic" \
 check "violin overlay-swarm" \
     "$BIN" violin "$DATA/samples.tsv" --group-col group --value-col expression --overlay-swarm \
         --title "Expression Distribution" --x-label "Group" --y-label "Expression"
+
+check "violin group-colors" \
+    "$BIN" violin "$DATA/samples.tsv" --group-col group --value-col expression \
+        --group-colors "steelblue,tomato,seagreen,goldenrod,mediumpurple" \
+        --title "Expression Distribution (colored)" --x-label "Group" --y-label "Expression"
 
 # ── pie ───────────────────────────────────────────────────────────────────────
 check "pie basic" \
