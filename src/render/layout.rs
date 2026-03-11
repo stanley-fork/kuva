@@ -1207,11 +1207,9 @@ impl ComputedLayout {
                             let needed = first.len() as f64 * char_w * cos_a;
                             if needed > margin_left { margin_left = needed; }
                         }
-                    } else {
-                        if let Some(last) = cats.last() {
-                            let needed = last.len() as f64 * char_w * cos_a;
-                            if needed > margin_right { margin_right = needed; }
-                        }
+                    } else if let Some(last) = cats.last() {
+                        let needed = last.len() as f64 * char_w * cos_a;
+                        if needed > margin_right { margin_right = needed; }
                     }
                 }
             }
