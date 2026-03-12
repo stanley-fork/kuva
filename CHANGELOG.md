@@ -7,20 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **`render_twin_y` now supports `Plot::Density`** — `DensityPlot` was silently dropped in both the primary and secondary match arms; it is now routed to `add_density` with the correct computed layout for each axis.
-
-### Changed
-
-- **`test_twin_y_showcase`** — replaced the climate example with a GC bias-style chart: precomputed bell-curve `Histogram` (Genome GC, primary), U-shaped `ScatterPlot` (Coverage, primary), and two `LinePlot`s for Reported/Empirical base quality (secondary). Mirrors the layout of a typical WGS GC bias QC plot.
-
 ---
 
 ## [0.1.4] — 2026-03-12
 
 ### Added
 
+- **Per-point colors on `StripPlot`** — `with_colored_group(label, iter_of_(value, color)_pairs)` adds a group where each point carries its own color. Colors are matched by position; points beyond the color list fall back to the group/uniform color. Useful when each observation belongs to a distinct category (e.g. motif type) and needs to be visually distinguished within a single column.
 - **`PolarPlot`** — polar coordinate scatter/line plot with configurable radial/angular grid, compass (θ=0 north, CW) or math (θ=0 east, CCW) conventions. Supports multiple labeled series, r-max override, r-value labels, spoke angle labels. CLI: `kuva polar --r <COL> --theta <COL> [--color-by <COL>] [--mode scatter|line] [--r-max <F>] [--theta-divisions <N>] [--theta-start <DEG>]`. Closes #25.
 - **`TernaryPlot`** — ternary/simplex scatter plot with barycentric coordinate system and equilateral triangle geometry. Auto-normalize with `with_normalize(true)`, configurable grid lines (dashed), percentage tick labels on each edge, bold corner labels, and multi-group coloring. CLI: `kuva ternary --a <COL> --b <COL> --c <COL> [--color-by <COL>] [--a-label <S>] [--b-label <S>] [--c-label <S>] [--normalize] [--grid-lines <N>]`. Closes #8.
 - **`RidgelinePlot`** — ridgeline (joyplot) plot with stacked KDE density curves, one per group. Groups are labelled on the y-axis; the x-axis is the continuous data range. Supports `.with_group(label, data)`, `.with_group_color(label, data, color)`, `.with_groups(iter)`, `.with_filled(bool)`, `.with_opacity(f64)`, `.with_overlap(f64)`, `.with_bandwidth(f64)`, `.with_kde_samples(usize)`, `.with_stroke_width(f64)`, `.with_normalize(bool)`, `.with_legend(bool)`, and `.with_line_dash(s)`. CLI: `kuva ridgeline --value <COL> [--group-by <COL>] [--overlap <F>] [--filled] [--bandwidth <F>]`.
@@ -68,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`render_twin_y` now supports `Plot::Density`** — `DensityPlot` was silently dropped in both the primary and secondary match arms; it is now routed to `add_density` with the correct computed layout for each axis.
 - **Legend overhaul** — background/border rects can now be suppressed via `with_legend_box(false)`; y-axis label x-position computed dynamically from actual tick label widths rather than a fixed offset; `margin_left` now uses actual tick string generation instead of a 6-char heuristic
 - **`BrickPlot` strigar color/legend ordering** — deterministic sort replaces `HashMap` iteration order; output is now byte-identical across runs
 - **Rotated x-axis tick labels** — `margin_left`/`margin_right` now account for horizontal projection of rotated labels; `TextAnchor::Start` used for positive rotation angles. Affects bar, waterfall, candlestick, and dot plots.
