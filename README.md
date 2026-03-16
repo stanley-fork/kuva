@@ -93,7 +93,15 @@ Full documentation — plot type reference, API guide, CLI flag reference, theme
 
 Thank you to everyone who has contributed to kuva!
 
-[@emilbratt](https://github.com/emilbratt) · [@jrmoynihan](https://github.com/jrmoynihan) · [@gabo515](https://github.com/gabo515) · [@iwer](https://github.com/iwer) · [@holtjma](https://github.com/holtjma)
+[![Contributors](https://contrib.rocks/image?repo=Psy-Fer/kuva)](https://github.com/Psy-Fer/kuva/graphs/contributors)
+
+<!-- To manually add contributors not captured above, add entries here:
+<table>
+<tr>
+  <td align="center"><a href="https://github.com/username"><img src="https://github.com/username.png" width="60"/><br/>@username</a></td>
+</tr>
+</table>
+-->
 
 ---
 
