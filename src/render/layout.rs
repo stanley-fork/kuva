@@ -1191,7 +1191,25 @@ impl ComputedLayout {
         } else {
             label_size + y_tick_label_px + 21.0 * s
         };
-        let mut margin_right = label_size;
+        // Estimate the overhang of the rightmost numeric x-tick label.
+        // Tick labels are centred on their tick position (TextAnchor::Middle), so the
+        // last tick (at x_max) extends half its pixel width to the right of the plot edge.
+        // Without this, labels like "15000" or "100.5" clip against the SVG boundary.
+        // Uses layout.x_range.1 / x_axis_max as a proxy — nice-rounding rarely changes
+        // the label length, mirroring how y_tick_label_px uses layout.y_range before
+        // auto-ranging (lines ~1174-1187 above).
+        let x_last_tick_half_w: f64 = if layout.suppress_x_ticks
+            || layout.x_categories.is_some()
+            || layout.x_tick_rotate.is_some()
+            || layout.log_x
+        {
+            0.0 // handled elsewhere or not applicable
+        } else {
+            let val = layout.x_axis_max.unwrap_or(layout.x_range.1);
+            let label = layout.x_tick_format.format(val);
+            label.len() as f64 * tick_size * 0.6 * 0.5
+        };
+        let mut margin_right = label_size.max(x_last_tick_half_w);
 
         // For rotated x-axis category labels the text extends horizontally from its anchor.
         // Negative angle → TextAnchor::End → extends left  → first label can clip left edge.
