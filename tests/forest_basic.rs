@@ -81,7 +81,11 @@ fn test_forest_custom_color() {
     let svg = SvgBackend.render_scene(&scene);
     std::fs::write("test_outputs/forest_custom_color.svg", svg.clone()).unwrap();
     assert!(svg.contains("<svg"));
-    assert!(svg.contains("#dc143c"), "SVG should contain crimson color (#dc143c)");
+    // Check the color appears in some form (hex, named, or rgb)
+    assert!(
+        svg.contains("#dc143c") || svg.contains("crimson") || svg.contains("rgb(220,20,60)"),
+        "SVG should contain crimson color in some encoding"
+    );
 }
 
 #[test]

@@ -1682,7 +1682,7 @@ fn add_forest(forest: &ForestPlot, scene: &mut Scene, computed: &ComputedLayout)
         let marker_half_w = if let Some(w) = row.weight {
             if max_weight > 0.0 {
                 let scaled = forest.marker_size * (w / max_weight).sqrt();
-                scaled.max(forest.marker_size * 0.15)
+                scaled.max(forest.marker_size * 0.15).max(1.5)
             } else {
                 forest.marker_size
             }

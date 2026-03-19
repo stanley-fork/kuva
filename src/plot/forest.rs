@@ -137,6 +137,17 @@ impl ForestPlot {
         self
     }
 
+    /// Add a row with both a weight and a per-row color override.
+    pub fn with_weighted_colored_row<S: Into<String>, C: Into<String>>(
+        mut self, label: S, estimate: f64, ci_lower: f64, ci_upper: f64, weight: f64, color: C,
+    ) -> Self {
+        let mut row = ForestRow::new(label, estimate, ci_lower, ci_upper);
+        row.weight = Some(weight);
+        row.color = Some(color.into());
+        self.rows.push(row);
+        self
+    }
+
     /// Set the point fill and whisker color (CSS color string, default `"steelblue"`).
     pub fn with_color<S: Into<String>>(mut self, color: S) -> Self {
         self.color = color.into();
