@@ -652,14 +652,20 @@ impl Plot {
             Plot::Histogram2d(h2d) => {
                 let max_count = h2d.bins.iter().flatten().copied().max().unwrap_or(1) as f64;
                 let cmap = h2d.color_map.clone();
+                let log_scale = h2d.log_count;
+                let log_max = (max_count + 1.0).ln();
                 Some(ColorBarInfo {
                     map_fn: Arc::new(move |t| {
-                        let norm = t / max_count;
-                        cmap.map(norm.clamp(0.0, 1.0))
+                        let norm = if log_scale {
+                            ((t + 1.0).ln() / log_max).clamp(0.0, 1.0)
+                        } else {
+                            (t / max_count).clamp(0.0, 1.0)
+                        };
+                        cmap.map(norm)
                     }),
                     min_value: 0.0,
                     max_value: max_count,
-                    label: Some("Count".to_string()),
+                    label: Some(if log_scale { "log(Count)".to_string() } else { "Count".to_string() }),
                 })
             }
             Plot::DotPlot(dp) => {

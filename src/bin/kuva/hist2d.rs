@@ -1,7 +1,7 @@
 use clap::Args;
 
 use kuva::plot::histogram2d::{Histogram2D, ColorMap};
-use kuva::render::layout::Layout;
+use kuva::render::layout::{Layout, TickFormat};
 use kuva::render::plots::Plot;
 use kuva::render::render::render_multiple;
 
@@ -36,6 +36,18 @@ pub struct Hist2dArgs {
     #[arg(long)]
     pub correlation: bool,
 
+    /// Log-scale the color mapping (ln(count+1)). Useful when a few high-density
+    /// bins dominate the color scale and obscure structure elsewhere.
+    #[arg(long)]
+    pub log_count: bool,
+
+    /// Colorbar tick label format: auto (default), sci, integer, fixed2.
+    /// auto: integers as-is, scientific notation for counts ≥ 10 000.
+    /// sci: always scientific notation. integer: round to nearest integer.
+    /// fixed2: two decimal places.
+    #[arg(long, default_value = "auto")]
+    pub colorbar_tick_format: String,
+
     #[command(flatten)]
     pub input: InputArgs,
 
@@ -45,6 +57,15 @@ pub struct Hist2dArgs {
     pub axis: AxisArgs,
     #[command(flatten)]
     pub log: LogArgs,
+}
+
+fn parse_colorbar_tick_format(name: &str) -> TickFormat {
+    match name {
+        "sci"     => TickFormat::Sci,
+        "integer" => TickFormat::Integer,
+        "fixed2"  => TickFormat::Fixed(2),
+        _         => TickFormat::Auto,
+    }
 }
 
 fn parse_colormap(name: &str) -> ColorMap {
@@ -97,12 +118,16 @@ pub fn run(args: Hist2dArgs) -> Result<(), String> {
     if args.correlation {
         plot = plot.with_correlation();
     }
+    if args.log_count {
+        plot = plot.with_log_count();
+    }
 
     let plots = vec![Plot::Histogram2d(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);
     let layout = apply_axis_args(layout, &args.axis);
     let layout = apply_log_args(layout, &args.log);
+    let layout = layout.with_colorbar_tick_format(parse_colorbar_tick_format(&args.colorbar_tick_format));
     let scene = render_multiple(plots, layout);
     write_output(scene, &args.base)
 }

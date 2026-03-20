@@ -2,7 +2,7 @@ use kuva::plot::Histogram2D;
 use kuva::plot::histogram2d::ColorMap;
 use kuva::backend::svg::SvgBackend;
 use kuva::render::render::render_multiple;
-use kuva::render::layout::Layout;
+use kuva::render::layout::{Layout, TickFormat};
 use kuva::render::plots::Plot;
 
 use rand_distr::{Normal, Distribution};
@@ -124,4 +124,116 @@ fn test_hist2d_explicit_range_renders_filled_bins() {
     // Multiple coloured rects expected (one per non-empty bin).
     let rect_count = svg.matches("<rect").count();
     assert!(rect_count >= 5, "expected multiple coloured bins; got {rect_count} rects");
+}
+
+#[test]
+fn test_hist2d_log_count() {
+    outdir();
+    // Skewed data: many points near origin, a few scattered — classic case for log scaling.
+    let mut data: Vec<(f64, f64)> = (0..5000).map(|i| ((i % 10) as f64 * 0.5, (i % 10) as f64 * 0.5)).collect();
+    data.extend((0..50).map(|i| (i as f64 * 0.2, (50 - i) as f64 * 0.2)));
+
+    let hist_linear = Histogram2D::new()
+        .with_data(data.clone(), (0.0, 10.0), (0.0, 10.0), 10, 10);
+    let hist_log = Histogram2D::new()
+        .with_data(data, (0.0, 10.0), (0.0, 10.0), 10, 10)
+        .with_log_count();
+
+    // Linear render
+    let plots = vec![Plot::Histogram2d(hist_linear)];
+    let layout = Layout::auto_from_plots(&plots).with_title("hist2d linear");
+    let svg_linear = render_svg(plots, layout);
+    std::fs::write("test_outputs/hist2d_linear.svg", &svg_linear).unwrap();
+
+    // Log render
+    let plots = vec![Plot::Histogram2d(hist_log)];
+    let layout = Layout::auto_from_plots(&plots).with_title("hist2d log count");
+    let svg_log = render_svg(plots, layout);
+    std::fs::write("test_outputs/hist2d_log_count.svg", &svg_log).unwrap();
+
+    assert!(svg_log.contains("<svg"));
+    assert!(!svg_log.contains("NaN"), "log SVG should contain no NaN values");
+    // Colorbar label should say log(Count)
+    assert!(svg_log.contains("log(Count)"), "colorbar label should be 'log(Count)'");
+    // Linear colorbar should still say Count
+    assert!(svg_linear.contains(">Count<") || svg_linear.contains("\"Count\""),
+        "linear colorbar label should be 'Count'");
+    // Both should render rects
+    let rect_count = svg_log.matches("<rect").count();
+    assert!(rect_count >= 3, "expected coloured bins in log plot, got {rect_count}");
+    // The two SVGs should differ in color values (log compression changes fills)
+    assert_ne!(svg_linear, svg_log, "log and linear renders should differ");
+}
+
+// ── Colorbar tick format tests ────────────────────────────────────────────────
+
+/// Auto format: integer counts render without decimal point; large counts
+/// (≥ 10 000) switch to scientific notation automatically.
+#[test]
+fn test_hist2d_colorbar_auto_format_integers() {
+    outdir();
+    let data: Vec<(f64, f64)> = (0..500).map(|i| ((i % 20) as f64, (i % 20) as f64)).collect();
+    let hist = Histogram2D::new().with_data(data, (0.0, 20.0), (0.0, 20.0), 20, 20);
+    let plots = vec![Plot::Histogram2d(hist)];
+    let layout = Layout::auto_from_plots(&plots).with_title("hist2d auto tick format");
+    let svg = render_svg(plots, layout);
+    std::fs::write("test_outputs/hist2d_colorbar_auto.svg", &svg).unwrap();
+    assert!(svg.contains("<svg"));
+    assert!(!svg.contains("NaN"));
+    // Auto format should not produce ".0" suffixes on integer counts
+    assert!(!svg.contains("25.0"), "integer tick labels should not have a trailing .0");
+}
+
+/// Sci format: all colorbar tick labels use scientific notation regardless of magnitude.
+#[test]
+fn test_hist2d_colorbar_sci_format() {
+    outdir();
+    let data: Vec<(f64, f64)> = (0..300).map(|i| ((i % 10) as f64, (i % 10) as f64)).collect();
+    let hist = Histogram2D::new().with_data(data, (0.0, 10.0), (0.0, 10.0), 10, 10);
+    let plots = vec![Plot::Histogram2d(hist)];
+    let layout = Layout::auto_from_plots(&plots)
+        .with_title("hist2d sci tick format")
+        .with_colorbar_tick_format(TickFormat::Sci);
+    let svg = render_svg(plots, layout);
+    std::fs::write("test_outputs/hist2d_colorbar_sci.svg", &svg).unwrap();
+    assert!(svg.contains("<svg"));
+    assert!(!svg.contains("NaN"));
+    // Sci format produces "e" notation
+    assert!(svg.contains('e'), "sci format should produce scientific notation labels");
+}
+
+/// Fixed format: colorbar ticks render with a fixed number of decimal places.
+#[test]
+fn test_hist2d_colorbar_fixed_format() {
+    outdir();
+    let data: Vec<(f64, f64)> = (0..200).map(|i| ((i % 10) as f64, (i % 10) as f64)).collect();
+    let hist = Histogram2D::new().with_data(data, (0.0, 10.0), (0.0, 10.0), 10, 10);
+    let plots = vec![Plot::Histogram2d(hist)];
+    let layout = Layout::auto_from_plots(&plots)
+        .with_title("hist2d fixed tick format")
+        .with_colorbar_tick_format(TickFormat::Fixed(2));
+    let svg = render_svg(plots, layout);
+    std::fs::write("test_outputs/hist2d_colorbar_fixed.svg", &svg).unwrap();
+    assert!(svg.contains("<svg"));
+    assert!(!svg.contains("NaN"));
+    // Fixed(2) produces ".00" on integers
+    assert!(svg.contains(".00"), "fixed(2) format should produce labels ending in .00 for integer counts");
+}
+
+/// Large count data: Auto format should switch to sci notation so the colorbar
+/// does not overflow with wide labels.
+#[test]
+fn test_hist2d_colorbar_auto_large_counts() {
+    outdir();
+    // 50 000 points all in the same bin → max count > 10 000, triggers sci notation
+    let data: Vec<(f64, f64)> = (0..50_000).map(|_| (5.0f64, 5.0f64)).collect();
+    let hist = Histogram2D::new().with_data(data, (0.0, 10.0), (0.0, 10.0), 10, 10);
+    let plots = vec![Plot::Histogram2d(hist)];
+    let layout = Layout::auto_from_plots(&plots).with_title("hist2d large counts auto");
+    let svg = render_svg(plots, layout);
+    std::fs::write("test_outputs/hist2d_colorbar_large_counts.svg", &svg).unwrap();
+    assert!(svg.contains("<svg"));
+    assert!(!svg.contains("NaN"));
+    // Max count is 50 000 (≥ 10 000), so Auto should produce at least one sci-notation label
+    assert!(svg.contains('e'), "auto format should use sci notation for counts ≥ 10 000");
 }

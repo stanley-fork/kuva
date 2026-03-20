@@ -265,6 +265,14 @@ check "hist2d turbo colormap" \
     "$BIN" hist2d "$DATA/hist2d.tsv" --x x --y y --bins-x 20 --bins-y 20 \
         --colormap turbo --title "hist2d turbo" --x-label "X" --y-label "Y"
 
+check "hist2d log-count" \
+    "$BIN" hist2d "$DATA/hist2d.tsv" --x x --y y --bins-x 20 --bins-y 20 \
+        --log-count --title "hist2d log count" --x-label "X" --y-label "Y"
+
+check "hist2d colorbar sci format" \
+    "$BIN" hist2d "$DATA/hist2d.tsv" --x x --y y --bins-x 20 --bins-y 20 \
+        --colorbar-tick-format sci --title "hist2d sci colorbar" --x-label "X" --y-label "Y"
+
 # ── contour ───────────────────────────────────────────────────────────────────
 check "contour basic" \
     "$BIN" contour "$DATA/contour.tsv" --x x --y y --z density \

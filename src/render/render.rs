@@ -885,6 +885,8 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout)
 
 fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedLayout) {
     let max_count = hist2d.bins.iter().flatten().copied().max().unwrap_or(1) as f64;
+    let log_scale = hist2d.log_count;
+    let log_max = (max_count + 1.0).ln();
 
     let x_bin_width = (hist2d.x_range.1 - hist2d.x_range.0) / hist2d.bins_x as f64;
     let y_bin_height = (hist2d.y_range.1 - hist2d.y_range.0) / hist2d.bins_y as f64;
@@ -918,7 +920,11 @@ fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedL
             let y0 = hist2d.y_range.0 + row_idx as f64 * y_bin_height;
             let x1 = x0 + x_bin_width;
             let y1 = y0 + y_bin_height;
-            let norm = (count as f64 / max_count).clamp(0.0, 1.0);
+            let norm = if log_scale {
+                ((count as f64 + 1.0).ln() / log_max).clamp(0.0, 1.0)
+            } else {
+                (count as f64 / max_count).clamp(0.0, 1.0)
+            };
             let color = cmap.map(norm);
 
             scene.add(Primitive::Rect {
@@ -2155,7 +2161,7 @@ fn add_colorbar(info: &ColorBarInfo, scene: &mut Scene, computed: &ComputedLayou
         scene.add(Primitive::Text {
             x: bar_x + bar_width + computed.tick_mark_major,
             y: y + 4.0,
-            content: format!("{:.1}", tick),
+            content: computed.colorbar_tick_format.format(*tick),
             size: computed.tick_size,
             anchor: TextAnchor::Start,
             rotate: None,
@@ -3185,7 +3191,7 @@ fn add_dot_stacked_legends(
         scene.add(Primitive::Text {
             x: bar_x + bar_width + computed.tick_mark_major,
             y: y + 4.0,
-            content: format!("{:.1}", tick),
+            content: computed.colorbar_tick_format.format(*tick),
             size: computed.tick_size,
             anchor: TextAnchor::Start,
             rotate: None,

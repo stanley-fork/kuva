@@ -159,6 +159,7 @@ pub struct Layout {
     pub palette: Option<Palette>,
     pub x_tick_format: TickFormat,
     pub y_tick_format: TickFormat,
+    pub colorbar_tick_format: TickFormat,
     pub y2_range: Option<(f64, f64)>,
     pub data_y2_range: Option<(f64, f64)>,
     pub y2_label: Option<String>,
@@ -268,6 +269,7 @@ impl Layout {
             palette: None,
             x_tick_format: TickFormat::Auto,
             y_tick_format: TickFormat::Auto,
+            colorbar_tick_format: TickFormat::Auto,
             y2_range: None,
             data_y2_range: None,
             y2_label: None,
@@ -999,6 +1001,13 @@ impl Layout {
         self
     }
 
+    /// Set the tick format for colorbar labels. Default: [`TickFormat::Auto`]
+    /// (switches to scientific notation for values ≥ 10 000 or ≤ 0.01).
+    pub fn with_colorbar_tick_format(mut self, fmt: TickFormat) -> Self {
+        self.colorbar_tick_format = fmt;
+        self
+    }
+
     pub fn with_y2_range(mut self, min: f64, max: f64) -> Self {
         self.y2_range = Some((min, max));
         self
@@ -1162,6 +1171,7 @@ pub struct ComputedLayout {
     pub theme: Theme,
     pub x_tick_format: TickFormat,
     pub y_tick_format: TickFormat,
+    pub colorbar_tick_format: TickFormat,
     pub y2_range: Option<(f64, f64)>,
     pub log_y2: bool,
     pub y2_tick_format: TickFormat,
@@ -1476,6 +1486,7 @@ impl ComputedLayout {
             theme: layout.theme.clone(),
             x_tick_format: layout.x_tick_format.clone(),
             y_tick_format: layout.y_tick_format.clone(),
+            colorbar_tick_format: layout.colorbar_tick_format.clone(),
             y2_range,
             log_y2: layout.log_y2,
             y2_tick_format: layout.y2_tick_format.clone(),
