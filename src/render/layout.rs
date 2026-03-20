@@ -519,6 +519,15 @@ impl Layout {
                 }
             }
 
+            if let Plot::Forest(fp) = plot {
+                // Reversed: row[0] at top, map_y maps larger values to top
+                y_labels = Some(fp.rows.iter().rev().map(|r| r.label.clone()).collect());
+                if let Some(ref label) = fp.legend_label {
+                    has_legend = true;
+                    max_label_len = max_label_len.max(label.len());
+                }
+            }
+
             if let Plot::Ridgeline(rp) = plot {
                 // Reversed: group[0] at top, map_y maps larger values to top
                 y_labels = Some(rp.groups.iter().rev().map(|g| g.label.clone()).collect());

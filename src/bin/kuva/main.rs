@@ -27,6 +27,7 @@ mod density;
 mod ridgeline;
 mod polar;
 mod ternary;
+mod forest;
 
 use clap::{CommandFactory, Parser, Subcommand};
 
@@ -71,6 +72,7 @@ enum Commands {
     Ridgeline(ridgeline::RidgelineArgs),
     Polar(polar::PolarArgs),
     Ternary(ternary::TernaryArgs),
+    Forest(forest::ForestArgs),
     #[command(hide = true, about = "Print the man page to stdout")]
     Man,
 }
@@ -111,6 +113,7 @@ fn main() {
         Commands::Ridgeline(args) => ridgeline::run(args),
         Commands::Polar(args) => polar::run(args),
         Commands::Ternary(args) => ternary::run(args),
+        Commands::Forest(args) => forest::run(args),
         Commands::Man => unreachable!(),
     };
 

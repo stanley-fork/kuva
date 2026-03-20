@@ -50,6 +50,7 @@ use crate::plot::density::DensityPlot;
 use crate::plot::ridgeline::RidgelinePlot;
 use crate::plot::polar::{PolarPlot, PolarMode};
 use crate::plot::ternary::TernaryPlot;
+use crate::plot::forest::ForestPlot;
 
 use crate::plot::Legend;
 use crate::plot::legend::{ColorBarInfo, LegendEntry, LegendGroup, LegendPosition, LegendShape};
@@ -1638,6 +1639,120 @@ fn add_strip(strip: &StripPlot, scene: &mut Scene, computed: &ComputedLayout) {
         );
         label_offset += group.values.len();
     }
+}
+
+fn add_forest(forest: &ForestPlot, scene: &mut Scene, computed: &ComputedLayout) {
+    let n = forest.rows.len();
+    if n == 0 { return; }
+
+    let max_weight = forest.rows.iter()
+        .filter_map(|r| r.weight)
+        .fold(0.0_f64, f64::max);
+
+    // Null reference line (vertical dashed line at null_value)
+    if forest.show_null_line {
+        if let Some(nv) = forest.null_value {
+            let x_px = computed.map_x(nv);
+            scene.add(Primitive::Line {
+                x1: x_px,
+                y1: computed.map_y(0.5),
+                x2: x_px,
+                y2: computed.map_y(n as f64 + 0.5),
+                stroke: Color::from("#999999"),
+                stroke_width: 1.0,
+                stroke_dasharray: Some("4,3".into()),
+            });
+        }
+    }
+
+    for (i, row) in forest.rows.iter().enumerate() {
+        // row[0] at top = largest y value
+        let y_data = (n - i) as f64;
+        let y_px = computed.map_y(y_data);
+
+        let color_str = row.color.as_deref().unwrap_or(&forest.color);
+        let color = Color::from(color_str);
+
+        let x_lower = computed.map_x(row.ci_lower);
+        let x_upper = computed.map_x(row.ci_upper);
+        let est_px = computed.map_x(row.estimate);
+
+        // Marker half-width, scaled by weight when present.
+        // Clamped to 15% of base size so the smallest study is still visible.
+        let marker_half_w = if let Some(w) = row.weight {
+            if max_weight > 0.0 {
+                let scaled = forest.marker_size * (w / max_weight).sqrt();
+                scaled.max(forest.marker_size * 0.15).max(1.5)
+            } else {
+                forest.marker_size
+            }
+        } else {
+            forest.marker_size
+        };
+
+        // CI whisker — one continuous line from ci_lower to ci_upper.
+        // Drawn first so the marker sits on top.
+        scene.add(Primitive::Line {
+            x1: x_lower,
+            y1: y_px,
+            x2: x_upper,
+            y2: y_px,
+            stroke: color.clone(),
+            stroke_width: forest.whisker_width,
+            stroke_dasharray: None,
+        });
+
+        // End caps
+        let cap = forest.cap_size;
+        if cap > 0.0 {
+            scene.add(Primitive::Line {
+                x1: x_lower,
+                y1: y_px - cap,
+                x2: x_lower,
+                y2: y_px + cap,
+                stroke: color.clone(),
+                stroke_width: forest.whisker_width,
+                stroke_dasharray: None,
+            });
+            scene.add(Primitive::Line {
+                x1: x_upper,
+                y1: y_px - cap,
+                x2: x_upper,
+                y2: y_px + cap,
+                stroke: color.clone(),
+                stroke_width: forest.whisker_width,
+                stroke_dasharray: None,
+            });
+        }
+
+        // Point estimate marker — filled square centered on the whisker.
+        let mh = marker_half_w * 2.0;
+        scene.add(Primitive::Rect {
+            x: est_px - marker_half_w,
+            y: y_px - marker_half_w,
+            width: mh,
+            height: mh,
+            fill: color,
+            stroke: None,
+            stroke_width: None,
+            opacity: None,
+        });
+    }
+}
+
+/// Render a single forest plot with the given layout.
+pub fn render_forest(forest: &ForestPlot, layout: &Layout) -> Scene {
+    let computed = ComputedLayout::from_layout(layout);
+    let mut scene = Scene::new(computed.width, computed.height);
+    scene.font_family = computed.font_family.clone();
+    apply_theme(&mut scene, &computed.theme);
+    add_axes_and_grid(&mut scene, &computed, layout);
+    add_labels_and_title(&mut scene, &computed, layout);
+    add_shaded_regions(&layout.shaded_regions, &mut scene, &computed);
+    add_forest(forest, &mut scene, &computed);
+    add_reference_lines(&layout.reference_lines, &mut scene, &computed);
+    add_text_annotations(&layout.annotations, &mut scene, &computed);
+    scene
 }
 
 fn add_waterfall(waterfall: &WaterfallPlot, scene: &mut Scene, computed: &ComputedLayout) {
@@ -4814,7 +4929,8 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
             match plot {
                 Plot::Scatter(_) | Plot::Line(_) | Plot::Series(_) |
                 Plot::Histogram(_) | Plot::Box(_) | Plot::Violin(_) |
-                Plot::Band(_) | Plot::Strip(_) | Plot::Density(_) => {
+                Plot::Band(_) | Plot::Strip(_) | Plot::Density(_) |
+                Plot::Forest(_) => {
                     plot.set_color(&palette[color_idx]);
                     color_idx += 1;
                 }
@@ -4966,6 +5082,9 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
             }
             Plot::Ternary(tp) => {
                 add_ternary(tp, &mut scene, &computed);
+            }
+            Plot::Forest(f) => {
+                add_forest(f, &mut scene, &computed);
             }
         }
     }

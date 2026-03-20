@@ -175,6 +175,17 @@ check "strip center" \
     "$BIN" strip "$DATA/samples.tsv" --group-col group --value-col expression --center \
         --title "Expression Spread" --x-label "Group" --y-label "Expression"
 
+# ── forest ────────────────────────────────────────────────────────────────────
+check "forest basic" \
+    "$BIN" forest "$DATA/forest.tsv" --label-col study --estimate-col estimate \
+        --ci-lower-col ci_lower --ci-upper-col ci_upper \
+        --title "Meta-Analysis" --x-label "Effect Size"
+
+check "forest weighted" \
+    "$BIN" forest "$DATA/forest.tsv" --label-col study --estimate-col estimate \
+        --ci-lower-col ci_lower --ci-upper-col ci_upper --weight-col weight \
+        --title "Meta-Analysis (Weighted)" --x-label "Effect Size"
+
 # ── waterfall ─────────────────────────────────────────────────────────────────
 check "waterfall basic" \
     "$BIN" waterfall "$DATA/waterfall.tsv" --label-col process --value-col log2fc \

@@ -15,6 +15,7 @@ EXAMPLES=(
     chord
     contour
     density
+    forest
     ridgeline
     dotplot
     heatmap

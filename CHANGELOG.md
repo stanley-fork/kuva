@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Custom X/Theta-Tick-Labels for `PolarPlot`** — Re-uses `with_x_tick_format()` for theta axis on `PolarPlot`. Introduces new default `TickFormat::Degree` for `PolarPlot`, so default behavior is unchanged.
 - **`Layout::with_polar_r_label_angle(deg)`** — Override the angle at which r-axis ring labels are drawn on polar plots (default: midpoint between 0° and first spoke). Useful to avoid overlap with custom theta tick labels.
+- **`ForestPlot`** — forest plot for meta-analysis: point estimates with confidence intervals on a categorical Y-axis, vertical dashed null-effect reference line, optional weight-scaled markers. CLI: `kuva forest data.tsv --label-col study --estimate-col estimate --ci-lower-col lower --ci-upper-col upper`.
 
 ### Fixed
 - Fixed an issue where manually set x- and y-axis minimum/maximum values were dropped in multi-panel figures.

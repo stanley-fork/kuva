@@ -203,6 +203,12 @@ Click any image to go to the full documentation page.
 <div class="gallery-desc">Genome synteny ribbons between sequences with forward and inverted blocks.</div>
 </a></div>
 
+<div class="gallery-card"><a href="./plots/forest.html">
+<img src="./assets/forest/basic.svg" alt="Forest Plot">
+<div class="gallery-caption">Forest Plot</div>
+<div class="gallery-desc">Point estimates with confidence intervals for meta-analysis studies.</div>
+</a></div>
+
 <div class="gallery-card"><a href="./plots/band.html">
 <img src="./assets/band/multi.svg" alt="Band Plot">
 <div class="gallery-caption">Band Plot</div>

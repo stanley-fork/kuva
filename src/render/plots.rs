@@ -27,6 +27,7 @@ use crate::plot::density::DensityPlot;
 use crate::plot::ridgeline::RidgelinePlot;
 use crate::plot::polar::PolarPlot;
 use crate::plot::ternary::TernaryPlot;
+use crate::plot::forest::ForestPlot;
 use crate::plot::legend::ColorBarInfo;
 use crate::render::render_utils;
 
@@ -61,6 +62,7 @@ pub enum Plot {
     Ridgeline(RidgelinePlot),
     Polar(PolarPlot),
     Ternary(TernaryPlot),
+    Forest(ForestPlot),
 }
 
 impl From<ScatterPlot>    for Plot { fn from(p: ScatterPlot)    -> Self { Plot::Scatter(p) } }
@@ -92,6 +94,7 @@ impl From<DensityPlot>   for Plot { fn from(p: DensityPlot)   -> Self { Plot::De
 impl From<RidgelinePlot> for Plot { fn from(p: RidgelinePlot) -> Self { Plot::Ridgeline(p) } }
 impl From<PolarPlot>     for Plot { fn from(p: PolarPlot)     -> Self { Plot::Polar(p) } }
 impl From<TernaryPlot>   for Plot { fn from(p: TernaryPlot)   -> Self { Plot::Ternary(p) } }
+impl From<ForestPlot>    for Plot { fn from(p: ForestPlot)    -> Self { Plot::Forest(p) } }
 
 fn bounds_from_2d<I>(points: I) -> Option<((f64, f64), (f64, f64))>
     where
@@ -141,6 +144,7 @@ impl Plot {
             Plot::Band(b) => b.color = color.into(),
             Plot::Strip(s) => s.color = color.into(),
             Plot::Density(d) => d.color = color.into(),
+            Plot::Forest(f) => f.color = color.into(),
             _ => {}
         }
     }
@@ -576,6 +580,25 @@ impl Plot {
                 };
                 Some(((x_min, x_max), (0.0, rows as f64)))
             }
+            Plot::Forest(fp) => {
+                if fp.rows.is_empty() { return None; }
+                let n = fp.rows.len();
+                let y_min = 0.5;
+                let y_max = n as f64 + 0.5;
+                let mut x_min = f64::INFINITY;
+                let mut x_max = f64::NEG_INFINITY;
+                for row in &fp.rows {
+                    x_min = x_min.min(row.ci_lower);
+                    x_max = x_max.max(row.ci_upper);
+                }
+                // Include null value in x range so the reference line is visible
+                if let Some(nv) = fp.null_value {
+                    x_min = x_min.min(nv);
+                    x_max = x_max.max(nv);
+                }
+                if !x_min.is_finite() { return None; }
+                Some(((x_min, x_max), (y_min, y_max)))
+            }
         }
     }
 
@@ -604,6 +627,7 @@ impl Plot {
                 let avg_cols = b.sequences.first().map_or(10, |s| s.len());
                 rows * avg_cols + 10
             }
+            Plot::Forest(f) => f.rows.len() * 4 + 5,
             _ => 100,
         }
     }
