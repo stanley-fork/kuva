@@ -834,6 +834,7 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout)
         let norm = if hist.normalize { 1.0 / max_count } else { 1.0 };
         for (i, count) in counts.iter().enumerate() {
             if i + 1 >= edges.len() { break; }
+            if *count == 0.0 { continue; }
             let x0 = computed.map_x(edges[i]);
             let x1 = computed.map_x(edges[i + 1]);
             let y0 = computed.map_y(0.0);
@@ -878,6 +879,7 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout)
     let norm: f64 = if hist.normalize { 1.0 / max_count } else { 1.0 };
 
     for (i, count) in counts.iter().enumerate() {
+        if *count == 0 { continue; }
         let x = range.0 + i as f64 * bin_width;
         let height = *count as f64 * norm;
 
