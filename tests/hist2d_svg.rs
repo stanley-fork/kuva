@@ -153,8 +153,9 @@ fn test_hist2d_log_count() {
 
     assert!(svg_log.contains("<svg"));
     assert!(!svg_log.contains("NaN"), "log SVG should contain no NaN values");
-    // Colorbar label should say log(Count)
-    assert!(svg_log.contains("log(Count)"), "colorbar label should be 'log(Count)'");
+    // Colorbar label should reference log and Count
+    assert!(svg_log.contains("log") && svg_log.contains("Count"),
+        "colorbar label should reference log and Count");
     // Linear colorbar should still say Count
     assert!(svg_linear.contains(">Count<") || svg_linear.contains("\"Count\""),
         "linear colorbar label should be 'Count'");

@@ -36,7 +36,7 @@ pub struct Hist2dArgs {
     #[arg(long)]
     pub correlation: bool,
 
-    /// Log-scale the color mapping (ln(count+1)). Useful when a few high-density
+    /// Log-scale the color mapping (log10(count+1)). Useful when a few high-density
     /// bins dominate the color scale and obscure structure elsewhere.
     #[arg(long)]
     pub log_count: bool,

@@ -913,7 +913,7 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout)
 fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedLayout) {
     let max_count = hist2d.bins.iter().flatten().copied().max().unwrap_or(1) as f64;
     let log_scale = hist2d.log_count;
-    let log_max = (max_count + 1.0).ln();
+    let log_max = (max_count + 1.0).log10();
 
     let x_bin_width = (hist2d.x_range.1 - hist2d.x_range.0) / hist2d.bins_x as f64;
     let y_bin_height = (hist2d.y_range.1 - hist2d.y_range.0) / hist2d.bins_y as f64;
@@ -948,7 +948,7 @@ fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedL
             let x1 = x0 + x_bin_width;
             let y1 = y0 + y_bin_height;
             let norm = if log_scale {
-                ((count as f64 + 1.0).ln() / log_max).clamp(0.0, 1.0)
+                ((count as f64 + 1.0).log10() / log_max).clamp(0.0, 1.0)
             } else {
                 (count as f64 / max_count).clamp(0.0, 1.0)
             };
@@ -2163,14 +2163,24 @@ fn add_colorbar(info: &ColorBarInfo, scene: &mut Scene, computed: &ComputedLayou
         opacity: None,
     });
 
-    // Tick marks and labels
-    let ticks = render_utils::generate_ticks(info.min_value, info.max_value, 5);
+    // Tick marks and labels — use custom tick_labels if provided, else auto-generate
     let range = info.max_value - info.min_value;
-    for tick in &ticks {
-        if *tick < info.min_value || *tick > info.max_value {
+    let auto_ticks: Vec<(f64, String)>;
+    let tick_entries: &[(f64, String)] = if let Some(ref tl) = info.tick_labels {
+        tl.as_slice()
+    } else {
+        let raw = render_utils::generate_ticks(info.min_value, info.max_value, 5);
+        auto_ticks = raw.into_iter()
+            .filter(|t| *t >= info.min_value && *t <= info.max_value)
+            .map(|t| (t, computed.colorbar_tick_format.format(t)))
+            .collect();
+        auto_ticks.as_slice()
+    };
+    for (pos, label) in tick_entries {
+        if *pos < info.min_value || *pos > info.max_value {
             continue;
         }
-        let frac = (tick - info.min_value) / range;
+        let frac = (pos - info.min_value) / range;
         let y = bar_y + bar_height - frac * bar_height; // invert: high values at top
 
         // tick mark
@@ -2188,7 +2198,7 @@ fn add_colorbar(info: &ColorBarInfo, scene: &mut Scene, computed: &ComputedLayou
         scene.add(Primitive::Text {
             x: bar_x + bar_width + computed.tick_mark_major,
             y: y + 4.0,
-            content: computed.colorbar_tick_format.format(*tick),
+            content: label.clone(),
             size: computed.tick_size,
             anchor: TextAnchor::Start,
             rotate: None,

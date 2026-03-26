@@ -650,26 +650,53 @@ impl Plot {
                     min_value: min,
                     max_value: max,
                     label: None,
+                    tick_labels: None,
                 })
             }
             Plot::Histogram2d(h2d) => {
                 let max_count = h2d.bins.iter().flatten().copied().max().unwrap_or(1) as f64;
                 let cmap = h2d.color_map.clone();
                 let log_scale = h2d.log_count;
-                let log_max = (max_count + 1.0).ln();
-                Some(ColorBarInfo {
-                    map_fn: Arc::new(move |t| {
-                        let norm = if log_scale {
-                            ((t + 1.0).ln() / log_max).clamp(0.0, 1.0)
-                        } else {
-                            (t / max_count).clamp(0.0, 1.0)
-                        };
-                        cmap.map(norm)
-                    }),
-                    min_value: 0.0,
-                    max_value: max_count,
-                    label: Some(if log_scale { "log(Count)".to_string() } else { "Count".to_string() }),
-                })
+                if log_scale {
+                    // Colorbar in log₁₀ space: ticks at integer powers of 10 labelled
+                    // with the actual count value so users can read off "this color = N cells".
+                    let log_max = (max_count + 1.0).log10();
+                    let tick_labels: Vec<(f64, String)> = {
+                        let mut v = vec![(0.0_f64, "0".to_string())];
+                        let mut k = 0u32;
+                        loop {
+                            let count = 10_f64.powi(k as i32);
+                            if count > max_count { break; }
+                            let pos = (count + 1.0).log10();
+                            v.push((pos, format!("{}", count as u64)));
+                            k += 1;
+                        }
+                        // Always include max_count at the top
+                        v.push((log_max, format!("{}", max_count as u64)));
+                        v.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9);
+                        v
+                    };
+                    Some(ColorBarInfo {
+                        map_fn: Arc::new(move |t| {
+                            // t is a log₁₀ value in [0, log_max]
+                            cmap.map((t / log_max).clamp(0.0, 1.0))
+                        }),
+                        min_value: 0.0,
+                        max_value: log_max,
+                        label: Some("log\u{2081}\u{2080}(Count + 1)".to_string()),
+                        tick_labels: Some(tick_labels),
+                    })
+                } else {
+                    Some(ColorBarInfo {
+                        map_fn: Arc::new(move |t| {
+                            cmap.map((t / max_count).clamp(0.0, 1.0))
+                        }),
+                        min_value: 0.0,
+                        max_value: max_count,
+                        label: Some("Count".to_string()),
+                        tick_labels: None,
+                    })
+                }
             }
             Plot::DotPlot(dp) => {
                 let label = dp.color_legend_label.clone()?;
@@ -683,6 +710,7 @@ impl Plot {
                     min_value: min,
                     max_value: max,
                     label: Some(label),
+                    tick_labels: None,
                 })
             }
             Plot::Contour(cp) => {
@@ -699,6 +727,7 @@ impl Plot {
                     min_value: z_min,
                     max_value: z_max,
                     label,
+                    tick_labels: None,
                 })
             }
             _ => None,

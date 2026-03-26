@@ -170,7 +170,7 @@ pub struct Histogram2D {
     pub color_map: ColorMap,
     /// When `true`, the Pearson r coefficient is printed in the top-right corner.
     pub show_correlation: bool,
-    /// When `true`, bin counts are log-scaled before color mapping (`ln(count+1)`).
+    /// When `true`, bin counts are log-scaled before color mapping (`log₁₀(count+1)`).
     pub log_count: bool,
 }
 
@@ -287,7 +287,7 @@ impl Histogram2D {
 
     /// Apply logarithmic scaling to bin counts before color mapping.
     ///
-    /// Uses `ln(count + 1)` so that zero counts map to 0.0 and the dynamic
+    /// Uses `log₁₀(count + 1)` so that zero counts map to 0.0 and the dynamic
     /// range is compressed. Useful when a few high-density bins dominate the
     /// color scale and obscure structure in low-density regions.
     pub fn with_log_count(mut self) -> Self {

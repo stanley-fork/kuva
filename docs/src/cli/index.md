@@ -673,7 +673,7 @@ Two-dimensional histogram (density grid) from two numeric columns.
 | `--bins-y <N>` | `10` | Number of bins on the Y axis |
 | `--colormap <NAME>` | `viridis` | Color map: `viridis`, `inferno`, `turbo`, `grayscale` |
 | `--correlation` | off | Overlay Pearson correlation coefficient |
-| `--log-count` | off | Log-scale the color mapping via `ln(count+1)`. Useful when a dense core dominates the color scale and hides structure in surrounding low-density regions. Colorbar label updates to "log(Count)". |
+| `--log-count` | off | Log-scale the color mapping via `log₁₀(count+1)`. Useful when a dense core dominates the color scale and hides structure in surrounding low-density regions. Colorbar label updates to "log₁₀(Count + 1)" with tick marks at actual count values (1, 10, 100, …). |
 | `--colorbar-tick-format <FMT>` | `auto` | Colorbar tick label format: `auto`, `sci`, `integer`, `fixed2`. `auto` renders integers as-is and switches to scientific notation when counts reach 10 000. |
 
 ```bash
