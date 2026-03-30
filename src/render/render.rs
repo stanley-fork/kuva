@@ -5977,18 +5977,19 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
     let stroke_w = computed.axis_stroke_width;
     let tick_sz = computed.tick_size;
 
-    // Determine r_max
-    let r_max = pp.r_max.unwrap_or_else(|| {
-        let m = pp.r_max_auto();
-        if m <= 0.0 { 1.0 } else { m }
-    });
+    // Determine r_min / r_max
+    let r_min = pp.r_min.unwrap_or(0.0);
+    let r_max = pp.r_max.unwrap_or_else(|| pp.r_max_auto());
+    // Guard: range must be positive.
+    let r_range = (r_max - r_min).max(f64::EPSILON);
 
     let n_rings = pp.r_grid_lines.unwrap_or(4).max(1);
     let n_div = pp.theta_divisions.max(2);
 
     // Helper: convert (r_data, theta_deg) → (px, py)
+    // Points with r_data < r_min are clamped to the centre.
     let theta_to_px = |r_data: f64, theta_deg: f64| -> (f64, f64) {
-        let r_frac = r_data / r_max;
+        let r_frac = (r_data - r_min).max(0.0) / r_range;
         let display_angle = pp.theta_start + theta_deg * if pp.clockwise { 1.0 } else { -1.0 };
         // svg_angle: angle from east axis in standard math (CCW positive)
         let svg_angle = (90.0 - display_angle).to_radians();
@@ -5998,6 +5999,10 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
     };
 
     if pp.show_grid {
+        // Labels are collected here and emitted after all geometry so that
+        // spoke/ring lines never paint over text.
+        let mut label_prims: Vec<Primitive> = Vec::new();
+
         // ── Concentric grid circles ───────────────────────────────────────────
         for i in 1..=n_rings {
             let r = avail_r * (i as f64) / (n_rings as f64);
@@ -6023,10 +6028,10 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 stroke_dasharray: dasharray,
             })));
 
-            // R-value label: place at the midpoint angle between the 0° spoke
+            // R-value label: placed at the midpoint angle between the 0° spoke
             // and the first clockwise spoke so it never overlaps the 0° theta label.
             if pp.show_r_labels {
-                let r_val = r_max * (i as f64) / (n_rings as f64);
+                let r_val = r_min + r_range * (i as f64) / (n_rings as f64);
                 let label = if r_val.fract() == 0.0 {
                     format!("{}", r_val as i64)
                 } else {
@@ -6039,7 +6044,7 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 let svg_angle = (90.0 - display_angle).to_radians();
                 let lx = round2(cx + r * svg_angle.cos() + 2.0);
                 let ly = round2(cy - r * svg_angle.sin() - 2.0);
-                scene.add(Primitive::Text {
+                label_prims.push(Primitive::Text {
                     x: lx,
                     y: ly,
                     content: label,
@@ -6051,7 +6056,27 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
             }
         }
 
+        // Centre label — only when r_min != 0 so readers know what the origin represents.
+        if pp.show_r_labels && r_min != 0.0 {
+            let label = if r_min.fract() == 0.0 {
+                format!("{}", r_min as i64)
+            } else {
+                format!("{:.2}", r_min)
+            };
+            label_prims.push(Primitive::Text {
+                x: round2(cx + 4.0),
+                y: round2(cy - 2.0),
+                content: label,
+                size: tick_sz,
+                anchor: TextAnchor::Start,
+                rotate: None,
+                bold: false,
+            });
+        }
+
         // ── Spoke lines ───────────────────────────────────────────────────────
+        let label_gap = 10.0_f64; // fixed pixel gap beyond outer ring
+        let ts = tick_sz as f64;
         for i in 0..n_div {
             let theta_deg = i as f64 * 360.0 / n_div as f64;
             let (x2, y2) = theta_to_px(r_max, theta_deg);
@@ -6065,25 +6090,53 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 stroke_dasharray: None,
             });
 
-            // Spoke angle label
-            let (lx, ly) = theta_to_px(r_max * 1.08, theta_deg);
-            // Determine text anchor based on position relative to center
-            let anchor = if lx < cx - 5.0 {
+            // Spoke angle label — computed directly (not via theta_to_px, which
+            // clamps to the data range) so the label always lands outside the ring.
+            let display_angle = pp.theta_start
+                + theta_deg * if pp.clockwise { 1.0 } else { -1.0 };
+            let svg_angle = (90.0 - display_angle).to_radians();
+            let cos_a = svg_angle.cos();
+            let sin_a = svg_angle.sin();
+            let label_r = avail_r + label_gap;
+            let lx = cx + label_r * cos_a;
+            let ly_raw = cy - label_r * sin_a;
+
+            // Direction-aware vertical alignment.
+            // SVG text y is the baseline; text renders above it.
+            // Labels above centre (sin_a > 0) naturally clear the ring —
+            //   shift the baseline up a little so the text body sits clear.
+            // Labels below centre (sin_a < 0) need the baseline pushed further
+            //   down so the text body (which grows upward) clears the ring.
+            // Horizontal labels get a mid-height nudge.
+            let ly = if sin_a > 0.15 {
+                ly_raw - ts * 0.2       // above centre: nudge up
+            } else if sin_a < -0.15 {
+                ly_raw + ts * 0.8       // below centre: shift baseline down by ~cap-height
+            } else {
+                ly_raw + ts * 0.35      // horizontal: small centering nudge
+            };
+
+            let anchor = if cos_a < -0.1 {
                 TextAnchor::End
-            } else if lx > cx + 5.0 {
+            } else if cos_a > 0.1 {
                 TextAnchor::Start
             } else {
                 TextAnchor::Middle
             };
-            scene.add(Primitive::Text {
+            label_prims.push(Primitive::Text {
                 x: round2(lx),
-                y: round2(ly + 4.0), // small baseline adjust
+                y: round2(ly),
                 content: computed.x_tick_format.format(theta_deg),
                 size: tick_sz,
                 anchor,
                 rotate: None,
                 bold: false,
             });
+        }
+
+        // Emit all labels after geometry so lines never overdraw text.
+        for prim in label_prims {
+            scene.add(prim);
         }
     }
 
