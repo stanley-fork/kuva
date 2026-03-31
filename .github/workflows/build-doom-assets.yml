@@ -47,13 +47,8 @@ jobs:
       - name: Download DOOM1.WAD shareware
         run: |
           # doom1.wad is stored in doom-crt via Git LFS.
-          # Use a sparse checkout so we only fetch that one file.
-          git clone --depth 1 --filter=blob:none --sparse \
-            https://github.com/mattiasgustavsson/doom-crt.git doom-crt-src
-          cd doom-crt-src
-          git sparse-checkout set doom1.wad
-          git lfs pull --include="doom1.wad"
-          cd ..
+          # Plain shallow clone — git-lfs smudge runs automatically on ubuntu-latest.
+          git clone --depth 1 https://github.com/mattiasgustavsson/doom-crt.git doom-crt-src
           cp doom-crt-src/doom1.wad doom1.wad
           ls -lh doom1.wad
 
