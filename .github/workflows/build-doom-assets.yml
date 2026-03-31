@@ -18,7 +18,9 @@ jobs:
       - name: Install Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: latest
+          # Pin to the version current when cloudflare/doom-wasm was last maintained.
+          # Newer Emscripten breaks the old autoconf configure step.
+          version: 3.1.46
 
       - name: Install build deps
         run: sudo apt-get install -y automake autoconf
@@ -29,7 +31,11 @@ jobs:
       - name: Build doom.wasm + doom.js
         working-directory: doom-wasm-src
         run: |
-          ./scripts/clean.sh
+          # ac_cv_prog_cc_stdc=no: skip the C-standard detection macro that
+          # fails when emcc is used as a cross-compiler — emcc already handles C99.
+          # CFLAGS: silence implicit-function-declaration errors in old DOOM source.
+          export ac_cv_prog_cc_stdc=no
+          export CFLAGS="-Wno-implicit-function-declaration -Wno-implicit-int"
           ./scripts/build.sh
           ls -lh src/websockets-doom.*
 
