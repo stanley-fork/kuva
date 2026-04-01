@@ -77,6 +77,7 @@
 - [Legends](./reference/legends.md)
 - [Themes](./reference/themes.md)
 - [Color Palettes](./reference/palettes.md)
+- [SVG Interactivity](./reference/interactive.md)
 
 # Performance
 

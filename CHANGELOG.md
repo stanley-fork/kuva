@@ -9,16 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Custom X/Theta-Tick-Labels for `PolarPlot`** — Re-uses `with_x_tick_format()` for theta axis on `PolarPlot`. Introduces new default `TickFormat::Degree` for `PolarPlot`, so default behavior is unchanged.
-- **`Layout::with_polar_r_label_angle(deg)`** — Override the angle at which r-axis ring labels are drawn on polar plots (default: midpoint between 0° and first spoke). Useful to avoid overlap with custom theta tick labels.
+- **SVG interactivity v1** (`--interactive` / `Layout::with_interactive()`) — opt-in, self-contained browser interactivity embedded directly in the SVG output with no external dependencies. Degrades silently to a static SVG in PNG/PDF/terminal/Inkscape contexts. Features: hover tooltips, click-to-pin (sticky highlight; Escape to clear), search + dim (text input dims non-matching elements), coordinate readout (cursor x/y in data space shown on hover), and legend toggle (click a legend entry to show/hide the corresponding series). Wired for scatter, line, bar, strip, and volcano plots in this release; remaining renderers deferred to v0.2.
+- **`kuva doom`** (`--features cli,doom`) — generates a fully self-contained, offline-playable DOOM SVG (~15 MB). Open in any browser and play with keyboard controls. The Chocolate Doom engine (GPL v2) and shareware WAD are base64-encoded directly into the SVG at build time; no server, no network requests, no external files needed. Easter egg feature, separate from the plotting library.
+- **`kuva bar --color-by <COL>`** — grouped bar chart mode. Groups rows by the specified column and creates one colored series per unique value using the active palette, with an automatic legend. When each x-label maps to exactly one series (e.g. `--color-by` equals `--label-col`), falls back to simple per-bar coloring instead of a grouped layout.
+- **`kuva strip --legend`** — assigns palette colors per group and shows a legend. Combines with `--interactive` for legend toggle.
+- **`PolarPlot` negative radius / `r_min` support** (`--r-min`) — `PolarPlot::with_r_min(f64)` sets the value mapped to the plot centre (default: 0). Points below `r_min` clamp to centre; ring labels show actual r values. CLI: `kuva polar --r-min <F>`. Closes #54.
+- **Custom X/Theta-Tick-Labels for `PolarPlot`** — `with_x_tick_format()` now applies to the theta axis on polar plots. New `TickFormat::Degree` default keeps existing behaviour unchanged.
+- **`Layout::with_polar_r_label_angle(deg)`** — override the angle at which r-axis ring labels are drawn (default: midpoint between spokes).
 - **`ForestPlot`** — forest plot for meta-analysis: point estimates with confidence intervals on a categorical Y-axis, vertical dashed null-effect reference line, optional weight-scaled markers. CLI: `kuva forest data.tsv --label-col study --estimate-col estimate --ci-lower-col lower --ci-upper-col upper`.
+- **`Figure::with_twin_y_plots(cell, primary, secondary)`** — twin-Y panels now work inside multi-panel `Figure` grid layouts. Auto-layout via `Layout::auto_from_twin_y_plots`; shared legend collection includes both primary and secondary plots.
+- **Fine-grained axis and grid line controls** — new `Layout` builder methods: `with_axis_line_width(f)`, `with_tick_width(f)`, `with_tick_length(f)`, `with_grid_line_width(f)`. All propagate through `ComputedLayout`; grid lines now drawn before axis borders (z-order fix). CLI: `--tick-length`, `--tick-width`, `--grid-stroke`.
+- **SVG clip-path support** — data elements are now clipped to the plot area, preventing points and lines from rendering outside the axis borders. Implemented via `Primitive::ClipStart`/`ClipEnd`; ignored by terminal and raster backends. Closes #53.
+- **`Histogram2D::with_log_count()`** — log₁₀-scaled colour axis for 2D histograms. Colorbar tick marks are placed at actual count values (0, 1, 10, 100 …) and labelled accordingly. CLI: `kuva hist2d --log-count`. Also adds `Layout::with_colorbar_tick_format(TickFormat)` / CLI `--colorbar-tick-format`.
+- **`SankeyPlot` flow labels** — `with_flow_labels()` annotates each ribbon with its flow value; `with_flow_label_units(s)` adds a unit string; `with_flow_label_decimals(n)` controls precision; `with_flow_label_percents()` shows percentages of total flow. CLI: `kuva sankey --flow-labels [--flow-label-percents]`.
+- **`kuva heatmap` long-format input** — accepts a value column (`--value-col`) from long-format data (row, column, value triples) with optional per-cell aggregation (`--agg-fn mean|sum|min|max|count`). Wide-format matrix input unchanged.
+- **`kuva bar --agg <FUNC>`** — aggregate a numeric value column by a label column using `mean`, `median`, `sum`, `min`, or `max` before plotting. Complements `--count-by` for summarising long-format data.
+- **`kuva volcano` and `kuva manhattan` — `--pvalue-col-is-log`** — accept a pre-computed −log₁₀(p) column directly; internally un-transforms via 10^(−v) before passing raw p-values to the plot struct.
+- **Colorbar title moved to side** — colorbar titles now render rotated on the left side of the colorbar rather than above it, matching common convention and preventing overlap with axis labels.
+- **Per-subcommand CLI documentation** — all CLI subcommands now have dedicated documentation pages at `docs/src/cli/<subcommand>.md`. Closes #36.
 
 ### Fixed
-- Fixed an issue where manually set x- and y-axis minimum/maximum values were dropped in multi-panel figures.
-
+- **Multi-panel figure axis ranges** — manually set `with_x_axis_min/max` / `with_y_axis_min/max` values were silently dropped when used inside `Figure` panels. Now correctly forwarded through `clone_layout`. Closes #43.
 - **Terminal y-axis label** — `--y-label` text is now rendered vertically (one character per row) in `--terminal` mode instead of horizontally, preventing overlap with the plot area.
 - **Terminal legend swatches** — circle-based legend swatches (scatter, density, volcano, manhattan, etc.) now show their actual series color instead of being masked by the legend background in `--terminal` mode.
-- **Polar r-label / theta-label overlap** — r-axis ring labels are now positioned at the midpoint angle between spokes instead of fixed at `cx+4` (directly on the 0° spoke), preventing overlap with the 0° theta tick label.
+- **Polar r-label / theta-label overlap** — r-axis ring labels are now positioned at the midpoint angle between spokes instead of directly on the 0° spoke.
+- **Histogram zero-height bins** — zero-count bins are now skipped before emitting a `Rect` primitive, eliminating SVG zero-height rect warnings. Closes #51.
+- **Density plot boundary leakage** — replaced post-hoc KDE clipping with boundary reflection (ggplot2-style): ghost points mirrored at user-specified bounds restore lost kernel mass so the curve terminates smoothly. `with_x_lo(f)` / `with_x_hi(f)` allow one-sided bounds; `with_x_range(lo, hi)` is kept as a shorthand. Closes #47.
+- **Density plot normalization** — `bounds()` sample count now matches the renderer; `--x-min` / `--x-max` CLI flags correctly restrict the KDE evaluation range. Closes #37.
+- **Histogram2D with real data** — CLI now accepts `--x-min`/`--x-max`/`--y-min`/`--y-max` to control the binning range; off-by-one at the upper edge clamped to the last bin. Closes #39.
+- **Histogram x-axis label truncation** — right margin now accounts for the last tick label's half-width so labels are never clipped. Closes #46.
+- **Heatmap / PDF cell limit** — a hard 1 M cell limit in `kuva heatmap` now emits a clear error with the cell count and concrete aggregation suggestions instead of silently producing a broken PDF. Closes #38.
 
 ---
 

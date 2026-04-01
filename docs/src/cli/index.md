@@ -129,6 +129,28 @@ These flags are available on every subcommand.
 | `--cvd-palette <NAME>` | — | Colour-vision-deficiency palette: `deuteranopia`, `protanopia`, `tritanopia`. Overrides `--palette`. |
 | `--background <COLOR>` | *(theme default)* | SVG background color (any CSS color string) |
 
+### SVG interactivity
+
+| Flag | Default | Description |
+|---|---|---|
+| `--interactive` | off | Embed browser interactivity in SVG output (ignored for PNG/PDF/terminal) |
+
+When `--interactive` is set the output SVG contains a self-contained `<script>` block with no external dependencies. Features:
+
+- **Hover tooltip** — hovering a data point shows its label and value.
+- **Click to pin** — click a point to keep its highlight; click again or press **Escape** to clear all pins.
+- **Search** — type in the search box (top-left of the plot area) to dim non-matching points. **Escape** clears.
+- **Coordinate readout** — mouse position inside the plot area is shown in data-space coordinates.
+- **Legend toggle** — click a legend entry to show/hide that series.
+- **Save button** — top-right button serialises the current SVG DOM (including any pinned/dimmed state). *Note: the download is not yet functional; this will be fixed in v0.2.*
+
+Supported in this release: `scatter`, `line`, `bar`, `strip`, `volcano`. All other subcommands accept `--interactive` and load the UI chrome (coordinate readout, search box) but do not yet have per-point hover/search — remaining renderers will be wired in v0.2.
+
+```bash
+kuva scatter data.tsv --x x --y y --color-by group --legend --interactive -o plot.svg
+kuva volcano hits.tsv --gene gene --log2fc log2fc --pvalue pvalue --legend --interactive -o volcano.svg
+```
+
 ### Terminal output
 
 | Flag | Default | Description |
