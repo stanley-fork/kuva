@@ -5,7 +5,7 @@ use crate::render::render::{
     collect_legend_entries, render_legend_at, render_multiple, render_twin_y, Primitive, Scene,
     TextAnchor,
 };
-use crate::render::text_metrics::{widest_text_width, FontStyle};
+use crate::render::text_metrics::{ascent, text_height, widest_text_width, FontStyle};
 
 #[derive(Debug, Clone)]
 pub enum FigureLegendPosition {
@@ -481,8 +481,10 @@ impl Figure {
             } else {
                 let labels = entries.iter().map(|e| e.label.as_str());
                 let w = (widest_text_width(labels, 12.0, FontStyle::Regular) + 35.0).max(80.0);
-                let line_h = user_layouts.first().map_or(12, |l| l.body_size) as f64 * 1.5;
-                let h = entries.len() as f64 * line_h + 20.0;
+                let body = user_layouts.first().map_or(12, |l| l.body_size) as f64;
+                // Match render_legend_at: ~1.5em leading, box hugging the content.
+                let line_h = (body * 1.5).max(12.0);
+                let h = entries.len() as f64 * line_h + 20.0 - (line_h - 12.0);
                 (w, h)
             }
         } else {
@@ -530,6 +532,17 @@ impl Figure {
                 )
             );
 
+        // Title band: reserve the real font height at the title size plus symmetric
+        // padding, and place the baseline so ascenders clear the top. A fixed 30px
+        // band with a y=22 baseline clipped the title once title_size exceeded ~20.
+        let title_pad = title_size as f64 * 0.2;
+        let figure_title_height = if title.is_some() {
+            text_height(title_size as f64, FontStyle::Regular) + 2.0 * title_pad
+        } else {
+            0.0
+        };
+        let figure_title_baseline = title_pad + ascent(title_size as f64, FontStyle::Regular);
+
         // If total figure size is specified, back-compute cell dimensions to fit.
         // Explicit per-row/col sizes are subtracted first; remaining space is shared
         // equally among unconstrained rows/cols.
@@ -544,7 +557,7 @@ impl Figure {
             } else {
                 0.0
             };
-            let title_h = if title.is_some() { 30.0 } else { 0.0 };
+            let title_h = figure_title_height;
 
             let explicit_col_total: f64 = (0..cols)
                 .filter_map(|c| explicit_col_widths.get(c).copied().flatten())
@@ -579,8 +592,6 @@ impl Figure {
                     .max(1.0);
             }
         }
-
-        let figure_title_height = if title.is_some() { 30.0 } else { 0.0 };
 
         // Build a layout for each structure slot (needed before per-row height calc).
         let mut layouts: Vec<Layout> = Vec::new();
@@ -793,7 +804,7 @@ impl Figure {
                 let label = config.label_for(i);
                 master.add(Primitive::Text {
                     x: cell_x + 8.0,
-                    y: cell_y + config.size as f64 + 2.0,
+                    y: cell_y + 2.0 + ascent(config.size as f64, FontStyle::Regular),
                     content: label,
                     size: config.size,
                     anchor: TextAnchor::Start,
@@ -807,7 +818,7 @@ impl Figure {
         if let Some(title) = title {
             master.add(Primitive::Text {
                 x: total_width / 2.0,
-                y: 22.0,
+                y: figure_title_baseline,
                 content: title,
                 size: title_size,
                 anchor: TextAnchor::Middle,

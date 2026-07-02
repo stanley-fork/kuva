@@ -41,6 +41,26 @@ fn test_jointplot_basic() {
     assert!(svg.contains("<svg"));
 }
 
+/// The jointplot title band and baseline must scale with `title_size`: the old
+/// fixed 35px band with a `title_h * 0.7` (=24.5px) baseline clipped large titles.
+#[test]
+fn test_jointplot_title_baseline_scales_with_title_size() {
+    let (x, y) = sample_data(50, 7);
+    let build = |ts: u32| {
+        let jp = JointPlot::new().with_xy(x.clone(), y.clone());
+        let layout = Layout::new((-6.0, 6.0), (-6.0, 6.0))
+            .with_title("JPTITLE")
+            .with_title_size(ts);
+        SvgBackend.render_scene(&render_jointplot(jp, layout))
+    };
+    let big = common::text_y(&build(48), "JPTITLE");
+    assert!(big > 44.0, "title_size 48 baseline {big:.1} must clear ascenders (was 24.5)");
+    assert!(
+        big > common::text_y(&build(16), "JPTITLE"),
+        "baseline must scale with title_size"
+    );
+}
+
 #[test]
 fn test_jointplot_density() {
     let (x, y) = sample_data(200, 1);

@@ -51,8 +51,17 @@ fn png_scale_parameter() {
     let w2 = u32::from_be_bytes([bytes2[16], bytes2[17], bytes2[18], bytes2[19]]);
     let h2 = u32::from_be_bytes([bytes2[20], bytes2[21], bytes2[22], bytes2[23]]);
 
-    assert_eq!(w2, w1 * 2, "2× width should be double 1× width");
-    assert_eq!(h2, h1 * 2, "2× height should be double 1× height");
+    // Doubling the raster scale doubles the pixel dimensions, to within the 1px
+    // rounding inherent in rasterising a sub-pixel canvas (real-metric margins are
+    // fractional, so round(2·w) can differ from 2·round(w) by one pixel).
+    assert!(
+        (w2 as i64 - (w1 * 2) as i64).abs() <= 1,
+        "2× width {w2} should be ~double 1× width {w1}"
+    );
+    assert!(
+        (h2 as i64 - (h1 * 2) as i64).abs() <= 1,
+        "2× height {h2} should be ~double 1× height {h1}"
+    );
 }
 
 // ---------------------------------------------------------------------------
