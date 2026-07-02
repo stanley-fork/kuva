@@ -1188,9 +1188,11 @@ impl Layout {
                 if pp.show_legend {
                     has_legend = true;
                     if pp.series.len() <= 1 {
-                        max_label_len = max_label_len
-                            .max(pp.left_label.len())
-                            .max(pp.right_label.len());
+                        // Single-series pyramids legend the two side labels. Measure both
+                        // so the box hugs their real width; a bare char count left
+                        // `max_label_w` at 0 and clipped labels like "Female".
+                        note_legend_label(&mut max_label_len, &mut max_label_w, &pp.left_label, 0);
+                        note_legend_label(&mut max_label_len, &mut max_label_w, &pp.right_label, 0);
                     } else {
                         for s in &pp.series {
                             note_legend_label(&mut max_label_len, &mut max_label_w, &s.label, 0);
@@ -2806,21 +2808,23 @@ impl ComputedLayout {
         // Width-aware colorbar geometry. Tick labels sit in a fixed band to the right of
         // the bar (governed by `colorbar_x_inset`), so the inset — not just the right
         // margin — must grow with the widest label or 6-digit labels clip at the canvas
-        // edge. Size to the widest label *after* applying the colorbar tick format,
-        // biasing low (no extra padding, 0.6 char-width) and letting `add_colorbar_at`
-        // shrink the font if a label still overruns. `colorbar_tick_values` is `None` for
-        // hand-built layouts; there we keep the legacy fixed reservation.
+        // edge. Measure the widest label *after* applying the colorbar tick format, at the
+        // size it renders (`tick_size`), and let `add_colorbar_at` shrink the font if a
+        // label still overruns. `colorbar_tick_values` is `None` for hand-built layouts;
+        // there we keep the legacy fixed reservation.
         let colorbar_label_px = match &layout.colorbar_tick_values {
-            Some(values) => {
-                let max_chars = values
-                    .iter()
-                    .map(|&v| layout.colorbar_tick_format.format(v).chars().count())
-                    .max()
-                    .unwrap_or(0);
+            Some(values) => values
+                .iter()
+                .map(|&v| {
+                    measure_text_width(
+                        &layout.colorbar_tick_format.format(v),
+                        tick_size,
+                        FontStyle::Regular,
+                    )
+                })
                 // Floor at ~2 char-widths like the axis-tick reservations, so a 1-2 char
                 // colorbar still gets a sane label band.
-                ((max_chars as f64) * tick_size * 0.6).max(tick_size * 2.0)
-            }
+                .fold(tick_size * 2.0, f64::max),
             None => 30.0 * s, // legacy ~5-char allotment
         };
         // bar (20) + tick mark + edge gap (10) + labels; equals the legacy 65*s inset
