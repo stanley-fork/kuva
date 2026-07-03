@@ -191,10 +191,10 @@ pub fn run(args: Scatter3DArgs) -> Result<(), String> {
             })
             .collect();
         if !entries.is_empty() {
-            let max_len = entries.iter().map(|e| e.label.len()).max().unwrap_or(0);
-            layout.show_legend = true;
-            layout.legend_width = (max_len as f64 * 8.5 + 35.0).max(80.0);
-            layout.legend_entries = Some(entries);
+            // Size the legend box to the measured group labels (swatch + gap + text)
+            // via the shared registration path, instead of a char-count width proxy
+            // with a fixed 80px floor that left dead space beside short labels.
+            layout = layout.with_legend_entries(entries);
         }
 
         let layout = apply_base_args(layout, &args.base);
