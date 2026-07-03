@@ -397,3 +397,14 @@ mod tests {
         assert!((b - 2.0 * a).abs() < 1e-9);
     }
 }
+
+#[cfg(test)]
+mod probe_scratch2 {
+    use super::*;
+    #[test]
+    fn probe_digit_widths() {
+        for d in "0123456789".chars() {
+            println!("{d}: {:.3}", measure_text_width(&d.to_string(), 12.0, FontStyle::Regular));
+        }
+    }
+}

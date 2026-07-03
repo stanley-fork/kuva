@@ -3477,4 +3477,39 @@ mod tests {
             "stagger must reserve one line height ({expected:.2}), reserved {delta:.2}"
         );
     }
+
+    /// Colorbar tick-label band width must come from real per-label measurement
+    /// (`measure_text_width`), not the old `max_chars * tick_size * 0.6` proxy —
+    /// the proxy under-reserved by a couple of px for 6-digit labels since DejaVu's
+    /// digit advance (0.636 em) is wider than the 0.6 factor assumed.
+    #[test]
+    fn colorbar_label_reservation_uses_real_measurement_not_char_count_factor() {
+        use super::ComputedLayout;
+        use crate::render::text_metrics::measure_text_width;
+
+        let mut layout = Layout::new((0.0, 1.0), (0.0, 1.0));
+        layout.colorbar_tick_values = Some(vec![800000.0]);
+        let computed = ComputedLayout::from_layout(&layout);
+
+        let tick_size = computed.tick_size as f64;
+        let label = computed.colorbar_tick_format.format(800000.0);
+        let real_width = measure_text_width(&label, tick_size, FontStyle::Regular);
+        let old_estimate = label.chars().count() as f64 * tick_size * 0.6;
+        // Sanity: the two proxies must actually diverge for this label, or the test
+        // can't distinguish which one is in use.
+        assert!(
+            (real_width - old_estimate).abs() > 1.0,
+            "test label must have real vs. old-estimate widths that meaningfully differ"
+        );
+
+        // colorbar_x_inset = 30*s + tick_mark_major_px + colorbar_label_px; back out
+        // colorbar_label_px and confirm it matches real measurement, not the old proxy.
+        let tick_mark_major_px = computed.tick_mark_major;
+        let colorbar_label_px = computed.colorbar_x_inset - 30.0 - tick_mark_major_px;
+        assert!(
+            (colorbar_label_px - real_width).abs() < 0.01,
+            "colorbar label reservation ({colorbar_label_px:.2}) must match real \
+             measurement ({real_width:.2}), not the old char-count estimate ({old_estimate:.2})"
+        );
+    }
 }

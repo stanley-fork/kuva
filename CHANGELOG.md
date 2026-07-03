@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Heatmap and brick in-cell value labels are centred on their true cap-height midpoint** (they previously rode high). Heatmap labels also shrink uniformly to fit the cell and drop rather than overflow into neighbours when cells are too short to render legibly — and a single wide outlier value no longer shrinks the whole grid below the floor and blanks every label (the too-wide value is dropped instead).
 - **Legend boxes hug their contents** — comfortable `body_size`-scaled row leading with the box sized to the rows actually drawn, so legends no longer carry uneven top/bottom padding or a fixed row height that overflowed at larger body sizes; applied consistently across the main, standalone, and figure legend paths.
 - **The x-axis title renders on tick-suppressed plots** — Manhattan plots (which draw their own chromosome labels) keep the "Chromosome" title, and the bottom margin reserves room for it so it clears those labels instead of overprinting them.
+- **`scatter3d --color-by` legend box was over-wide** — the CLI sized the box with a char-count proxy plus a hard 80px floor, leaving dead space beside short group labels. Now routes through the shared `Layout::with_legend_entries`, which measures the widest label (box 80 → 49px for typical short labels).
+- **Colorbar tick-label band was mildly under-reserved for long labels** — the last width estimate left over from before the text-metrics work used `max_chars × tick_size × 0.6`; DejaVu's digit advance is closer to `0.636em`, so 6-digit labels were reserved a couple of px narrower than needed. Now measures each formatted label directly.
 
 ---
 
