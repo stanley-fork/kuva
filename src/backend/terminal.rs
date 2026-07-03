@@ -21,6 +21,7 @@
 //! ```
 
 use crate::render::render::{Primitive, Scene, TextAnchor};
+use crate::render::text_metrics::{center_offset, FontStyle};
 
 // ── Box-drawing bit constants ─────────────────────────────────────────────────
 
@@ -814,12 +815,12 @@ impl Canvas {
                 let rgb = self.text_color;
                 let x_s = x + tx;
                 let y_s = y + ty;
-                // SVG text is positioned by baseline (bottom of glyphs).  The
-                // axis code adds `font_size * 0.35` so text visually centres on
-                // tick lines.  Terminal cells have no baseline concept — subtract
-                // that offset so text lands on the same character row as its
-                // reference line/tick.
-                let baseline = *size as f64 * 0.35;
+                // SVG text is positioned by baseline (bottom of glyphs). The
+                // renderer drops the baseline by `center_offset` so text visually
+                // centres on its reference line; subtract the *same* offset here so
+                // it lands on the matching character row. Using center_offset (not a
+                // hardcoded 0.35) keeps this in lockstep with the renderer.
+                let baseline = center_offset(*size as f64, FontStyle::Regular);
                 let row = self.to_cy(y_s - baseline);
                 // Lower any `$...$` math regions to inline Unicode (σ, x²,
                 // √(…)) — the character grid renders the result directly.
@@ -908,7 +909,8 @@ impl Canvas {
                 let rgb = self.text_color;
                 let x_s = x + tx;
                 let y_s = y + ty;
-                let baseline = *size as f64 * 0.35;
+                // Same center_offset the renderer used (kept in lockstep).
+                let baseline = center_offset(*size as f64, FontStyle::Regular);
                 let row = self.to_cy(y_s - baseline);
                 let chars: Vec<char> = content.chars().collect();
                 let len = chars.len() as isize;
