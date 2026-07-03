@@ -5,10 +5,12 @@
 //! cargo run --example gen_text_metrics
 //! ```
 //!
-//! The output is a run-length-encoded table of horizontal advance widths over
-//! the Basic Multilingual Plane, one table per font style (Regular, Italic,
-//! Bold, BoldItalic). Each is measured from its own face so nothing relies on
-//! one style's metrics matching another's — swap the fonts and regenerate. No
+//! The output is, per font style (Regular, Italic, Bold, BoldItalic): a
+//! run-length-encoded table of horizontal advance widths over the Basic
+//! Multilingual Plane, plus the per-style vertical metrics (ascent, descent,
+//! line-gap, cap-height, x-height) as `VMETRICS_*` constants. Each is measured
+//! from its own face so nothing relies on one style's metrics matching
+//! another's — swap the fonts and regenerate. No
 //! bold-oblique face is bundled, so BoldItalic falls back to the Bold face until
 //! one is added. The `text_metrics::tests::committed_table_matches_font` test
 //! fails if the committed table drifts from the fonts, so regenerate when it does.
@@ -33,6 +35,30 @@ fn dense(face: &Face) -> Vec<u16> {
         }
     }
     advances
+}
+
+/// Per-face vertical metrics in font units: `[ascent, descent, line_gap,
+/// cap_height, x_height]`, where `descent` is stored as a positive depth below
+/// the baseline. hhea ascender/descender/lineGap are used (they match the
+/// rendered line box); cap/x-height are measured from the 'H'/'x' glyph outlines,
+/// falling back to OS/2 sCapHeight/sxHeight and then a derived value only when the
+/// glyph is absent (DejaVu's OS/2 omits both, so the outline path is what runs).
+fn vmetrics(face: &Face) -> [i16; 5] {
+    let ascent = face.ascender();
+    let descent = -face.descender(); // store as a positive depth below baseline
+    let line_gap = face.line_gap();
+    // Measure cap-height and x-height from the actual outlines of 'H' and 'x'
+    // (the top of their bounding boxes). This is robust to faces whose OS/2 table
+    // omits sCapHeight/sxHeight — DejaVu does, so `capital_height()`/`x_height()`
+    // return None. Fall back to OS/2, then a derived value, only if the glyph is
+    // missing entirely.
+    let glyph_top = |ch: char| {
+        face.glyph_index(ch).and_then(|g| face.glyph_bounding_box(g)).map(|bb| bb.y_max)
+    };
+    let cap_height = glyph_top('H').or_else(|| face.capital_height()).unwrap_or(ascent);
+    let x_height =
+        glyph_top('x').or_else(|| face.x_height()).unwrap_or((f32::from(cap_height) * 0.72) as i16);
+    [ascent, descent, line_gap, cap_height, x_height]
 }
 
 /// Run-length-encodes a dense table into `(advance, run_length)` pairs.
@@ -66,8 +92,9 @@ fn emit_rle(buf: &mut String, name: &str, runs: &[(u16, u16)]) {
 }
 
 /// Reads a face, falling back to `fallback` (relative to ASSETS) when the
-/// primary file is absent. Returns the owned bytes and the face's RLE table.
-fn read_rle(primary: &str, fallback: Option<&str>) -> (Vec<u8>, Vec<(u16, u16)>, u16) {
+/// primary file is absent. Returns the owned font bytes, the RLE advance table,
+/// the units-per-em, and the per-face vertical metrics.
+fn read_rle(primary: &str, fallback: Option<&str>) -> (Vec<u8>, Vec<(u16, u16)>, u16, [i16; 5]) {
     let path = format!("{ASSETS}/{primary}");
     let chosen = if std::path::Path::new(&path).exists() {
         path
@@ -81,7 +108,20 @@ fn read_rle(primary: &str, fallback: Option<&str>) -> (Vec<u8>, Vec<(u16, u16)>,
     let face = Face::parse(&bytes, 0).expect("parse face");
     let upem = face.units_per_em();
     let runs = rle(&dense(&face));
-    (bytes, runs, upem)
+    let vm = vmetrics(&face); // end the borrow of `bytes` before it moves into the tuple
+    (bytes, runs, upem, vm)
+}
+
+/// Emits a `VMetrics` const literal (referencing the struct defined in `mod.rs`).
+fn emit_vmetrics(buf: &mut String, name: &str, vm: &[i16; 5]) {
+    let [ascent, descent, line_gap, cap_height, x_height] = *vm;
+    writeln!(
+        buf,
+        "pub(super) const {name}: super::VMetrics = super::VMetrics {{ \
+         ascent: {ascent}, descent: {descent}, line_gap: {line_gap}, \
+         cap_height: {cap_height}, x_height: {x_height} }};"
+    )
+    .unwrap();
 }
 
 fn main() {
@@ -94,11 +134,11 @@ fn main() {
         ("ADVANCE_RLE_BOLD_ITALIC", "DejaVuSans-BoldOblique.ttf", Some("DejaVuSans-Bold.ttf")),
     ];
 
-    let tables: Vec<(&str, Vec<(u16, u16)>, u16)> = faces
+    let tables: Vec<(&str, Vec<(u16, u16)>, u16, [i16; 5])> = faces
         .iter()
         .map(|(name, primary, fallback)| {
-            let (_bytes, runs, upem) = read_rle(primary, *fallback);
-            (*name, runs, upem)
+            let (_bytes, runs, upem, vm) = read_rle(primary, *fallback);
+            (*name, runs, upem, vm)
         })
         .collect();
     let upem = tables[0].2;
@@ -136,7 +176,13 @@ fn main() {
     writeln!(buf, "/// Mean advance over printable ASCII, in em — used for inverse").unwrap();
     writeln!(buf, "/// width-to-character-count estimates where no concrete string is available.").unwrap();
     writeln!(buf, "pub(super) const MEAN_ADVANCE_EM: f64 = {mean_em:.6};\n").unwrap();
-    for (name, runs, _) in &tables {
+    writeln!(buf, "/// Per-style vertical metrics in font units (scaled by `size / UNITS_PER_EM`").unwrap();
+    writeln!(buf, "/// at runtime); see `super::VMetrics`.").unwrap();
+    for (name, _, _, vm) in &tables {
+        emit_vmetrics(&mut buf, &name.replace("ADVANCE_RLE", "VMETRICS"), vm);
+    }
+    buf.push('\n');
+    for (name, runs, _, _) in &tables {
         writeln!(buf, "/// {} runs.", runs.len()).unwrap();
         emit_rle(&mut buf, name, runs);
         buf.push('\n');
@@ -144,6 +190,6 @@ fn main() {
 
     std::fs::write(OUT, &buf).expect("write data.rs");
     let summary: Vec<String> =
-        tables.iter().map(|(n, r, _)| format!("{n}={}", r.len())).collect();
+        tables.iter().map(|(n, r, _, _)| format!("{n}={}", r.len())).collect();
     println!("wrote {OUT} ({})", summary.join(", "));
 }

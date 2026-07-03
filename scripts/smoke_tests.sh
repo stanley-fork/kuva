@@ -309,6 +309,13 @@ check "manhattan pvalue-col-is-log" \
     "$BIN" manhattan "$DATA/gene_stats_logp.tsv" --chr-col chr --pvalue-col neg_log10_pvalue --pvalue-col-is-log \
         --title "GWAS Results (log p input)" --x-label "Chromosome" "--y-label=-log10(p-value)"
 
+# Staggered chromosome labels: the crowded right-end chromosomes drop to a second
+# row. Exercises the stagger vertical reservation (must clear the x-axis title).
+check "manhattan staggered labels" \
+    "$BIN" manhattan "$DATA/gene_stats.tsv" --chr-col chr --pos-col pos --pvalue-col pvalue \
+        --genome-build hg38 --x-label-overlap stagger \
+        --title "GWAS (staggered labels)" --x-label "Chromosome" "--y-label=-log10(p-value)"
+
 # ── candlestick ───────────────────────────────────────────────────────────────
 check "candlestick basic" \
     "$BIN" candlestick "$DATA/candlestick.tsv" \

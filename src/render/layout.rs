@@ -6,7 +6,9 @@ use crate::render::palette::Palette;
 use crate::render::plots::Plot;
 use crate::render::render::{compute_sunburst_value_range, compute_treemap_value_range, waffle_legend_label};
 use crate::render::render_utils;
-use crate::render::text_metrics::{measure_text_width, mean_char_width, widest_text_width, FontStyle};
+use crate::render::text_metrics::{
+    descent, line_height, measure_text_width, mean_char_width, widest_text_width, FontStyle,
+};
 use crate::render::theme::Theme;
 use std::sync::Arc;
 
@@ -1188,6 +1190,9 @@ impl Layout {
                 if pp.show_legend {
                     has_legend = true;
                     if pp.series.len() <= 1 {
+                        // Single-series pyramids legend the two side labels. Measure both
+                        // so the box hugs their real width; a bare char count left
+                        // `max_label_w` at 0 and clipped labels like "Female".
                         note_legend_label(&mut max_label_len, &mut max_label_w, &pp.left_label, 0);
                         note_legend_label(&mut max_label_len, &mut max_label_w, &pp.right_label, 0);
                     } else {
@@ -2459,6 +2464,13 @@ impl ComputedLayout {
         let title_size = layout.title_size as f64 * s;
         let label_size = layout.label_size as f64 * s;
         let tick_size = layout.tick_size as f64 * s;
+        // Height of one legend row. A legend is a list, so it wants comfortable
+        // leading (~1.5em — the long-standing look) rather than the tight single-
+        // spaced line height, but it must scale with body_size (the old fixed 18px
+        // overflowed once body_size was raised). Never below the swatch. Entries are
+        // centred within the row (render_legend_entry), so the taller row keeps equal
+        // padding above and below the content.
+        let legend_row_h = (layout.body_size as f64 * s * 1.5).max(12.0 * s);
         // Compute tick mark length early — needed for margin_left and tick_label_margin.
         let tick_mark_major_px = layout.tick_length.map(|l| l * s).unwrap_or(5.0 * s);
 
@@ -2475,7 +2487,7 @@ impl ComputedLayout {
                 0
             };
         let base_margin_top = if title_lines > 0 {
-            title_size * title_lines as f64 + label_size + 12.0 * s
+            line_height(title_size, FontStyle::Regular) * title_lines as f64 + label_size + 12.0 * s
         } else {
             10.0 * s
         };
@@ -2491,7 +2503,13 @@ impl ComputedLayout {
         // keep only minimal space. When rotation IS set (e.g. Manhattan chromosome labels drawn
         // by the renderer itself), compute space for the rotated custom labels.
         let mut margin_bottom = if layout.suppress_x_ticks && layout.x_tick_rotate.is_none() {
-            tick_size + 15.0 * s
+            // Ticks are suppressed but the renderer may still draw its own labels just
+            // below the plot (e.g. Manhattan chromosome names). The x-axis title is drawn
+            // unconditionally when set (axis.rs), so reserve a line for it here too —
+            // otherwise it overprints those labels. Wrapped title lines beyond the first
+            // are added further down.
+            let title_extra = if layout.x_label.is_some() { label_size + 6.0 * s } else { 0.0 };
+            tick_size + 15.0 * s + title_extra
         } else if let Some(angle) = layout.x_tick_rotate {
             // Rotated labels extend below their anchor point by label_px * sin(|angle|).
             let label_px = match layout.x_categories.as_ref() {
@@ -2502,15 +2520,23 @@ impl ComputedLayout {
                 _ => 10.0 * mean_char_width(tick_size),
             };
             let angle_rad = angle.abs() * std::f64::consts::PI / 180.0;
+            // Below the axis a rotated label extends by its length projected down
+            // (label_px*sin) plus a constant part the drawing places below the tick:
+            // the baseline anchor sits `tick_size` below the tick mark (axis.rs), and
+            // the label's descender projects a further `descent*cos` down. (The ascent
+            // projects UP toward the axis, so it needs no bottom room.) A flat
+            // `tick_size` ignored the descender; `text_height*cos` dropped the anchor
+            // and clipped at steep angles — this matches the draw at every angle.
+            let perp = tick_size + descent(tick_size, FontStyle::Regular) * angle_rad.cos();
             // The x-axis title (if present) is drawn below the rotated tick labels, so
             // reserve a line for it. The dominant `label_px * sin` term would otherwise
-            // crowd it out: the `.max()` floor below does include `label_size`, but it
-            // only wins for short labels, leaving long-label plots with no room for the
-            // title (it then overlaps the lowest tick label). Wrapped title lines beyond
-            // the first are added separately further down.
+            // crowd it out: the `.max()` floor below includes `label_size`, but only wins
+            // for short labels, leaving long-label plots with no room for the title (it
+            // then overlaps the lowest tick label). Wrapped title lines beyond the first
+            // are added separately further down.
             let title_extra = if layout.x_label.is_some() { label_size + 6.0 * s } else { 0.0 };
             let needed =
-                label_px * angle_rad.sin() + tick_size + tick_mark_major_px + 10.0 * s + title_extra;
+                label_px * angle_rad.sin() + perp + tick_mark_major_px + 10.0 * s + title_extra;
             needed.max(tick_size + label_size + tick_mark_major_px + 20.0 * s)
         } else {
             tick_size + label_size + tick_mark_major_px + 20.0 * s
@@ -2519,13 +2545,16 @@ impl ComputedLayout {
         // Also applies when suppress_x_ticks is true (e.g. Manhattan, which
         // draws its own chromosome labels via add_manhattan_chr_labels).
         if matches!(layout.x_label_overlap, AxisLabelOverlap::Stagger) {
-            margin_bottom += tick_size;
+            // The second staggered row sits a full line height below the first (the
+            // pitch used in axis.rs); reserve that, not a bare tick_size, so the
+            // lower row's descenders clear the axis title.
+            margin_bottom += line_height(tick_size, FontStyle::Regular);
         }
         // Extra bottom margin for wrapped x-axis label.
         if let (Some(ref xlabel), Some(max_chars)) = (&layout.x_label, layout.x_label_wrap) {
             let x_label_lines = render_utils::wrap_text(xlabel, max_chars).len();
             if x_label_lines > 1 {
-                margin_bottom += (x_label_lines - 1) as f64 * label_size;
+                margin_bottom += (x_label_lines - 1) as f64 * line_height(label_size, FontStyle::Regular);
             }
         }
         // Left: axis label + y tick label text width + gaps.
@@ -2588,7 +2617,10 @@ impl ComputedLayout {
             // 16px = 3 edge + 5 label-to-ticklabels gap + 8 tick_label_margin base;
             // tick_mark_major_px is added separately so the margin grows with tick length.
             // Extra label_size per wrapped line beyond the first.
-            label_size * y_label_lines as f64 + y_tick_label_px + 16.0 * s + tick_mark_major_px
+            line_height(label_size, FontStyle::Regular) * y_label_lines as f64
+                + y_tick_label_px
+                + 16.0 * s
+                + tick_mark_major_px
         };
         // Estimate the overhang of the rightmost numeric x-tick label.
         // Tick labels are centred on their tick position (TextAnchor::Middle), so the
@@ -2659,7 +2691,7 @@ impl ComputedLayout {
             let y2_tick_label_px =
                 widest_text_width(labels.iter().map(|s| s.as_str()), tick_size, FontStyle::Regular)
                     .max(tick_size * 2.0);
-            label_size * y2_label_lines as f64 + y2_tick_label_px + 15.0 * s
+            line_height(label_size, FontStyle::Regular) * y2_label_lines as f64 + y2_tick_label_px + 15.0 * s
         } else {
             0.0
         };
@@ -2683,8 +2715,8 @@ impl ComputedLayout {
             };
             if n_entries > 10 {
                 let canvas_h_est = layout.height.unwrap_or(400.0) * s;
-                let avail_h_est = (canvas_h_est - margin_top - 16.0 * s).max(18.0 * s);
-                let max_entries_est = ((avail_h_est / (18.0 * s)).floor() as usize).max(10);
+                let avail_h_est = (canvas_h_est - margin_top - 16.0 * s).max(legend_row_h);
+                let max_entries_est = ((avail_h_est / legend_row_h).floor() as usize).max(10);
                 if n_entries > max_entries_est {
                     let overflow = n_entries - max_entries_est.saturating_sub(1);
                     let overflow_text = format!("… (+{overflow} more)");
@@ -2702,7 +2734,7 @@ impl ComputedLayout {
         let mut legend_col_count: usize = 0;
         if layout.show_legend {
             // Estimate legend height for OutsideTop/Bottom margin adjustments.
-            let legend_line_h = 18.0 * s;
+            let legend_line_h = legend_row_h;
             let wrap_line_count = |text: &str| -> usize {
                 if let Some(mc) = layout.legend_wrap {
                     render_utils::wrap_text(text, mc).len()
@@ -2805,21 +2837,23 @@ impl ComputedLayout {
         // Width-aware colorbar geometry. Tick labels sit in a fixed band to the right of
         // the bar (governed by `colorbar_x_inset`), so the inset — not just the right
         // margin — must grow with the widest label or 6-digit labels clip at the canvas
-        // edge. Size to the widest label *after* applying the colorbar tick format,
-        // biasing low (no extra padding, 0.6 char-width) and letting `add_colorbar_at`
-        // shrink the font if a label still overruns. `colorbar_tick_values` is `None` for
-        // hand-built layouts; there we keep the legacy fixed reservation.
+        // edge. Measure the widest label *after* applying the colorbar tick format, at the
+        // size it renders (`tick_size`), and let `add_colorbar_at` shrink the font if a
+        // label still overruns. `colorbar_tick_values` is `None` for hand-built layouts;
+        // there we keep the legacy fixed reservation.
         let colorbar_label_px = match &layout.colorbar_tick_values {
-            Some(values) => {
-                let max_chars = values
-                    .iter()
-                    .map(|&v| layout.colorbar_tick_format.format(v).chars().count())
-                    .max()
-                    .unwrap_or(0);
+            Some(values) => values
+                .iter()
+                .map(|&v| {
+                    measure_text_width(
+                        &layout.colorbar_tick_format.format(v),
+                        tick_size,
+                        FontStyle::Regular,
+                    )
+                })
                 // Floor at ~2 char-widths like the axis-tick reservations, so a 1-2 char
                 // colorbar still gets a sane label band.
-                ((max_chars as f64) * tick_size * 0.6).max(tick_size * 2.0)
-            }
+                .fold(tick_size * 2.0, f64::max),
             None => 30.0 * s, // legacy ~5-char allotment
         };
         // bar (20) + tick mark + edge gap (10) + labels; equals the legacy 65*s inset
@@ -2930,10 +2964,10 @@ impl ComputedLayout {
         // every legend entry maps to a distinct row without gaps.
         let legend_line_height = if let Some(tr) = layout.term_rows {
             let cell_h = height / tr as f64;
-            let rows_per_entry = ((18.0 * s) / cell_h).round().max(1.0);
+            let rows_per_entry = (legend_row_h / cell_h).round().max(1.0);
             rows_per_entry * cell_h
         } else {
-            18.0 * s
+            legend_row_h
         };
 
         let mut s = Self {
@@ -3277,6 +3311,170 @@ mod tests {
         assert!(
             layout.legend_width > short + 25.0,
             "legend_width must track the group labels, not the legend label"
+        );
+    }
+
+    /// Legend row height must track `body_size`: at a large size each row needs at
+    /// least the real font line height, or entries overprint. Regression for the
+    /// old fixed 18px row pitch that overflowed once body_size exceeded ~13.
+    #[test]
+    fn legend_row_height_tracks_large_body_size() {
+        use super::ComputedLayout;
+        use crate::render::text_metrics::line_height;
+
+        let strip = StripPlot::new()
+            .with_group("Alpha", vec![1.0, 2.0])
+            .with_group("Beta", vec![1.5, 2.5])
+            .with_group_colors(vec!["steelblue", "tomato"])
+            .with_legend("groups");
+        let layout = Layout::auto_from_plots(&[Plot::Strip(strip)]).with_body_size(28);
+        let computed = ComputedLayout::from_layout(&layout);
+
+        let needed = line_height(28.0, FontStyle::Regular);
+        assert!(
+            computed.legend_line_height >= needed,
+            "legend row {:.1}px must hold a {:.1}px line at body_size 28",
+            computed.legend_line_height,
+            needed
+        );
+    }
+
+    /// Legend rows use comfortable list leading (taller than the tight single-spaced
+    /// line height) so entries aren't cramped — while still scaling with body_size
+    /// (see legend_row_height_tracks_large_body_size).
+    #[test]
+    fn legend_row_height_has_comfortable_leading() {
+        use crate::render::text_metrics::line_height;
+        let layout = Layout::new((0.0, 1.0), (0.0, 1.0));
+        let computed = super::ComputedLayout::from_layout(&layout);
+        let single_spaced = line_height(computed.body_size as f64, FontStyle::Regular);
+        assert!(
+            computed.legend_line_height > single_spaced,
+            "legend row {:.1}px should have leading beyond single-spaced {:.1}px",
+            computed.legend_line_height,
+            single_spaced
+        );
+    }
+
+    /// A steeply-rotated x-tick label must stay within the canvas: the bottom margin
+    /// has to cover the label's full drawn extent (the baseline anchor sits tick_size
+    /// below the axis, plus the label projects down by length·sin + descent·cos), not
+    /// the `text_height·cos` term that vanishes as the angle approaches vertical.
+    /// Regression for the steep-angle clip.
+    #[test]
+    fn steep_rotated_x_labels_stay_within_canvas() {
+        use super::ComputedLayout;
+        use crate::render::text_metrics::descent;
+
+        let longest = "a rather long category label";
+        let mut layout = Layout::new((0.0, 5.0), (0.0, 10.0));
+        layout.x_categories = Some(vec![longest.to_string(); 5]);
+        let layout = layout.with_x_tick_rotate(90.0); // vertical labels, no x-axis title
+        let c = ComputedLayout::from_layout(&layout);
+
+        let ts = c.tick_size as f64;
+        let a = 90.0_f64.to_radians();
+        // Lowest pixel of the rotated label below the axis, matching the draw in
+        // axis.rs: anchor at (tick_mark + tick_size), then length·sin + descent·cos.
+        let drawn = c.tick_mark_major
+            + ts
+            + measure_text_width(longest, ts, FontStyle::Regular) * a.sin()
+            + descent(ts, FontStyle::Regular) * a.cos();
+        assert!(
+            c.margin_bottom >= drawn,
+            "margin_bottom {:.1} must cover the vertical label's drawn extent {:.1}",
+            c.margin_bottom,
+            drawn
+        );
+    }
+
+    /// At an intermediate angle the rotated label's descender projects `descent·cos`
+    /// below its baseline anchor. The 90° test can't see that term (cos 90° = 0), so pin
+    /// the reservation tightly at 45°: the bottom margin equals the label's lowest drawn
+    /// pixel plus the fixed `10·s` breathing room. Dropping the `descent·cos` term (~2px
+    /// here) breaks the equality — a loose `>=` check cannot, the 10·s pad swamps it.
+    #[test]
+    fn rotated_x_label_margin_hugs_the_drawn_descender_at_45_degrees() {
+        use super::ComputedLayout;
+        use crate::render::text_metrics::descent;
+
+        // A long label so the length term dominates the `.max()` floor (margin == needed),
+        // and no x_label so there is no title reservation added on top.
+        let longest = "a rather long category label";
+        let mut layout = Layout::new((0.0, 5.0), (0.0, 10.0));
+        layout.x_categories = Some(vec![longest.to_string(); 5]);
+        let layout = layout.with_x_tick_rotate(45.0);
+        let c = ComputedLayout::from_layout(&layout);
+
+        let s = layout.scale.max(0.1);
+        let ts = c.tick_size as f64;
+        let a = 45.0_f64.to_radians();
+        // Same construction as the 90° test: anchor at (tick_mark + tick_size), then
+        // length·sin + descender·cos.
+        let drawn = c.tick_mark_major
+            + ts
+            + measure_text_width(longest, ts, FontStyle::Regular) * a.sin()
+            + descent(ts, FontStyle::Regular) * a.cos();
+        assert!(
+            (c.margin_bottom - drawn - 10.0 * s).abs() < 0.5,
+            "margin_bottom {:.2} should hug the drawn extent {:.2} plus 10·s ({:.1}); a \
+             {:.2}px mismatch means the descender projection was mis-reserved",
+            c.margin_bottom,
+            drawn,
+            10.0 * s,
+            c.margin_bottom - drawn - 10.0 * s
+        );
+    }
+
+    /// The x-axis title gets a reserved line in the bottom margin even when numeric
+    /// ticks are suppressed and no rotation is set (the Manhattan library path), so it
+    /// cannot overprint the renderer's own chromosome labels drawn just below the plot.
+    #[test]
+    fn suppressed_ticks_reserve_a_line_for_the_x_title() {
+        use super::ComputedLayout;
+
+        let untitled = {
+            let mut l = Layout::new((0.0, 5.0), (0.0, 10.0));
+            l.suppress_x_ticks = true;
+            ComputedLayout::from_layout(&l)
+        };
+        let titled = {
+            let mut l = Layout::new((0.0, 5.0), (0.0, 10.0)).with_x_label("Chromosome");
+            l.suppress_x_ticks = true;
+            ComputedLayout::from_layout(&l)
+        };
+
+        // Setting the title must widen the bottom margin by at least a full label line;
+        // before the fix both cases took the bare `tick_size + 15` path and the title
+        // overprinted the suppressed axis's own labels.
+        let ls = titled.label_size as f64;
+        assert!(
+            titled.margin_bottom >= untitled.margin_bottom + ls,
+            "suppressed-tick x-title must add >= one label line ({:.1}) to margin_bottom; \
+             got titled {:.1} vs untitled {:.1}",
+            ls,
+            titled.margin_bottom,
+            untitled.margin_bottom
+        );
+    }
+
+    /// Staggering reserves a full real line height for the second row of x-tick
+    /// labels — matching the pitch axis.rs draws them at — not a bare tick_size,
+    /// so the lower row's descenders don't crowd the x-axis title.
+    #[test]
+    fn stagger_reserves_one_line_height_for_second_row() {
+        use super::{AxisLabelOverlap, ComputedLayout};
+        use crate::render::text_metrics::line_height;
+
+        let plain = ComputedLayout::from_layout(&Layout::new((0.0, 5.0), (0.0, 10.0)));
+        let staggered = ComputedLayout::from_layout(
+            &Layout::new((0.0, 5.0), (0.0, 10.0)).with_x_label_overlap(AxisLabelOverlap::Stagger),
+        );
+        let expected = line_height(plain.tick_size as f64, FontStyle::Regular);
+        let delta = staggered.margin_bottom - plain.margin_bottom;
+        assert!(
+            (delta - expected).abs() < 0.01,
+            "stagger must reserve one line height ({expected:.2}), reserved {delta:.2}"
         );
     }
 }

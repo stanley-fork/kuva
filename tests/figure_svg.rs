@@ -382,6 +382,33 @@ fn svg_dim(svg: &str, attr: &str) -> f64 {
     svg[start..end].parse().unwrap()
 }
 
+/// The figure title band and baseline must scale with `title_size`: a fixed 30px
+/// band and y=22 baseline clipped the title once title_size exceeded ~20.
+#[test]
+fn figure_title_band_and_baseline_scale_with_title_size() {
+    let build = |ts: u32| {
+        let scene = Figure::new(1, 1)
+            .with_plots(vec![scatter_plot("blue")])
+            .with_title("TITLEMARK")
+            .with_title_size(ts)
+            .render();
+        SvgBackend.render_scene(&scene)
+    };
+    let small = build(16);
+    let big = build(48);
+
+    // The reserved band grows with title_size, so the whole figure is taller.
+    assert!(
+        svg_dim(&big, "height") > svg_dim(&small, "height"),
+        "title band must scale with title_size (was a fixed 30px)"
+    );
+    // The baseline drops so a 48px title clears its ascenders (~44.5px) instead of
+    // clipping at the old fixed y=22, and scales relative to the small title.
+    let yb = common::text_y(&big, "TITLEMARK");
+    assert!(yb > 44.0, "title_size 48 baseline {yb:.1} must clear ascenders");
+    assert!(yb > common::text_y(&small, "TITLEMARK"), "baseline must scale with title_size");
+}
+
 #[test]
 fn figure_size_basic() {
     // 2×2 grid, no title, no legend — total size should be exactly 800×600.
@@ -894,7 +921,7 @@ fn figure_legend_top_left() {
         1035.0,
         "top legend does not expand width"
     );
-    assert_eq!(svg_dim(&svg, "height"), 476.0, "top legend expands height");
+    assert_eq!(svg_dim(&svg, "height"), 470.0, "top legend expands height");
 }
 
 #[test]
@@ -902,7 +929,7 @@ fn figure_legend_top_center() {
     let svg = render_legend_pos(FigureLegendPosition::TopCenter, "figure_legend_top_center");
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
     assert_eq!(svg_dim(&svg, "width"), 1035.0);
-    assert_eq!(svg_dim(&svg, "height"), 476.0);
+    assert_eq!(svg_dim(&svg, "height"), 470.0);
 }
 
 #[test]
@@ -910,7 +937,7 @@ fn figure_legend_top_right() {
     let svg = render_legend_pos(FigureLegendPosition::TopRight, "figure_legend_top_right");
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
     assert_eq!(svg_dim(&svg, "width"), 1035.0);
-    assert_eq!(svg_dim(&svg, "height"), 476.0);
+    assert_eq!(svg_dim(&svg, "height"), 470.0);
 }
 
 // ── Bottom edge ───────────────────────────────────────────────────────────────
@@ -932,7 +959,7 @@ fn figure_legend_bottom_left() {
     );
     assert_eq!(
         svg_dim(&svg, "height"),
-        476.0,
+        470.0,
         "bottom legend expands height"
     );
 }
@@ -945,7 +972,7 @@ fn figure_legend_bottom_center() {
     );
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
     assert_eq!(svg_dim(&svg, "width"), 1035.0);
-    assert_eq!(svg_dim(&svg, "height"), 476.0);
+    assert_eq!(svg_dim(&svg, "height"), 470.0);
 }
 
 #[test]
@@ -956,17 +983,17 @@ fn figure_legend_bottom_right() {
     );
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
     assert_eq!(svg_dim(&svg, "width"), 1035.0);
-    assert_eq!(svg_dim(&svg, "height"), 476.0);
+    assert_eq!(svg_dim(&svg, "height"), 470.0);
 }
 
 // ── Legend height scales with body_size ─────────────────────────────────────
 //
-// Regression for the hardcoded `18.0` in render_legend_at and figure.rs.
-// With body_size=16: line_height = 16*1.5 = 24 (not 18).
-// Legend entries "Alpha"/"Beta" (2 entries):
-//   legend_height = 2*24+20 = 68   (was 2*18+20 = 56 at default body_size=12)
+// Regression for a fixed legend row height decoupled from body_size. Legend rows
+// use ~1.5em leading and the box hugs the content, both scaling with body_size:
+//   row = 16 * 1.5 = 24;  box = 2*24 + 2*10 - (24 - 12) = 56
+//   (the hug subtracts one row's leading below the last entry; padding = 10)
 //   legend_spacing = 20
-// Top legend: total height = 400 + 68 + 20 = 488  (was 476 at body_size=12)
+// Top legend: total height = 400 + 56 + 20 = 476.0
 
 #[test]
 fn figure_legend_height_scales_with_body_size() {
@@ -985,8 +1012,8 @@ fn figure_legend_height_scales_with_body_size() {
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
     assert_eq!(
         svg_dim(&svg, "height"),
-        488.0,
-        "legend height must scale with body_size (16*1.5=24 per entry, 2*24+20=68 + 20 spacing)"
+        476.0,
+        "legend height must scale with body_size (row=16*1.5=24, box=2*24+20-(24-12)=56, + 20 spacing)"
     );
 }
 
@@ -1007,7 +1034,7 @@ fn figure_legend_bottom_compat() {
     let svg = render_legend_pos(FigureLegendPosition::Bottom, "figure_legend_bottom_compat");
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
     assert_eq!(svg_dim(&svg, "width"), 1035.0);
-    assert_eq!(svg_dim(&svg, "height"), 476.0);
+    assert_eq!(svg_dim(&svg, "height"), 470.0);
 }
 
 // ── Left/Top offsets actually shift the grid ─────────────────────────────────
@@ -1020,9 +1047,9 @@ fn figure_legend_bottom_compat() {
 // appears in the SVG.
 //
 // For Top positions the grid cells must be offset downward by
-// (legend_height + legend_spacing) = 76 px.  Cell y normally starts at
-// y = padding = 10, so with top legend it should be y = 86.
-// We verify `translate(…,86)` appears.
+// (legend_height + legend_spacing) = 70 px.  Cell y normally starts at
+// y = padding = 10, so with top legend it should be y = 80.
+// We verify `translate(…,80)` appears.
 
 #[test]
 fn figure_legend_left_grid_offset() {
@@ -1043,10 +1070,10 @@ fn figure_legend_top_grid_offset() {
         FigureLegendPosition::TopCenter,
         "figure_legend_top_offset_check",
     );
-    // Cell 0 translate: x=10, y = cell_y_offset(76) + padding(10) + figure_title(0) = 86
+    // Cell 0 translate: x=10, y = legend_height(50) + spacing(20) + padding(10) = 80
     assert!(
-        svg.contains(",86)"),
-        "top legend should shift grid cells down by 76px"
+        svg.contains(",80)"),
+        "top legend should shift grid cells down by legend_height + spacing"
     );
 }
 

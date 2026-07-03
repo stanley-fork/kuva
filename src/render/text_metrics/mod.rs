@@ -1,4 +1,6 @@
-//! Real text-width measurement backed by the bundled DejaVu Sans advance widths.
+//! Real text measurement backed by the bundled DejaVu Sans metrics — horizontal
+//! advance widths and per-style vertical metrics (ascent, descent, line height,
+//! cap/x-height).
 //!
 //! kuva reserves space for every label, tick, legend entry, and title from a
 //! width estimate computed at layout time. Historically that estimate was
@@ -63,6 +65,82 @@ impl FontStyle {
             (true, true) => FontStyle::BoldItalic,
         }
     }
+}
+
+/// Per-style vertical metrics for the bundled face, in font units (scale to
+/// pixels by `size / UNITS_PER_EM`). `descent` is stored as a positive depth
+/// below the baseline. `cap_height`/`x_height` are measured from the `H`/`x`
+/// glyph outlines (robust to faces whose OS/2 table omits them, as DejaVu does).
+#[derive(Clone, Copy, Debug)]
+struct VMetrics {
+    ascent: i16,
+    descent: i16,
+    line_gap: i16,
+    cap_height: i16,
+    x_height: i16,
+}
+
+/// Vertical metrics (font units) for `style`.
+fn vmetrics(style: FontStyle) -> VMetrics {
+    match style {
+        FontStyle::Regular => data::VMETRICS_REGULAR,
+        FontStyle::Italic => data::VMETRICS_ITALIC,
+        FontStyle::Bold => data::VMETRICS_BOLD,
+        FontStyle::BoldItalic => data::VMETRICS_BOLD_ITALIC,
+    }
+}
+
+/// Scales a font-unit vertical metric to pixels at `font_size`.
+fn scale_units(units: impl Into<i32>, font_size: f64) -> f64 {
+    f64::from(units.into()) / f64::from(data::UNITS_PER_EM) * font_size
+}
+
+/// Natural single-spaced line height (ascent + descent + line gap) in pixels —
+/// the vertical advance between stacked lines and the minimum height a row or box
+/// must reserve to hold one line of text without clipping. Replaces the zoo of
+/// `font_size * {1.0..1.55}` and hardcoded-pixel line-height guesses.
+pub(crate) fn line_height(font_size: f64, style: FontStyle) -> f64 {
+    let m = vmetrics(style);
+    scale_units(i32::from(m.ascent) + i32::from(m.descent) + i32::from(m.line_gap), font_size)
+}
+
+/// Distance from the baseline up to the top of the font's ascenders, in pixels.
+/// Use to top-anchor text in a reserved band (baseline = top + ascent).
+pub(crate) fn ascent(font_size: f64, style: FontStyle) -> f64 {
+    scale_units(vmetrics(style).ascent, font_size)
+}
+
+/// Distance from the baseline down to the bottom of descenders (positive), in px.
+pub(crate) fn descent(font_size: f64, style: FontStyle) -> f64 {
+    scale_units(vmetrics(style).descent, font_size)
+}
+
+/// Height of the em box glyphs actually occupy (ascent + descent), without line
+/// leading — the measure to test text against a fixed height (cell, band, ring).
+pub(crate) fn text_height(font_size: f64, style: FontStyle) -> f64 {
+    let m = vmetrics(style);
+    scale_units(i32::from(m.ascent) + i32::from(m.descent), font_size)
+}
+
+/// Cap height (top of uppercase letters above the baseline), in pixels.
+#[allow(dead_code)]
+pub(crate) fn cap_height(font_size: f64, style: FontStyle) -> f64 {
+    scale_units(vmetrics(style).cap_height, font_size)
+}
+
+/// x-height (top of lowercase letters above the baseline), in pixels.
+#[allow(dead_code)]
+pub(crate) fn x_height(font_size: f64, style: FontStyle) -> f64 {
+    scale_units(vmetrics(style).x_height, font_size)
+}
+
+/// Baseline offset that vertically centers a line of uppercase/digit text on a
+/// target y: draw the baseline at `target_y + center_offset(size, style)` so the
+/// cap-height midpoint lands on `target_y`. The real-metric replacement for the
+/// ubiquitous `font_size * 0.35` centering guess (`0.35 ≈ cap_height/2` for
+/// DejaVu, but this tracks the actual font instead of assuming it).
+pub(crate) fn center_offset(font_size: f64, style: FontStyle) -> f64 {
+    scale_units(vmetrics(style).cap_height, font_size) / 2.0
 }
 
 /// Estimated rendered width of a single line of `text` at `font_size` pixels,
@@ -244,5 +322,78 @@ mod tests {
                 assert_eq!(table[cp as usize], expected, "{style:?} mismatch at U+{cp:04X}");
             }
         }
+    }
+
+    /// Drift guard for the vertical metrics: every committed `VMetrics` must
+    /// reproduce the face it was generated from (hhea ascent/descent/line-gap and
+    /// the 'H'/'x' outline tops). Mirrors `vmetrics()` in gen_text_metrics.rs.
+    #[test]
+    fn committed_vmetrics_match_font() {
+        let cases = [
+            (FontStyle::Regular, "DejaVuSans.ttf", None),
+            (FontStyle::Italic, "DejaVuSans-Oblique.ttf", None),
+            (FontStyle::Bold, "DejaVuSans-Bold.ttf", None),
+            (FontStyle::BoldItalic, "DejaVuSans-BoldOblique.ttf", Some("DejaVuSans-Bold.ttf")),
+        ];
+        for (style, primary, fallback) in cases {
+            let dir = format!("{}/assets/fonts", env!("CARGO_MANIFEST_DIR"));
+            let primary_path = format!("{dir}/{primary}");
+            let path = match (std::path::Path::new(&primary_path).exists(), fallback) {
+                (true, _) => primary_path,
+                (false, Some(fb)) => format!("{dir}/{fb}"),
+                (false, None) => primary_path,
+            };
+            let bytes = std::fs::read(&path).expect("read bundled font");
+            let face = ttf_parser::Face::parse(&bytes, 0).expect("parse font");
+            let glyph_top = |ch: char| {
+                face.glyph_index(ch).and_then(|g| face.glyph_bounding_box(g)).map(|bb| bb.y_max)
+            };
+            let cap = glyph_top('H').or_else(|| face.capital_height()).unwrap_or(face.ascender());
+            let x = glyph_top('x')
+                .or_else(|| face.x_height())
+                .unwrap_or((f32::from(cap) * 0.72) as i16);
+
+            let m = vmetrics(style);
+            assert_eq!(m.ascent, face.ascender(), "{style:?} ascent");
+            assert_eq!(m.descent, -face.descender(), "{style:?} descent");
+            assert_eq!(m.line_gap, face.line_gap(), "{style:?} line_gap");
+            assert_eq!(m.cap_height, cap, "{style:?} cap_height");
+            assert_eq!(m.x_height, x, "{style:?} x_height");
+        }
+    }
+
+    #[test]
+    fn line_height_covers_ascent_and_descent() {
+        // A row shorter than ascent+descent would clip; line_height must cover it
+        // (equals it exactly for DejaVu, whose line_gap is 0).
+        let lh = line_height(SIZE, FontStyle::Regular);
+        let box_h = ascent(SIZE, FontStyle::Regular) + descent(SIZE, FontStyle::Regular);
+        assert!(lh >= box_h - 1e-9, "line_height {lh} < ascent+descent {box_h}");
+    }
+
+    #[test]
+    fn line_height_exceeds_cap_height() {
+        // Sizing a row to cap height alone (a common bug) clips descenders.
+        assert!(line_height(SIZE, FontStyle::Regular) > cap_height(SIZE, FontStyle::Regular));
+    }
+
+    #[test]
+    fn center_offset_is_half_cap_height() {
+        let co = center_offset(SIZE, FontStyle::Regular);
+        assert!((co - cap_height(SIZE, FontStyle::Regular) / 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn x_height_below_cap_below_ascent() {
+        let s = FontStyle::Regular;
+        assert!(x_height(SIZE, s) < cap_height(SIZE, s));
+        assert!(cap_height(SIZE, s) < ascent(SIZE, s));
+    }
+
+    #[test]
+    fn vertical_metrics_scale_linearly_with_size() {
+        let a = line_height(10.0, FontStyle::Regular);
+        let b = line_height(20.0, FontStyle::Regular);
+        assert!((b - 2.0 * a).abs() < 1e-9);
     }
 }

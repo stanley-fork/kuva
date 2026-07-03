@@ -815,6 +815,10 @@ impl Canvas {
         clip: Clip,
     ) {
         let text_w = measure_text(text, size, font, cache);
+        // Offscreen buffer height for rotated text. 1.5em deliberately over-provisions
+        // the real line box (ascent+descent ≈ 1.16em for the bundled font) so tall
+        // accented caps never clip; the 0.3em baseline-from-bottom below likewise
+        // exceeds the real descent (≈0.24em). Safe bounds, not exact metrics.
         let text_h = size * 1.5;
         let pad = 2.0f32;
 

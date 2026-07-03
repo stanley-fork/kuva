@@ -34,6 +34,83 @@ fn test_heatmap_colorbar_values() {
     assert!(svg.contains("<svg"));
 }
 
+/// In-cell value labels shrink to fit short cells, and drop out entirely once even
+/// the shrunk size would fall below the readable floor — so dense heatmaps never
+/// overflow labels into neighbouring cells.
+#[test]
+fn heatmap_value_labels_shrink_to_fit_cells() {
+    // Font size of the <text> whose content is exactly `value` — a distinctive,
+    // non-round number that appears only as an in-cell label, never as a tick.
+    fn value_font_size(svg: &str, value: &str) -> Option<u32> {
+        let end = svg.find(&format!(">{value}</text>"))?;
+        let head = &svg[..end];
+        let tag = &head[head.rfind("<text")?..];
+        let fs = &tag[tag.find("font-size=\"")? + "font-size=\"".len()..];
+        fs[..fs.find('"')?].parse().ok()
+    }
+
+    let marker = "87.31";
+    // A heatmap with `rows` rows (its first cell is the marker) on a fixed 300px canvas,
+    // so more rows means shorter cells.
+    let render = |rows: usize| -> String {
+        let mut data = vec![vec![87.31, 20.0, 30.0]];
+        for i in 1..rows {
+            data.push(vec![i as f64, (i * 2) as f64, (i * 3) as f64]);
+        }
+        let hm = Heatmap::new().with_data(data).with_values().with_color_map(ColorMap::Viridis);
+        let plots = vec![Plot::Heatmap(hm)];
+        let layout = Layout::auto_from_plots(&plots).with_height(300.0);
+        SvgBackend.render_scene(&render_multiple(plots, layout))
+    };
+
+    let roomy = value_font_size(&render(3), marker).expect("roomy grid draws the value");
+    let dense = value_font_size(&render(30), marker).expect("dense grid draws a shrunken value");
+    assert!(dense < roomy, "value must shrink in shorter cells ({dense} !< {roomy})");
+    assert!(
+        value_font_size(&render(70), marker).is_none(),
+        "sub-floor cells must drop the value labels rather than overflow"
+    );
+}
+
+#[test]
+fn heatmap_wide_outlier_does_not_blank_every_value() {
+    // Count the <text> elements whose content is exactly `value`.
+    fn count(svg: &str, value: &str) -> usize {
+        svg.matches(&format!(">{value}</text>")).count()
+    }
+
+    // One 10-cell row of "0.50", optionally with a single large-magnitude outlier that
+    // formats far wider ("1000000.00"). The outlier must not shrink the whole grid below
+    // the legibility floor and suppress every label.
+    let render = |outlier: bool| -> String {
+        let mut row = vec![0.50_f64; 10];
+        if outlier {
+            row[5] = 1_000_000.0;
+        }
+        let hm =
+            Heatmap::new().with_data(vec![row]).with_values().with_color_map(ColorMap::Viridis);
+        let plots = vec![Plot::Heatmap(hm)];
+        let layout = Layout::auto_from_plots(&plots).with_width(420.0).with_height(140.0);
+        SvgBackend.render_scene(&render_multiple(plots, layout))
+    };
+
+    let baseline = count(&render(false), "0.50");
+    assert!(baseline >= 9, "sanity: short values draw without an outlier (got {baseline})");
+
+    let with = render(true);
+    assert!(
+        count(&with, "0.50") >= baseline - 1,
+        "a wide outlier must drop only itself, not blank the grid: {} of {} short labels survived",
+        count(&with, "0.50"),
+        baseline
+    );
+    assert_eq!(
+        count(&with, "1000000.00"),
+        0,
+        "the un-fittable outlier value is dropped, not overflowed"
+    );
+}
+
 #[test]
 fn test_heatmap_colorbar() {
     let data = vec![
