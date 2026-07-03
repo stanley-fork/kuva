@@ -21522,7 +21522,7 @@ fn add_horizon_annots(hp: &HorizonPlot, scene: &mut Scene, computed: &ComputedLa
                     bold: false,
                     color: Some(sign_color),
                 });
-                let char_w = mean_char_width(font_size as f64);
+                let char_w = measure_text_width("+", font_size as f64, FontStyle::Regular);
                 scene.add(Primitive::Text {
                     x: annot_x + char_w,
                     y: pos_y,
@@ -21563,7 +21563,7 @@ fn add_horizon_annots(hp: &HorizonPlot, scene: &mut Scene, computed: &ComputedLa
                     bold: false,
                     color: Some(sign_color),
                 });
-                let char_w = mean_char_width(font_size as f64);
+                let char_w = measure_text_width("-", font_size as f64, FontStyle::Regular);
                 scene.add(Primitive::Text {
                     x: annot_x + char_w,
                     y: neg_y,

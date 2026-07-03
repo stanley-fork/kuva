@@ -489,6 +489,28 @@ fn figure_size_with_shared_legend() {
     assert!(svg.contains("Treatment"));
 }
 
+#[test]
+fn figure_shared_legend_hugs_short_content_no_80px_floor() {
+    // "A" (~43px reserved) and "ABCDE" (~77px reserved) both stay under the old
+    // `.max(80.0)` floor, so pre-fix both would tie at exactly 80px. Real
+    // measurement must still show a difference between them.
+    let short = Figure::new(1, 1)
+        .with_plots(vec![scatter_with_legend("steelblue", "A")])
+        .with_shared_legend();
+    let short_width = svg_dim(&SvgBackend.render_scene(&short.render()), "width");
+
+    let longer = Figure::new(1, 1)
+        .with_plots(vec![scatter_with_legend("steelblue", "ABCDE")])
+        .with_shared_legend();
+    let longer_width = svg_dim(&SvgBackend.render_scene(&longer.render()), "width");
+
+    assert!(
+        longer_width > short_width,
+        "a longer (but still short) shared-legend label should widen the canvas \
+         ({short_width} !< {longer_width}); a stale 80px floor would mask this"
+    );
+}
+
 fn scatter_with_legend(color: &str, label: &str) -> Vec<Plot> {
     vec![Plot::Scatter(
         ScatterPlot::new()
@@ -789,7 +811,7 @@ fn figure_legend_right_top() {
         svg.contains("Alpha") && svg.contains("Beta"),
         "legend entries missing"
     );
-    assert_eq!(svg_dim(&svg, "width"), 1135.0, "right legend expands width");
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01, "right legend expands width");
     assert_eq!(
         svg_dim(&svg, "height"),
         400.0,
@@ -804,7 +826,7 @@ fn figure_legend_right_middle() {
         "figure_legend_right_middle",
     );
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
-    assert_eq!(svg_dim(&svg, "width"), 1135.0);
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01);
     assert_eq!(svg_dim(&svg, "height"), 400.0);
 }
 
@@ -815,7 +837,7 @@ fn figure_legend_right_bottom() {
         "figure_legend_right_bottom",
     );
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
-    assert_eq!(svg_dim(&svg, "width"), 1135.0);
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01);
     assert_eq!(svg_dim(&svg, "height"), 400.0);
 }
 
@@ -828,7 +850,7 @@ fn figure_legend_left_top() {
         svg.contains("Alpha") && svg.contains("Beta"),
         "legend entries missing"
     );
-    assert_eq!(svg_dim(&svg, "width"), 1135.0, "left legend expands width");
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01, "left legend expands width");
     assert_eq!(
         svg_dim(&svg, "height"),
         400.0,
@@ -843,7 +865,7 @@ fn figure_legend_left_middle() {
         "figure_legend_left_middle",
     );
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
-    assert_eq!(svg_dim(&svg, "width"), 1135.0);
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01);
     assert_eq!(svg_dim(&svg, "height"), 400.0);
 }
 
@@ -854,7 +876,7 @@ fn figure_legend_left_bottom() {
         "figure_legend_left_bottom",
     );
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
-    assert_eq!(svg_dim(&svg, "width"), 1135.0);
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01);
     assert_eq!(svg_dim(&svg, "height"), 400.0);
 }
 
@@ -975,7 +997,7 @@ fn figure_legend_right_compat() {
     // `Right` is a backward-compat alias for `RightMiddle` — same dimensions and entries.
     let svg = render_legend_pos(FigureLegendPosition::Right, "figure_legend_right_compat");
     assert!(svg.contains("Alpha") && svg.contains("Beta"));
-    assert_eq!(svg_dim(&svg, "width"), 1135.0);
+    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01);
     assert_eq!(svg_dim(&svg, "height"), 400.0);
 }
 
@@ -991,9 +1013,11 @@ fn figure_legend_bottom_compat() {
 // ── Left/Top offsets actually shift the grid ─────────────────────────────────
 //
 // For Left positions the grid cells must be offset rightward by
-// (legend_width + legend_spacing) = 100 px.  A cell that would normally start
-// at x = padding = 10 should now start at x = 110.  We verify this by
-// checking that the `translate(110,…)` group appears in the SVG.
+// (legend_width + legend_spacing), where legend_width is now measured from the
+// real "Alpha"/"Beta" label widths (~69.12px) rather than the old 80px floor.
+// A cell that would normally start at x = padding = 10 should now start at
+// x ≈ 99.12.  We verify this by checking that a `translate(99.1...,` group
+// appears in the SVG.
 //
 // For Top positions the grid cells must be offset downward by
 // (legend_height + legend_spacing) = 76 px.  Cell y normally starts at
@@ -1006,10 +1030,10 @@ fn figure_legend_left_grid_offset() {
         FigureLegendPosition::LeftMiddle,
         "figure_legend_left_offset_check",
     );
-    // Cell 0 translate: x = cell_x_offset(100) + padding(10) + col(0)*(500+15) = 110
+    // Cell 0 translate: x = cell_x_offset(~89.12) + padding(10) ≈ 99.12
     assert!(
-        svg.contains("translate(110,"),
-        "left legend should shift grid cells right by 100px"
+        svg.contains("translate(99.1"),
+        "left legend should shift grid cells right to make room for the measured legend width"
     );
 }
 

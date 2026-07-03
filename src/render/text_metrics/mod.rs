@@ -147,6 +147,7 @@ mod tests {
         assert_eq!(measure_text_width("", SIZE, FontStyle::Regular), 0.0);
     }
 
+
     #[test]
     fn wide_glyphs_measure_wider_than_narrow_ones() {
         let wide = measure_text_width("MMMM", SIZE, FontStyle::Regular);

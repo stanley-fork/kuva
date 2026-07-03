@@ -1188,9 +1188,8 @@ impl Layout {
                 if pp.show_legend {
                     has_legend = true;
                     if pp.series.len() <= 1 {
-                        max_label_len = max_label_len
-                            .max(pp.left_label.len())
-                            .max(pp.right_label.len());
+                        note_legend_label(&mut max_label_len, &mut max_label_w, &pp.left_label, 0);
+                        note_legend_label(&mut max_label_len, &mut max_label_w, &pp.right_label, 0);
                     } else {
                         for s in &pp.series {
                             note_legend_label(&mut max_label_len, &mut max_label_w, &s.label, 0);
