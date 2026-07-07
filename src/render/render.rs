@@ -3242,7 +3242,7 @@ fn draw_3d_box(
     proj
 }
 
-fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout) {
+fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout, bw_idx: usize) {
     let ranges = match s.data_ranges() {
         Some(r) => r,
         None => return,
@@ -3301,8 +3301,17 @@ fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout
     let depth_span = (depth_max - depth_min).max(1e-12);
 
     // Hoist loop-invariant values
-    let stroke_color = s.marker_stroke_width.map(|_| Color::from("#333333"));
+    let stroke_color = if computed.bw_mode {
+        s.marker_stroke_width.map(|_| Color::from("#1a1a1a"))
+    } else {
+        s.marker_stroke_width.map(|_| Color::from("#333333"))
+    };
     let base_opacity = s.marker_opacity.unwrap_or(1.0);
+    // One marker shape per Scatter3D plot instance (not per point) — enough to
+    // distinguish multiple Scatter3D instances in one figure. z-colormap and
+    // per-point `colors` schemes still lose their per-point color information
+    // in BW mode (there's no clean series index to fall back to per point).
+    let bw_marker = if computed.bw_mode { crate::render::bw::bw_shape(bw_idx) } else { s.marker };
 
     for pp in &projected {
         let i = pp.idx;
@@ -3319,7 +3328,9 @@ fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout
         // Use map_rgb fast path when available, fall back to string for Custom colormaps
         let owned_color: String;
         let rgb_buf: [u8; 7]; // "#rrggbb"
-        let fill_ref: &str = if has_z_cmap {
+        let fill_ref: &str = if computed.bw_mode {
+            "#1a1a1a"
+        } else if has_z_cmap {
             let norm = (s.data[i].z - z_min) / z_span;
             let cmap = s.z_colormap.as_ref().unwrap();
             if let Some((r, g, b)) = cmap.map_rgb(norm) {
@@ -3353,7 +3364,7 @@ fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout
 
         draw_marker(
             scene,
-            s.marker,
+            bw_marker,
             round2(pp.sx),
             round2(pp.sy),
             point_size,
@@ -4861,6 +4872,7 @@ fn region_centroids(
 
 /// Draw coloured set-indicator dots centered above an inline region label.
 /// One dot per "in" set, arranged horizontally, placed just above `first_text_y`.
+#[allow(clippy::too_many_arguments)]
 fn draw_inline_indicators(
     vp: &VennPlot,
     scene: &mut Scene,
@@ -4869,6 +4881,7 @@ fn draw_inline_indicators(
     ly: f64,
     label_size: u32,
     n: usize,
+    bw_mode: bool,
 ) {
     if !vp.show_set_indicators || (!vp.show_counts && !vp.show_percentages) {
         return;
@@ -4893,15 +4906,22 @@ fn draw_inline_indicators(
 
     for (k, &set_i) in in_sets.iter().enumerate() {
         let color = vp.color_for(set_i);
-        scene.add(Primitive::Circle {
-            cx: dot_start_x + k as f64 * dot_stride,
-            cy: dot_cy,
-            r: dot_r,
-            fill: Color::from(color.as_str()),
-            fill_opacity: None,
-            stroke: Some(Color::from("#ffffff")),
-            stroke_width: Some(0.6),
-        });
+        let (marker, fill_str) = if bw_mode {
+            (crate::render::bw::bw_shape(set_i), "#1a1a1a")
+        } else {
+            (MarkerShape::Circle, color.as_str())
+        };
+        draw_marker(
+            scene,
+            marker,
+            dot_start_x + k as f64 * dot_stride,
+            dot_cy,
+            dot_r,
+            fill_str,
+            None,
+            Some(Color::from("#ffffff")),
+            Some(0.6),
+        );
     }
 }
 
@@ -5043,31 +5063,56 @@ fn add_venn(vp: &VennPlot, scene: &mut Scene, computed: &ComputedLayout) {
         _ => return,
     };
 
-    // Draw filled shapes (fill first, then stroke outlines)
+    // Draw filled shapes (fill first, then stroke outlines). Keeps the exact
+    // Circle-vs-Path split from before (existing tests count real <circle>
+    // elements for the common 2-set case) — BW mode only changes fill/stroke
+    // color and adds a hatch overlay so overlapping sets still blend via
+    // fill_opacity while the hatch itself stays crisp at full opacity.
     for (i, &(scx, scy, srx, sry, angle)) in shapes.iter().enumerate() {
+        use crate::render::bw::{bw_fill, register_pattern};
         let color = vp.color_for(i);
-        let c = Color::from(color.as_str());
         let is_circle = (srx - sry).abs() < 1e-9;
+        let (fill_color, stroke_color) = if computed.bw_mode {
+            let (grey, _) = bw_fill(i);
+            (Color::from(grey), Color::from("#1a1a1a"))
+        } else {
+            (Color::from(color.as_str()), Color::from(color.as_str()))
+        };
         if is_circle {
             scene.add(Primitive::Circle {
                 cx: scx,
                 cy: scy,
                 r: srx,
-                fill: c.clone(),
+                fill: fill_color,
                 fill_opacity: Some(vp.fill_opacity),
-                stroke: Some(c),
+                stroke: Some(stroke_color),
                 stroke_width: Some(vp.stroke_width),
             });
         } else {
             let d = ellipse_path(scx, scy, srx, sry, angle);
             scene.add(Primitive::Path(Box::new(PathData {
                 d,
-                fill: Some(c.clone()),
-                stroke: c,
+                fill: Some(fill_color),
+                stroke: stroke_color,
                 stroke_width: vp.stroke_width,
                 opacity: Some(vp.fill_opacity),
                 stroke_dasharray: None,
             })));
+        }
+        if computed.bw_mode {
+            let (_, pattern) = bw_fill(i);
+            let pat_url = register_pattern(scene, pattern);
+            if !pat_url.is_empty() {
+                let d = ellipse_path(scx, scy, srx, sry, angle);
+                scene.add(Primitive::Path(Box::new(PathData {
+                    d,
+                    fill: Some(Color::from(pat_url.as_str())),
+                    stroke: Color::None,
+                    stroke_width: 0.0,
+                    opacity: None,
+                    stroke_dasharray: None,
+                })));
+            }
         }
     }
 
@@ -5133,7 +5178,7 @@ fn add_venn(vp: &VennPlot, scene: &mut Scene, computed: &ComputedLayout) {
             let pct_str = format!("({:.1}%)", count as f64 / total as f64 * 100.0);
 
             // Set-indicator dots above the text block.
-            draw_inline_indicators(vp, scene, mask, lx, ly, label_size, n);
+            draw_inline_indicators(vp, scene, mask, lx, ly, label_size, n, computed.bw_mode);
 
             match (vp.show_counts, vp.show_percentages) {
                 (true, true) => {
@@ -5325,15 +5370,22 @@ fn add_venn(vp: &VennPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     for (k, &set_i) in in_sets.iter().enumerate() {
                         let color = vp.color_for(set_i);
                         let dot_cx = group_start_x + dot_r + k as f64 * dot_stride;
-                        scene.add(Primitive::Circle {
-                            cx: dot_cx,
-                            cy: ly,
-                            r: dot_r,
-                            fill: Color::from(color.as_str()),
-                            fill_opacity: None,
-                            stroke: Some(Color::from("#ffffff")),
-                            stroke_width: Some(0.8),
-                        });
+                        let (marker, fill_str) = if computed.bw_mode {
+                            (crate::render::bw::bw_shape(set_i), "#1a1a1a")
+                        } else {
+                            (MarkerShape::Circle, color.as_str())
+                        };
+                        draw_marker(
+                            scene,
+                            marker,
+                            dot_cx,
+                            ly,
+                            dot_r,
+                            fill_str,
+                            None,
+                            Some(Color::from("#ffffff")),
+                            Some(0.8),
+                        );
                     }
                 }
 
@@ -5400,7 +5452,7 @@ fn add_venn(vp: &VennPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 let pct_str = format!("({:.1}%)", count as f64 / total as f64 * 100.0);
 
                 // Set-indicator dots above the text block.
-                draw_inline_indicators(vp, scene, mask, lx, ly, label_size, n);
+                draw_inline_indicators(vp, scene, mask, lx, ly, label_size, n, computed.bw_mode);
 
                 match (vp.show_counts, vp.show_percentages) {
                     (true, true) => {
@@ -7208,37 +7260,69 @@ fn add_legend_at(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout, 
     }
 
     let mut cur_y = legend_y;
-    for entry in legend.entries.iter().take(entries_to_show) {
+    for (bw_idx, entry) in legend.entries.iter().take(entries_to_show).enumerate() {
         let swatch_x = legend_x;
         let swatch_y = cur_y;
         match entry.shape {
-            LegendShape::Circle | LegendShape::CircleSize(_) => {
-                let r = if let LegendShape::CircleSize(r) = entry.shape {
-                    r
-                } else {
-                    5.0
-                };
+            LegendShape::CircleSize(r) => {
+                // Magnitude legend, not a category — dark fill only, no shape swap.
+                let fill = if computed.bw_mode { Color::from("#1a1a1a") } else { entry.color.clone().into() };
                 scene.add(Primitive::Circle {
                     cx: swatch_x + 5.0,
                     cy: swatch_y + line_height / 2.0 - 2.0,
                     r,
-                    fill: entry.color.clone().into(),
+                    fill,
                     fill_opacity: None,
                     stroke: None,
                     stroke_width: None,
                 });
             }
+            LegendShape::Circle => {
+                if computed.bw_mode {
+                    let marker = crate::render::bw::bw_shape(bw_idx);
+                    draw_marker(
+                        scene,
+                        marker,
+                        swatch_x + 5.0,
+                        swatch_y + line_height / 2.0 - 2.0,
+                        5.0,
+                        "#1a1a1a",
+                        None,
+                        None,
+                        None,
+                    );
+                } else {
+                    scene.add(Primitive::Circle {
+                        cx: swatch_x + 5.0,
+                        cy: swatch_y + line_height / 2.0 - 2.0,
+                        r: 5.0,
+                        fill: entry.color.clone().into(),
+                        fill_opacity: None,
+                        stroke: None,
+                        stroke_width: None,
+                    });
+                }
+            }
             _ => {
-                scene.add(Primitive::Rect {
-                    x: swatch_x,
-                    y: swatch_y,
-                    width: 12.0,
-                    height: 12.0,
-                    fill: entry.color.clone().into(),
-                    stroke: None,
-                    stroke_width: None,
-                    opacity: None,
-                });
+                if computed.bw_mode {
+                    use crate::render::bw::{bw_fill, register_pattern};
+                    let (grey, pattern) = bw_fill(bw_idx);
+                    scene.add(Primitive::Rect { x: swatch_x, y: swatch_y, width: 12.0, height: 12.0, fill: Color::from(grey), stroke: None, stroke_width: None, opacity: None });
+                    register_pattern(scene, pattern);
+                    let pid = pattern.id();
+                    scene.add(Primitive::Rect { x: swatch_x, y: swatch_y, width: 12.0, height: 12.0, fill: Color::from(&format!("url(#{pid})")), stroke: None, stroke_width: None, opacity: None });
+                } else {
+                    scene.add(Primitive::Rect {
+                        x: swatch_x,
+                        y: swatch_y,
+                        width: 12.0,
+                        height: 12.0,
+                        fill: entry.color.clone().into(),
+                        stroke: None,
+                        stroke_width: None,
+                        opacity: None,
+                    });
+                }
             }
         }
         scene.add(Primitive::Text {
@@ -7931,15 +8015,12 @@ fn add_volcano(vp: &VolcanoPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     extra_attrs: volcano_extra,
                 });
             }
-            scene.add(Primitive::Circle {
-                cx,
-                cy,
-                r: vp.point_size,
-                fill: Color::from(color.as_str()),
-                fill_opacity: None,
-                stroke: None,
-                stroke_width: None,
-            });
+            let (marker, fill_str) = if computed.bw_mode {
+                (crate::render::bw::bw_shape(pass as usize), "#1a1a1a")
+            } else {
+                (MarkerShape::Circle, color.as_str())
+            };
+            draw_marker(scene, marker, cx, cy, vp.point_size, fill_str, None, None, None);
             if tip.is_some() || computed.interactive {
                 scene.add(Primitive::GroupEnd);
             }
@@ -8072,12 +8153,13 @@ fn add_manhattan(mp: &ManhattanPlot, scene: &mut Scene, computed: &ComputedLayou
     let gw_y = mp.genome_wide;
     if gw_y >= computed.y_range.0 && gw_y <= computed.y_range.1 {
         let sy = computed.map_y(gw_y);
+        let stroke = if computed.bw_mode { "#1a1a1a".into() } else { "#cc3333".into() };
         scene.add(Primitive::Line {
             x1: plot_left,
             y1: sy,
             x2: plot_right,
             y2: sy,
-            stroke: "#cc3333".into(),
+            stroke,
             stroke_width: 1.0,
             stroke_dasharray: Some("4 4".into()),
         });
@@ -8085,14 +8167,19 @@ fn add_manhattan(mp: &ManhattanPlot, scene: &mut Scene, computed: &ComputedLayou
     let sg_y = mp.suggestive;
     if sg_y >= computed.y_range.0 && sg_y <= computed.y_range.1 {
         let sy = computed.map_y(sg_y);
+        let (stroke, dasharray) = if computed.bw_mode {
+            (Color::from("#888888"), Some("2 3".to_string()))
+        } else {
+            (Color::from("#888888"), Some("4 4".to_string()))
+        };
         scene.add(Primitive::Line {
             x1: plot_left,
             y1: sy,
             x2: plot_right,
             y2: sy,
-            stroke: "#888888".into(),
+            stroke,
             stroke_width: 1.0,
-            stroke_dasharray: Some("4 4".into()),
+            stroke_dasharray: dasharray,
         });
     }
 
@@ -8149,15 +8236,12 @@ fn add_manhattan(mp: &ManhattanPlot, scene: &mut Scene, computed: &ComputedLayou
                     extra_attrs: None,
                 });
             }
-            scene.add(Primitive::Circle {
-                cx,
-                cy,
-                r: mp.point_size,
-                fill: Color::from(&color),
-                fill_opacity: None,
-                stroke: None,
-                stroke_width: None,
-            });
+            let (marker, fill_str) = if computed.bw_mode {
+                (crate::render::bw::bw_shape(span_idx), "#1a1a1a".to_string())
+            } else {
+                (MarkerShape::Circle, color.clone())
+            };
+            draw_marker(scene, marker, cx, cy, mp.point_size, &fill_str, None, None, None);
             if tip.is_some() {
                 scene.add(Primitive::GroupEnd);
             }
@@ -9393,6 +9477,17 @@ fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
 
     let grid_positions = dp.dot_grid_positions();
 
+    // Categorical dot colors are arbitrary per-dot strings, not an enumerated
+    // series — recover a stable category index from `dot_legend` (label,
+    // color) so BW mode can assign each category a distinct marker shape
+    // instead of losing all distinction to a single dark fill.
+    let dot_color_bw_idx: std::collections::HashMap<&str, usize> = dp
+        .dot_legend
+        .iter()
+        .enumerate()
+        .map(|(i, (_, color))| (color.as_str(), i))
+        .collect();
+
     let has_size = dp.points.iter().any(|p| p.size.is_some())
         || dp
             .points
@@ -9571,15 +9666,13 @@ fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
 
             if categorical_mode {
                 if let Some(color) = pt.dot_colors.get(k).and_then(|c| c.as_deref()) {
-                    scene.add(Primitive::Circle {
-                        cx: dot_cx,
-                        cy: dot_cy,
-                        r: cell_dot_r,
-                        fill: color.into(),
-                        fill_opacity: None,
-                        stroke: None,
-                        stroke_width: None,
-                    });
+                    let (marker, fill_str) = if computed.bw_mode {
+                        let idx = dot_color_bw_idx.get(color).copied().unwrap_or(0);
+                        (crate::render::bw::bw_shape(idx), "#1a1a1a")
+                    } else {
+                        (MarkerShape::Circle, color)
+                    };
+                    draw_marker(scene, marker, dot_cx, dot_cy, cell_dot_r, fill_str, None, None, None);
                 }
             } else if per_dot_mode {
                 if let Some(fill_v) = pt.dot_fills.get(k).and_then(|v| *v) {
@@ -14107,6 +14200,7 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
     let mut band_bw_idx = 0usize;
     let mut density_bw_idx = 0usize;
     let mut histogram_bw_idx = 0usize;
+    let mut scatter3d_bw_idx = 0usize;
     for plot in plots.iter() {
         match plot {
             Plot::Scatter(s) => {
@@ -14209,7 +14303,8 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
                 add_forest(f, &mut scene, &computed);
             }
             Plot::Scatter3D(s) => {
-                add_scatter3d(s, &mut scene, &computed);
+                add_scatter3d(s, &mut scene, &computed, scatter3d_bw_idx);
+                scatter3d_bw_idx += 1;
             }
             Plot::Surface3D(s) => {
                 add_surface3d(s, &mut scene, &computed);
@@ -15515,7 +15610,15 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
         match series.mode {
             PolarMode::Scatter => {
                 let r_dot = series.marker_size;
-                let stroke = series.marker_stroke_width.map(|_| color.clone());
+                let (marker, fill_str, stroke) = if computed.bw_mode {
+                    (
+                        crate::render::bw::bw_shape(si),
+                        "#1a1a1a".to_string(),
+                        series.marker_stroke_width.map(|_| Color::from("#1a1a1a")),
+                    )
+                } else {
+                    (MarkerShape::Circle, color_str.clone(), series.marker_stroke_width.map(|_| color.clone()))
+                };
                 for (j, (&(px, py), (&r_val, &theta_val))) in pts
                     .iter()
                     .zip(series.r.iter().zip(series.theta.iter()))
@@ -15534,15 +15637,7 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                             extra_attrs: None,
                         });
                     }
-                    scene.add(Primitive::Circle {
-                        cx: px,
-                        cy: py,
-                        r: r_dot,
-                        fill: color.clone(),
-                        fill_opacity: series.marker_opacity,
-                        stroke: stroke.clone(),
-                        stroke_width: series.marker_stroke_width,
-                    });
+                    draw_marker(scene, marker, px, py, r_dot, &fill_str, series.marker_opacity, stroke.clone(), series.marker_stroke_width);
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -15554,13 +15649,18 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     continue;
                 }
                 let path_d = build_path(&pts);
+                let (stroke_color, dash) = if computed.bw_mode {
+                    (Color::from("#1a1a1a"), crate::render::bw::bw_dash(si).dasharray())
+                } else {
+                    (color, series.line_dash.clone())
+                };
                 scene.add(Primitive::Path(Box::new(PathData {
                     d: path_d,
                     fill: None,
-                    stroke: color,
+                    stroke: stroke_color,
                     stroke_width: series.stroke_width,
                     opacity: None,
-                    stroke_dasharray: series.line_dash.clone(),
+                    stroke_dasharray: dash,
                 })));
             }
         }
@@ -15797,15 +15897,23 @@ fn add_ternary(tp: &TernaryPlot, scene: &mut Scene, computed: &ComputedLayout) {
             (pt.a, pt.b, pt.c)
         };
 
-        let color_str = if let Some(ref g) = pt.group {
-            let idx = groups.iter().position(|x| x == g).unwrap_or(0);
-            palette[idx % palette.len()].to_string()
+        let group_idx = pt.group.as_ref().and_then(|g| groups.iter().position(|x| x == g)).unwrap_or(0);
+        let color_str = if pt.group.is_some() {
+            palette[group_idx % palette.len()].to_string()
         } else {
             palette[0].to_string()
         };
         let color = Color::from(&*color_str);
 
-        let stroke = tp.marker_stroke_width.map(|_| color.clone());
+        let (marker, fill_str, stroke) = if computed.bw_mode {
+            (
+                crate::render::bw::bw_shape(group_idx),
+                "#1a1a1a".to_string(),
+                tp.marker_stroke_width.map(|_| Color::from("#1a1a1a")),
+            )
+        } else {
+            (MarkerShape::Circle, color_str.clone(), tp.marker_stroke_width.map(|_| color.clone()))
+        };
         let (px, py) = bary_to_px(a, b, c);
         let tip = tooltip(tp.show_tooltips, &tp.tooltip_labels, tpi, || {
             format!("A={:.2}, B={:.2}, C={:.2}", pt.a, pt.b, pt.c)
@@ -15817,15 +15925,7 @@ fn add_ternary(tp: &TernaryPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 extra_attrs: None,
             });
         }
-        scene.add(Primitive::Circle {
-            cx: px,
-            cy: py,
-            r: tp.marker_size,
-            fill: color,
-            fill_opacity: tp.marker_opacity,
-            stroke,
-            stroke_width: tp.marker_stroke_width,
-        });
+        draw_marker(scene, marker, px, py, tp.marker_size, &fill_str, tp.marker_opacity, stroke, tp.marker_stroke_width);
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
         }

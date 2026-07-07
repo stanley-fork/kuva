@@ -14,6 +14,22 @@ fn bw_svg(plots: Vec<Plot>, layout: Layout) -> String {
     SvgBackend.render_scene(&scene)
 }
 
+/// True if the SVG contains a `<rect>` element filled with the bw-mode marker
+/// color — i.e. a `Square` marker drawn by `draw_marker`. Chart-area/clip
+/// rects never carry this fill, so this can't false-positive on chrome.
+fn svg_has_bw_square_marker(svg: &str) -> bool {
+    let mut search_from = 0;
+    while let Some(rel) = svg[search_from..].find("<rect ") {
+        let start = search_from + rel;
+        let end = svg[start..].find("/>").map_or(svg.len(), |e| start + e);
+        if svg[start..end].contains("fill=\"#1a1a1a\"") {
+            return true;
+        }
+        search_from = end.max(start + 1);
+    }
+    false
+}
+
 // ── Tier 1: fills ────────────────────────────────────────────────────────────
 
 #[test]
@@ -741,6 +757,181 @@ fn bw_upset_dot_matrix_uses_guaranteed_contrast_not_user_colors() {
     assert!(
         !svg.contains("#4499cc") && !svg.contains("#eeeeee"),
         "BW mode must not leak the user's configured dot colors into the output"
+    );
+}
+
+// ── Group 2: point/marker family ──────────────────────────────────────────────
+//
+// All of these draw raw Circle points or call draw_marker directly. Without a
+// bw fix, every point renders as a plain dark circle regardless of category —
+// so in bw_mode a non-circle SVG tag (<rect> for Square, <path> for Triangle/
+// Diamond) appearing at all is the signal that shape differentiation kicked in.
+
+#[test]
+fn bw_volcano_categories_use_distinct_shapes() {
+    use kuva::plot::VolcanoPlot;
+    // fc_cutoff=1.0, p_cutoff=0.05 (defaults): one point per category (NS, Down, Up).
+    let volcano = VolcanoPlot::new().with_points(vec![
+        ("GeneNS", 0.1, 0.5),   // NS: |log2fc| < cutoff
+        ("GeneDown", -2.0, 0.01), // Down: log2fc <= -cutoff, significant
+        ("GeneUp", 2.0, 0.01),    // Up: log2fc >= cutoff, significant
+    ]);
+    let plots = vec![Plot::Volcano(volcano)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_volcano.svg", svg.clone()).unwrap();
+    // NS -> bw_shape(0) = Circle, Down -> bw_shape(1) = Square (<rect>).
+    assert!(
+        svg_has_bw_square_marker(&svg),
+        "Down category should render as a Square (<rect> filled #1a1a1a)"
+    );
+}
+
+#[test]
+fn bw_manhattan_chromosomes_use_distinct_shapes() {
+    use kuva::plot::ManhattanPlot;
+    let mp = ManhattanPlot::new().with_data(vec![
+        ("1", 0.01),
+        ("2", 0.02),
+        ("3", 0.03),
+    ]);
+    let plots = vec![Plot::Manhattan(mp)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_manhattan.svg", svg.clone()).unwrap();
+    // Chr "1" (span 0) -> Circle, chr "2" (span 1) -> Square (<rect>).
+    assert!(
+        svg_has_bw_square_marker(&svg),
+        "second chromosome band should render as a Square (<rect> filled #1a1a1a)"
+    );
+}
+
+#[test]
+fn bw_manhattan_significance_lines_are_not_colored() {
+    use kuva::plot::ManhattanPlot;
+    let mp = ManhattanPlot::new().with_data(vec![
+        ("1", 0.01),
+        ("2", 0.02),
+        ("3", 0.03),
+    ]);
+    let plots = vec![Plot::Manhattan(mp)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_manhattan_thresholds.svg", svg.clone()).unwrap();
+    assert!(
+        !svg.contains("#cc3333"),
+        "genome-wide significance line should not be red in BW mode"
+    );
+    assert!(
+        svg.contains("stroke=\"#1a1a1a\""),
+        "genome-wide significance line should use the BW near-black color"
+    );
+}
+
+#[test]
+fn bw_polar_scatter_series_use_distinct_shapes() {
+    use kuva::plot::polar::PolarPlot;
+    let polar = PolarPlot::new()
+        .with_series(vec![1.0, 2.0, 3.0], vec![0.0, 90.0, 180.0])
+        .with_series(vec![1.5, 2.5], vec![45.0, 135.0]);
+    let plots = vec![Plot::Polar(polar)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_polar.svg", svg.clone()).unwrap();
+    assert!(
+        svg_has_bw_square_marker(&svg),
+        "second polar series should render as a Square (<rect> filled #1a1a1a)"
+    );
+}
+
+#[test]
+fn bw_ternary_groups_use_distinct_shapes() {
+    use kuva::plot::ternary::TernaryPlot;
+    let ternary = TernaryPlot::new()
+        .with_point_group(0.6, 0.2, 0.2, "A")
+        .with_point_group(0.2, 0.6, 0.2, "B")
+        .with_point_group(0.3, 0.5, 0.2, "B");
+    let plots = vec![Plot::Ternary(ternary)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_ternary.svg", svg.clone()).unwrap();
+    assert!(
+        svg_has_bw_square_marker(&svg),
+        "second ternary group should render as a Square (<rect> filled #1a1a1a)"
+    );
+}
+
+#[test]
+fn bw_diceplot_categorical_dots_use_distinct_shapes() {
+    use kuva::plot::diceplot::DicePlot;
+    let dice = DicePlot::new(1)
+        .with_category_labels(vec!["Only".into()])
+        .with_dot_legend(vec![("Down", "#2166ac"), ("Up", "#b2182b")])
+        .with_records(vec![
+            ("Row1", "Col1", "Only", "#2166ac"),
+            ("Row2", "Col1", "Only", "#b2182b"),
+        ]);
+    let plots = vec![Plot::DicePlot(dice)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_diceplot.svg", svg.clone()).unwrap();
+    // "Down" (legend index 0) -> Circle, "Up" (legend index 1) -> Square (<rect>).
+    assert!(
+        svg_has_bw_square_marker(&svg),
+        "second dot-legend category should render as a Square (<rect> filled #1a1a1a)"
+    );
+}
+
+#[test]
+fn bw_diceplot_dot_legend_swatches_are_not_colored() {
+    use kuva::plot::diceplot::DicePlot;
+    let dice = DicePlot::new(1)
+        .with_category_labels(vec!["Only".into()])
+        .with_dot_legend(vec![("Down", "#2166ac"), ("Up", "#b2182b")])
+        .with_records(vec![
+            ("Row1", "Col1", "Only", "#2166ac"),
+            ("Row2", "Col1", "Only", "#b2182b"),
+        ]);
+    let plots = vec![Plot::DicePlot(dice)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_diceplot_legend.svg", svg.clone()).unwrap();
+    assert!(
+        !svg.contains("#2166ac") && !svg.contains("#b2182b"),
+        "dot-legend swatches (drawn via add_legend_at) should not leak the user's configured colors in BW mode"
+    );
+}
+
+#[test]
+fn bw_venn_sets_use_distinct_patterns() {
+    use kuva::plot::venn::VennPlot;
+    let venn = VennPlot::new()
+        .with_set_size("Set A", 100)
+        .with_set_size("Set B", 80)
+        .with_overlap(["Set A", "Set B"], 30);
+    let plots = vec![Plot::Venn(venn)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_venn.svg", svg.clone()).unwrap();
+    let pattern_count = svg.matches("<pattern").count();
+    assert!(
+        pattern_count >= 2,
+        "Two venn sets should use at least 2 distinct patterns, got {pattern_count}"
+    );
+}
+
+#[test]
+fn bw_scatter3d_instances_use_distinct_shapes() {
+    use kuva::plot::scatter3d::Scatter3DPlot;
+    let s0 = Scatter3DPlot::new().with_data(vec![(1.0, 2.0, 3.0), (2.0, 3.0, 4.0)]).with_color("steelblue");
+    let s1 = Scatter3DPlot::new().with_data(vec![(4.0, 5.0, 1.0), (5.0, 6.0, 2.0)]).with_color("tomato");
+    let plots = vec![Plot::Scatter3D(s0), Plot::Scatter3D(s1)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_scatter3d.svg", svg.clone()).unwrap();
+    assert!(
+        svg_has_bw_square_marker(&svg),
+        "second Scatter3D instance should render as a Square (<rect> filled #1a1a1a)"
     );
 }
 
