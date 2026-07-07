@@ -30,6 +30,61 @@ fn svg_has_bw_square_marker(svg: &str) -> bool {
     false
 }
 
+/// Count of distinct `url(#kuva-fp-...)` pattern fills used strictly *inside*
+/// the plot-body clip group — i.e. on the data marks themselves, not on
+/// legend swatches (which live outside the clip group and, via the
+/// already-bw-aware generic legend renderer, can register their own pattern
+/// defs independent of whether the plot's data-drawing code is bw-aware).
+/// `svg.matches("<pattern").count()` alone is NOT a safe signal here: pattern
+/// *definitions* are deduplicated by id, so a plot with an unrelated but
+/// already-bw-aware legend can satisfy a bare pattern-def-count assertion
+/// even when its own data marks are not bw-aware at all.
+fn distinct_patterns_in_plot_body(svg: &str) -> usize {
+    let body = match svg.find("<g clip-path=") {
+        Some(start) => {
+            let open_end = svg[start..].find('>').map_or(svg.len(), |e| start + e + 1);
+            let close = svg[open_end..].rfind("</g>").map_or(svg.len(), |e| open_end + e);
+            &svg[open_end..close]
+        }
+        None => svg,
+    };
+    let mut ids = std::collections::HashSet::new();
+    let mut search_from = 0;
+    while let Some(rel) = body[search_from..].find("url(#kuva-fp-") {
+        let start = search_from + rel;
+        let end = body[start..].find(')').map_or(body.len(), |e| start + e + 1);
+        ids.insert(&body[start..end]);
+        search_from = end;
+    }
+    ids.len()
+}
+
+/// Count of distinct dash "groups" (dasharray value, or "solid" when the
+/// attribute is absent) among elements stroked with `stroke`. Scans forward
+/// from each `stroke="<stroke>"` occurrence to the element's closing `/>`
+/// (both `<line>` and `<path>` end that way in this backend), so it works
+/// for both primitive kinds without needing to know which one is used.
+fn distinct_dash_groups_for_stroke(svg: &str, stroke: &str) -> usize {
+    let marker = format!("stroke=\"{stroke}\"");
+    let mut groups = std::collections::HashSet::new();
+    let mut search_from = 0;
+    while let Some(rel) = svg[search_from..].find(&marker) {
+        let start = search_from + rel;
+        let end = svg[start..].find("/>").map_or(svg.len(), |e| start + e);
+        let seg = &svg[start..end];
+        let dash = if let Some(dpos) = seg.find("stroke-dasharray=\"") {
+            let s = dpos + "stroke-dasharray=\"".len();
+            let e = seg[s..].find('"').map_or(seg.len(), |e| s + e);
+            seg[s..e].to_string()
+        } else {
+            "solid".to_string()
+        };
+        groups.insert(dash);
+        search_from = end.max(start + 1);
+    }
+    groups.len()
+}
+
 // ── Tier 1: fills ────────────────────────────────────────────────────────────
 
 #[test]
@@ -933,6 +988,258 @@ fn bw_scatter3d_instances_use_distinct_shapes() {
         svg_has_bw_square_marker(&svg),
         "second Scatter3D instance should render as a Square (<rect> filled #1a1a1a)"
     );
+}
+
+// ── Group 3: hierarchical rect/path family ──────────────────────────────────
+
+#[test]
+fn bw_mosaic_rows_use_distinct_patterns() {
+    use kuva::plot::mosaic::MosaicPlot;
+    let mosaic = MosaicPlot::new()
+        .with_cell("Control", "Positive", 30.0)
+        .with_cell("Control", "Negative", 70.0)
+        .with_cell("Treated", "Positive", 60.0)
+        .with_cell("Treated", "Negative", 40.0);
+    let plots = vec![Plot::Mosaic(mosaic)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_mosaic.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "two mosaic rows should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_treemap_roots_use_distinct_patterns() {
+    use kuva::plot::treemap::{TreemapNode, TreemapPlot};
+    let treemap = TreemapPlot::new()
+        .with_node(TreemapNode::new(
+            "Foods",
+            vec![TreemapNode::leaf("Apples", 30.0), TreemapNode::leaf("Oranges", 20.0)],
+        ))
+        .with_node(TreemapNode::new(
+            "Drinks",
+            vec![TreemapNode::leaf("Coffee", 15.0), TreemapNode::leaf("Tea", 10.0)],
+        ));
+    let plots = vec![Plot::Treemap(treemap)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_treemap.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "two treemap roots should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_sunburst_roots_use_distinct_patterns() {
+    use kuva::plot::sunburst::SunburstPlot;
+    use kuva::plot::treemap::TreemapNode;
+    let sunburst = SunburstPlot::new()
+        .with_node(TreemapNode::new(
+            "Org1",
+            vec![TreemapNode::leaf("Alice", 40.0), TreemapNode::leaf("Bob", 30.0)],
+        ))
+        .with_node(TreemapNode::new(
+            "Org2",
+            vec![TreemapNode::leaf("Carol", 25.0), TreemapNode::leaf("Dave", 20.0)],
+        ));
+    let plots = vec![Plot::Sunburst(sunburst)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_sunburst.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "two sunburst roots should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_funnel_stages_use_distinct_patterns() {
+    use kuva::plot::funnel::FunnelPlot;
+    let funnel = FunnelPlot::new()
+        .with_stage("Screened", 1200.0)
+        .with_stage("Eligible", 800.0)
+        .with_stage("Enrolled", 600.0);
+    let plots = vec![Plot::Funnel(funnel)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_funnel.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "funnel stages should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_pyramid_sides_use_distinct_patterns() {
+    use kuva::plot::pyramid::PopulationPyramid;
+    let pyramid = PopulationPyramid::new()
+        .with_left_color("#4C72B0")
+        .with_right_color("#DD8452")
+        .with_group("0-4", 6.5, 6.2)
+        .with_group("5-9", 6.8, 6.5);
+    let plots = vec![Plot::Pyramid(pyramid)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_pyramid.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "pyramid left/right halves should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_waffle_categories_use_distinct_patterns() {
+    use kuva::plot::waffle::WafflePlot;
+    let waffle = WafflePlot::new()
+        .with_category("Treated", 45.0, "steelblue")
+        .with_category("Partial", 30.0, "gold")
+        .with_category("Untreated", 25.0, "#e74c3c")
+        .with_grid(5, 20);
+    let plots = vec![Plot::Waffle(waffle)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_waffle.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "waffle categories should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_gantt_groups_use_distinct_patterns() {
+    use kuva::plot::gantt::GanttPlot;
+    let gantt = GanttPlot::new()
+        .with_task_group("Design", "Wireframes", 0.0, 3.0)
+        .with_task_group("Dev", "Backend API", 3.0, 8.0);
+    let plots = vec![Plot::Gantt(gantt)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_gantt.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "gantt task groups should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_brick_template_chars_use_distinct_patterns() {
+    use kuva::plot::brick::BrickPlot;
+    use std::collections::HashMap;
+    let mut template = HashMap::new();
+    template.insert('X', "steelblue".to_string());
+    template.insert('Y', "#ff7f0e".to_string());
+    let brick = BrickPlot::new()
+        .with_sequences(vec!["XYXYXY", "XXYXYY"])
+        .with_template(template);
+    let plots = vec![Plot::Brick(brick)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_brick.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "brick template characters should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+// ── Group 4: line/stroke family ─────────────────────────────────────────────
+
+#[test]
+fn bw_candlestick_up_down_use_distinct_patterns() {
+    use kuva::plot::candlestick::CandlestickPlot;
+    let candlestick = CandlestickPlot::new()
+        .with_candle("Day1", 10.0, 12.0, 9.0, 11.5) // up
+        .with_candle("Day2", 11.5, 12.0, 8.0, 8.5); // down
+    let plots = vec![Plot::Candlestick(candlestick)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_candlestick.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "up vs down candle bodies should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_forest_rows_use_distinct_patterns() {
+    use kuva::plot::forest::ForestPlot;
+    let forest = ForestPlot::new()
+        .with_row("Study A", 0.50, 0.10, 0.90)
+        .with_row("Study B", -0.30, -0.80, 0.20);
+    let plots = vec![Plot::Forest(forest)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_forest.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "forest row markers should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_lollipop_points_use_distinct_patterns() {
+    use kuva::plot::lollipop::LollipopPlot;
+    let lollipop = LollipopPlot::new()
+        .with_point(1.0, 5.0)
+        .with_point(2.0, 8.0);
+    let plots = vec![Plot::Lollipop(lollipop)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_lollipop.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "lollipop dots should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_phylo_clades_use_distinct_dashes() {
+    use kuva::plot::PhyloTree;
+    let edges: Vec<(&str, &str, f64)> = vec![
+        ("root", "Bacteria", 1.5),
+        ("root", "Eukarya", 2.0),
+        ("Bacteria", "E. coli", 0.5),
+        ("Bacteria", "B. subtilis", 0.7),
+        ("Eukarya", "Yeast", 1.0),
+        ("Eukarya", "Human", 0.8),
+    ];
+    // node id 1 = "Bacteria", id 2 = "Eukarya" (see tests/phylo_basic.rs)
+    let tree = PhyloTree::from_edges(&edges)
+        .with_clade_color(1, "#e41a1c")
+        .with_clade_color(2, "#377eb8");
+    let plots = vec![Plot::PhyloTree(tree)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_phylo.svg", svg.clone()).unwrap();
+    assert!(!svg.contains("#e41a1c") && !svg.contains("#377eb8"), "clade colors should not leak into BW mode");
+    let dash_groups = distinct_dash_groups_for_stroke(&svg, "#1a1a1a");
+    assert!(dash_groups >= 2, "the two clades should use at least 2 distinct dash styles, got {dash_groups}");
+}
+
+#[test]
+fn bw_parallel_groups_use_distinct_dashes() {
+    use kuva::plot::parallel::ParallelPlot;
+    let parallel = ParallelPlot::new()
+        .with_axis_names(vec!["A", "B", "C"])
+        .with_row_group("Group1", vec![1.0, 2.0, 3.0])
+        .with_row_group("Group2", vec![3.0, 2.0, 1.0]);
+    let plots = vec![Plot::Parallel(parallel)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_parallel.svg", svg.clone()).unwrap();
+    let dash_groups = distinct_dash_groups_for_stroke(&svg, "#1a1a1a");
+    assert!(dash_groups >= 2, "the two row groups should use at least 2 distinct dash styles, got {dash_groups}");
+}
+
+#[test]
+fn bw_radar_series_use_distinct_patterns() {
+    use kuva::plot::radar::RadarPlot;
+    let radar = RadarPlot::new(vec!["Speed", "Power", "Range"])
+        .with_series(vec![3.0, 4.0, 5.0])
+        .with_series(vec![5.0, 3.0, 2.0])
+        .with_filled(true);
+    let plots = vec![Plot::Radar(radar)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_radar.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "the two radar series should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_horizon_pos_neg_are_not_colored() {
+    use kuva::plot::horizon::HorizonPlot;
+    let x: Vec<f64> = (0..10).map(|i| i as f64).collect();
+    let y: Vec<f64> = x.iter().map(|&t| (t - 5.0) * 2.0).collect(); // crosses zero
+    let horizon = HorizonPlot::new().with_series("Temp", x, y);
+    let plots = vec![Plot::Horizon(horizon)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_horizon.svg", svg.clone()).unwrap();
+    // Default pos_color/neg_color hex (see horizon_basic.rs) should not leak through.
+    assert!(!svg.contains("#1f77b4") && !svg.contains("#d62728"), "pos/neg colors should not leak into BW mode");
+    assert!(svg.contains("#1a1a1a"), "positive bands should use the fixed BW dark grey");
+    assert!(svg.contains("#888888"), "negative bands should use a distinct fixed BW grey");
 }
 
 // ── Sanity checks ─────────────────────────────────────────────────────────────

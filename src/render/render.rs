@@ -2225,25 +2225,54 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
             _ => "rgb(180,180,180)",
         }
     };
+    // BW pattern index for a flank base — fixed A/C/G/T/other ordering (not
+    // hashmap-derived, so it's stable across runs).
+    let dna_bw_idx = |ch: char| -> usize {
+        match ch {
+            'A' | 'a' => 0,
+            'C' | 'c' => 1,
+            'G' | 'g' => 2,
+            'T' | 't' => 3,
+            _ => 4,
+        }
+    };
+    // BW pattern index per STR template character — `template` is a HashMap
+    // with no defined iteration order, so sort keys for a stable index.
+    let template_bw_idx: HashMap<char, usize> = brickplot.template.as_ref().map_or_else(
+        HashMap::new,
+        |template| {
+            let mut keys: Vec<char> = template.keys().copied().collect();
+            keys.sort_unstable();
+            keys.into_iter().enumerate().map(|(i, c)| (c, i)).collect()
+        },
+    );
 
     // Helper: draw one brick rect. `yr` is the y-flipped row index for pixel mapping.
-    let draw_brick =
-        |scene: &mut Scene, x_start: f64, width: f64, yr: usize, eff_offset: f64, fill: Color| {
-            let x0 = computed.map_x(x_start - eff_offset);
-            let x1 = computed.map_x(x_start + width - eff_offset);
-            let y0 = computed.map_y(yr as f64 + 1.0);
-            let y1 = computed.map_y(yr as f64);
-            scene.add(Primitive::Rect {
-                x: x0,
-                y: y0,
-                width: (x1 - x0).abs() * 0.95,
-                height: (y1 - y0).abs() * 0.95,
-                fill,
-                stroke: None,
-                stroke_width: None,
-                opacity: None,
-            });
-        };
+    let draw_brick = |scene: &mut Scene,
+                       x_start: f64,
+                       width: f64,
+                       yr: usize,
+                       eff_offset: f64,
+                       bw_idx: usize,
+                       color_str: &str| {
+        let x0 = computed.map_x(x_start - eff_offset);
+        let x1 = computed.map_x(x_start + width - eff_offset);
+        let y0 = computed.map_y(yr as f64 + 1.0);
+        let y1 = computed.map_y(yr as f64);
+        rect_bw(
+            scene,
+            computed,
+            bw_idx,
+            color_str,
+            x0,
+            y0,
+            (x1 - x0).abs() * 0.95,
+            (y1 - y0).abs() * 0.95,
+            None,
+            None,
+            None,
+        );
+    };
 
     // Pass 1: brick rects. Row 0 renders at the TOP of the plot (y-flip via yr).
     for i in 0..num_rows {
@@ -2263,7 +2292,8 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
                         1.0,
                         yr,
                         eff_offset,
-                        Color::from(dna_color(ch)),
+                        dna_bw_idx(ch),
+                        dna_color(ch),
                     );
                 }
             }
@@ -2286,14 +2316,8 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
             let color = template
                 .get(&value)
                 .expect("BrickPlot value not found in template colormap");
-            draw_brick(
-                scene,
-                x_start,
-                width,
-                yr,
-                eff_offset,
-                Color::from(color.as_str()),
-            );
+            let bw_idx = *template_bw_idx.get(&value).unwrap_or(&0);
+            draw_brick(scene, x_start, width, yr, eff_offset, bw_idx, color.as_str());
             x_pos += width;
         }
 
@@ -2308,7 +2332,8 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
                         1.0,
                         yr,
                         eff_offset,
-                        Color::from(dna_color(ch)),
+                        dna_bw_idx(ch),
+                        dna_color(ch),
                     );
                 }
             }
@@ -3521,7 +3546,11 @@ fn add_forest(forest: &ForestPlot, scene: &mut Scene, computed: &ComputedLayout)
         let y_px = computed.map_y(y_data);
 
         let color_str = row.color.as_deref().unwrap_or(&forest.color);
-        let color = Color::from(color_str);
+        let (line_stroke, line_dash) = if computed.bw_mode {
+            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+        } else {
+            (Color::from(color_str), None)
+        };
 
         let x_lower = computed.map_x(row.ci_lower);
         let x_upper = computed.map_x(row.ci_upper);
@@ -3547,9 +3576,9 @@ fn add_forest(forest: &ForestPlot, scene: &mut Scene, computed: &ComputedLayout)
             y1: y_px,
             x2: x_upper,
             y2: y_px,
-            stroke: color.clone(),
+            stroke: line_stroke.clone(),
             stroke_width: forest.whisker_width,
-            stroke_dasharray: None,
+            stroke_dasharray: line_dash.clone(),
         });
 
         // End caps
@@ -3560,33 +3589,36 @@ fn add_forest(forest: &ForestPlot, scene: &mut Scene, computed: &ComputedLayout)
                 y1: y_px - cap,
                 x2: x_lower,
                 y2: y_px + cap,
-                stroke: color.clone(),
+                stroke: line_stroke.clone(),
                 stroke_width: forest.whisker_width,
-                stroke_dasharray: None,
+                stroke_dasharray: line_dash.clone(),
             });
             scene.add(Primitive::Line {
                 x1: x_upper,
                 y1: y_px - cap,
                 x2: x_upper,
                 y2: y_px + cap,
-                stroke: color.clone(),
+                stroke: line_stroke,
                 stroke_width: forest.whisker_width,
-                stroke_dasharray: None,
+                stroke_dasharray: line_dash,
             });
         }
 
         // Point estimate marker — filled square centered on the whisker.
         let mh = marker_half_w * 2.0;
-        scene.add(Primitive::Rect {
-            x: est_px - marker_half_w,
-            y: y_px - marker_half_w,
-            width: mh,
-            height: mh,
-            fill: color,
-            stroke: None,
-            stroke_width: None,
-            opacity: None,
-        });
+        rect_bw(
+            scene,
+            computed,
+            i,
+            color_str,
+            est_px - marker_half_w,
+            y_px - marker_half_w,
+            mh,
+            mh,
+            None,
+            None,
+            None,
+        );
     }
 }
 
@@ -3629,7 +3661,7 @@ fn add_lollipop(
     }
 
     // 1. Domain rectangles (drawn first, behind everything).
-    for domain in &lp.domains {
+    for (domain_idx, domain) in lp.domains.iter().enumerate() {
         let x_left = computed
             .map_x(domain.x_start)
             .min(computed.map_x(domain.x_end));
@@ -3645,16 +3677,19 @@ fn add_lollipop(
         let width = x_right - x_left;
         let height = y_bot - y_top;
 
-        scene.add(Primitive::Rect {
-            x: x_left,
-            y: y_top,
+        rect_bw(
+            scene,
+            computed,
+            domain_idx,
+            &domain.color,
+            x_left,
+            y_top,
             width,
             height,
-            fill: Color::from(domain.color.as_str()),
-            stroke: None,
-            stroke_width: None,
-            opacity: Some(domain.opacity),
-        });
+            None,
+            None,
+            Some(domain.opacity),
+        );
 
         if let Some(ref label) = domain.label {
             scene.add(Primitive::Text {
@@ -3687,7 +3722,7 @@ fn add_lollipop(
     }
 
     // 3. Stems and dots.
-    for point in &lp.points {
+    for (i, point) in lp.points.iter().enumerate() {
         let x_px = computed.map_x(point.x);
         let y_px = computed.map_y(point.y);
         let base_px = computed.map_y(lp.baseline);
@@ -3695,14 +3730,19 @@ fn add_lollipop(
         let color = Color::from(color_str);
 
         // Stem.
+        let (stem_stroke, stem_dash) = if computed.bw_mode {
+            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+        } else {
+            (color.clone(), None)
+        };
         scene.add(Primitive::Line {
             x1: x_px,
             y1: base_px,
             x2: x_px,
             y2: y_px,
-            stroke: color.clone(),
+            stroke: stem_stroke,
             stroke_width: lp.stem_width,
-            stroke_dasharray: None,
+            stroke_dasharray: stem_dash,
         });
 
         // Dot.
@@ -3711,15 +3751,41 @@ fn add_lollipop(
             .as_deref()
             .map(Color::from)
             .unwrap_or_else(|| color.clone());
-        scene.add(Primitive::Circle {
-            cx: x_px,
-            cy: y_px,
-            r: lp.dot_radius,
-            fill: color,
-            fill_opacity: None,
-            stroke: Some(stroke_color),
-            stroke_width: Some(lp.dot_stroke_width),
-        });
+        if computed.bw_mode {
+            use crate::render::bw::{bw_fill, register_pattern};
+            let (grey, pattern) = bw_fill(i);
+            scene.add(Primitive::Circle {
+                cx: x_px,
+                cy: y_px,
+                r: lp.dot_radius,
+                fill: Color::from(grey),
+                fill_opacity: None,
+                stroke: Some(Color::from("#1a1a1a")),
+                stroke_width: Some(lp.dot_stroke_width),
+            });
+            let pat_url = register_pattern(scene, pattern);
+            if !pat_url.is_empty() {
+                scene.add(Primitive::Circle {
+                    cx: x_px,
+                    cy: y_px,
+                    r: lp.dot_radius,
+                    fill: Color::from(pat_url.as_str()),
+                    fill_opacity: None,
+                    stroke: None,
+                    stroke_width: None,
+                });
+            }
+        } else {
+            scene.add(Primitive::Circle {
+                cx: x_px,
+                cy: y_px,
+                r: lp.dot_radius,
+                fill: color,
+                fill_opacity: None,
+                stroke: Some(stroke_color),
+                stroke_width: Some(lp.dot_stroke_width),
+            });
+        }
 
         // Per-point label.
         if let Some(ref label) = point.label {
@@ -4668,6 +4734,11 @@ fn add_parallel(pp: &ParallelPlot, scene: &mut Scene, computed: &ComputedLayout)
         if row.values.len() < n_axes {
             continue;
         }
+        let row_group_idx = if has_groups {
+            row.group.as_deref().map(group_idx).unwrap_or(0)
+        } else {
+            0
+        };
         let color_str = if has_groups {
             if let Some(ref g) = row.group {
                 pp.color_for_group_idx(group_idx(g))
@@ -4676,6 +4747,11 @@ fn add_parallel(pp: &ParallelPlot, scene: &mut Scene, computed: &ComputedLayout)
             }
         } else {
             pp.color.clone()
+        };
+        let (stroke, stroke_dasharray) = if computed.bw_mode {
+            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(row_group_idx).dasharray())
+        } else {
+            (Color::from(color_str.as_str()), None)
         };
 
         let pts: Vec<(f64, f64)> = row
@@ -4689,10 +4765,10 @@ fn add_parallel(pp: &ParallelPlot, scene: &mut Scene, computed: &ComputedLayout)
         scene.add(Primitive::Path(Box::new(PathData {
             d: build_path(&pts),
             fill: None,
-            stroke: Color::from(color_str.as_str()),
+            stroke,
             stroke_width: pp.stroke_width,
             opacity: Some(pp.opacity),
-            stroke_dasharray: None,
+            stroke_dasharray,
         })));
     }
 
@@ -4722,13 +4798,18 @@ fn add_parallel(pp: &ParallelPlot, scene: &mut Scene, computed: &ComputedLayout)
                 .collect();
 
             let color_str = pp.color_for_group_idx(gi);
+            let (stroke, stroke_dasharray) = if computed.bw_mode {
+                (Color::from("#1a1a1a"), crate::render::bw::bw_dash(gi).dasharray())
+            } else {
+                (Color::from(color_str.as_str()), None)
+            };
             scene.add(Primitive::Path(Box::new(PathData {
                 d: build_path(&pts),
                 fill: None,
-                stroke: Color::from(color_str.as_str()),
+                stroke,
                 stroke_width: pp.mean_stroke_width,
                 opacity: Some(1.0),
-                stroke_dasharray: None,
+                stroke_dasharray,
             })));
         }
     }
@@ -12126,6 +12207,18 @@ fn add_candlestick(cp: &CandlestickPlot, scene: &mut Scene, computed: &ComputedL
             &cp.color_doji
         }
     };
+    // BW pattern index: up/down/doji is a fixed 3-category convention, not a
+    // per-candle series — every up candle shares one pattern, every down
+    // candle another, so the direction stays visually legible in BW mode.
+    let candle_bw_idx = |c: &CandleDataPoint| -> usize {
+        if c.close > c.open {
+            0
+        } else if c.close < c.open {
+            1
+        } else {
+            2
+        }
+    };
 
     for (i, candle) in cp.candles.iter().enumerate() {
         let x_val = if continuous {
@@ -12135,6 +12228,7 @@ fn add_candlestick(cp: &CandlestickPlot, scene: &mut Scene, computed: &ComputedL
         };
         let x_center = computed.map_x(x_val);
         let color = candle_color(candle).to_string();
+        let bw_idx = candle_bw_idx(candle);
 
         let tip = tooltip(cp.show_tooltips, &cp.tooltip_labels, i, || {
             format!(
@@ -12151,30 +12245,39 @@ fn add_candlestick(cp: &CandlestickPlot, scene: &mut Scene, computed: &ComputedL
         }
 
         // Wick
+        let (wick_stroke, wick_dash) = if computed.bw_mode {
+            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(bw_idx).dasharray())
+        } else {
+            (Color::from(&color), None)
+        };
         scene.add(Primitive::Line {
             x1: x_center,
             y1: map_y_price(candle.high),
             x2: x_center,
             y2: map_y_price(candle.low),
-            stroke: Color::from(&color),
+            stroke: wick_stroke,
             stroke_width: cp.wick_width,
-            stroke_dasharray: None,
+            stroke_dasharray: wick_dash,
         });
 
         // Body
         let body_top = map_y_price(candle.open.max(candle.close));
         let body_bottom = map_y_price(candle.open.min(candle.close));
         let body_h = (body_bottom - body_top).max(1.0);
-        scene.add(Primitive::Rect {
-            x: x_center - body_w / 2.0,
-            y: body_top,
-            width: body_w,
-            height: body_h,
-            fill: Color::from(&color),
-            stroke: Some(Color::from(&color)),
-            stroke_width: Some(0.5),
-            opacity: None,
-        });
+        let body_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&color) };
+        rect_bw(
+            scene,
+            computed,
+            bw_idx,
+            &color,
+            x_center - body_w / 2.0,
+            body_top,
+            body_w,
+            body_h,
+            Some(body_stroke),
+            Some(0.5),
+            None,
+        );
 
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
@@ -12204,16 +12307,19 @@ fn add_candlestick(cp: &CandlestickPlot, scene: &mut Scene, computed: &ComputedL
                     let x_center = computed.map_x(x_val);
                     let color = candle_color(candle).to_string();
                     let bar_h = (vol / vol_max) * vol_panel_h;
-                    scene.add(Primitive::Rect {
-                        x: x_center - body_w / 2.0,
-                        y: vol_panel_bottom - bar_h,
-                        width: body_w,
-                        height: bar_h,
-                        fill: color.into(),
-                        stroke: None,
-                        stroke_width: None,
-                        opacity: Some(0.5),
-                    });
+                    rect_bw(
+                        scene,
+                        computed,
+                        candle_bw_idx(candle),
+                        &color,
+                        x_center - body_w / 2.0,
+                        vol_panel_bottom - bar_h,
+                        body_w,
+                        bar_h,
+                        None,
+                        None,
+                        Some(0.5),
+                    );
                 }
             }
         }
@@ -14932,18 +15038,30 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
         };
 
     // ── Step 4: clade color lookup ────────────────────────────────────────────
+    // node_bw_idx mirrors node_color: 0 = uncoloured/default branch_color,
+    // ci+1 = the ci'th entry in clade_colors — so every clade gets its own
+    // dash pattern in BW mode, distinct from the uncoloured rest of the tree.
     let mut node_color: Vec<String> = vec![tree.branch_color.clone(); n_nodes];
-    for &(clade_root, ref color) in &tree.clade_colors {
+    let mut node_bw_idx: Vec<usize> = vec![0; n_nodes];
+    for (ci, &(clade_root, ref color)) in tree.clade_colors.iter().enumerate() {
         let mut stack = vec![clade_root];
         while let Some(id) = stack.pop() {
             if id < n_nodes {
                 node_color[id] = color.clone();
+                node_bw_idx[id] = ci + 1;
                 for &child in &tree.nodes[id].children {
                     stack.push(child);
                 }
             }
         }
     }
+    let bw_stroke = |i: usize| -> (Color, Option<String>) {
+        if computed.bw_mode {
+            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(node_bw_idx[i]).dasharray())
+        } else {
+            (Color::from(&node_color[i]), None)
+        }
+    };
 
     // ── Step 5: draw branches ─────────────────────────────────────────────────
     let sw = 1.5_f64;
@@ -14952,14 +15070,15 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
         TreeBranchStyle::Slanted => {
             for i in 0..n_nodes {
                 if let Some(p) = tree.nodes[i].parent {
+                    let (stroke, stroke_dasharray) = bw_stroke(i);
                     scene.elements.push(Primitive::Line {
                         x1: px[p],
                         y1: py[p],
                         x2: px[i],
                         y2: py[i],
-                        stroke: Color::from(&node_color[i]),
+                        stroke,
                         stroke_width: sw,
-                        stroke_dasharray: None,
+                        stroke_dasharray,
                     });
                 }
             }
@@ -14973,24 +15092,26 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
             for i in 0..n_nodes {
                 if let Some(p) = tree.nodes[i].parent {
                     if horiz {
+                        let (stroke, stroke_dasharray) = bw_stroke(i);
                         scene.elements.push(Primitive::Line {
                             x1: px[p],
                             y1: py[i],
                             x2: px[i],
                             y2: py[i],
-                            stroke: Color::from(&node_color[i]),
+                            stroke,
                             stroke_width: sw,
-                            stroke_dasharray: None,
+                            stroke_dasharray,
                         });
                     } else {
+                        let (stroke, stroke_dasharray) = bw_stroke(i);
                         scene.elements.push(Primitive::Line {
                             x1: px[i],
                             y1: py[p],
                             x2: px[i],
                             y2: py[i],
-                            stroke: Color::from(&node_color[i]),
+                            stroke,
                             stroke_width: sw,
-                            stroke_dasharray: None,
+                            stroke_dasharray,
                         });
                     }
                 }
@@ -15010,14 +15131,15 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
                         .iter()
                         .map(|&c| py[c])
                         .fold(f64::NEG_INFINITY, f64::max);
+                    let (stroke, stroke_dasharray) = bw_stroke(i);
                     scene.elements.push(Primitive::Line {
                         x1: px[i],
                         y1: y_min,
                         x2: px[i],
                         y2: y_max,
-                        stroke: Color::from(&node_color[i]),
+                        stroke,
                         stroke_width: sw,
-                        stroke_dasharray: None,
+                        stroke_dasharray,
                     });
                 } else {
                     let x_min = children
@@ -15028,14 +15150,15 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
                         .iter()
                         .map(|&c| px[c])
                         .fold(f64::NEG_INFINITY, f64::max);
+                    let (stroke, stroke_dasharray) = bw_stroke(i);
                     scene.elements.push(Primitive::Line {
                         x1: x_min,
                         y1: py[i],
                         x2: x_max,
                         y2: py[i],
-                        stroke: Color::from(&node_color[i]),
+                        stroke,
                         stroke_width: sw,
-                        stroke_dasharray: None,
+                        stroke_dasharray,
                     });
                 }
             }
@@ -15051,18 +15174,20 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
                     let r_p = r_arr[p];
                     let x1 = cx + r_p * theta_c.cos();
                     let y1 = cy + r_p * theta_c.sin();
+                    let (stroke, stroke_dasharray) = bw_stroke(i);
                     scene.elements.push(Primitive::Line {
                         x1,
                         y1,
                         x2: px[i],
                         y2: py[i],
-                        stroke: Color::from(&node_color[i]),
+                        stroke,
                         stroke_width: sw,
-                        stroke_dasharray: None,
+                        stroke_dasharray,
                     });
                 }
             }
             // Arc spines at each internal node's radius
+            #[allow(clippy::needless_range_loop)]
             for i in 0..n_nodes {
                 let children = &tree.nodes[i].children;
                 if children.is_empty() {
@@ -15089,24 +15214,26 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
                     "M {:.3} {:.3} A {:.3} {:.3} 0 {} 1 {:.3} {:.3}",
                     x_start, y_start, r_i, r_i, large_arc, x_end, y_end
                 );
+                let (stroke, stroke_dasharray) = bw_stroke(i);
                 scene.elements.push(Primitive::Path(Box::new(PathData {
                     d,
                     fill: None,
-                    stroke: Color::from(&node_color[i]),
+                    stroke,
                     stroke_width: sw,
                     opacity: None,
-                    stroke_dasharray: None,
+                    stroke_dasharray,
                 })));
             }
         }
     }
 
     // ── Step 6: root marker ───────────────────────────────────────────────────
+    let root_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&tree.branch_color) };
     scene.elements.push(Primitive::Circle {
         cx: px[tree.root],
         cy: py[tree.root],
         r: 3.0,
-        fill: Color::from(&tree.branch_color),
+        fill: root_fill,
         fill_opacity: None,
         stroke: None,
         stroke_width: None,
@@ -16601,16 +16728,7 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
             let seg_top = seg_y - seg_h;
             let color = mp.color_for_row_idx(ri);
 
-            scene.add(Primitive::Rect {
-                x: col_x,
-                y: seg_top,
-                width: col_w,
-                height: seg_h,
-                fill: Color::from(color.as_str()),
-                stroke: None,
-                stroke_width: None,
-                opacity: None,
-            });
+            rect_bw(scene, computed, ri, &color, col_x, seg_top, col_w, seg_h, None, None, None);
 
             // Label inside cell
             let show_label = mp.show_percents || mp.show_values;
@@ -17572,6 +17690,11 @@ fn add_radar(rp: &crate::plot::radar::RadarPlot, scene: &mut Scene, computed: &C
     // ── Series polygons ───────────────────────────────────────────────────────
     for (si, series) in rp.series.iter().enumerate() {
         let color = series.color.clone().unwrap_or_else(|| pal[si].to_string());
+        let (outline_stroke, outline_dash) = if computed.bw_mode {
+            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(si).dasharray())
+        } else {
+            (Color::from(color.as_str()), series.dasharray.clone())
+        };
 
         // Error band (shaded region between value±error)
         if let Some(errors) = &series.errors {
@@ -17590,14 +17713,17 @@ fn add_radar(rp: &crate::plot::radar::RadarPlot, scene: &mut Scene, computed: &C
                 .map(|(i, &v)| axis_px(i, frac(v - errors.get(i).copied().unwrap_or(0.0), i)))
                 .collect();
             if outer.len() >= 3 && inner.len() >= 3 {
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d: radar_band_path(&outer, &inner),
-                    fill: Some(Color::from(color.as_str())),
-                    stroke: Color::from(color.as_str()),
-                    stroke_width: 0.5,
-                    opacity: Some((rp.opacity * 0.6).max(0.1)),
-                    stroke_dasharray: None,
-                })));
+                path_bw(
+                    scene,
+                    computed,
+                    si,
+                    &color,
+                    radar_band_path(&outer, &inner),
+                    outline_stroke.clone(),
+                    0.5,
+                    Some((rp.opacity * 0.6).max(0.1)),
+                    None,
+                );
             }
         }
 
@@ -17615,36 +17741,67 @@ fn add_radar(rp: &crate::plot::radar::RadarPlot, scene: &mut Scene, computed: &C
         let path = radar_polygon_path(&pts);
 
         if rp.filled {
-            scene.add(Primitive::Path(Box::new(PathData {
-                d: path.clone(),
-                fill: Some(Color::from(color.as_str())),
-                stroke: Color::from(color.as_str()),
-                stroke_width: rp.stroke_width,
-                opacity: Some(rp.opacity),
-                stroke_dasharray: series.dasharray.clone(),
-            })));
+            path_bw(
+                scene,
+                computed,
+                si,
+                &color,
+                path,
+                outline_stroke.clone(),
+                rp.stroke_width,
+                Some(rp.opacity),
+                outline_dash.clone(),
+            );
         } else {
             scene.add(Primitive::Path(Box::new(PathData {
                 d: path,
                 fill: None,
-                stroke: Color::from(color.as_str()),
+                stroke: outline_stroke,
                 stroke_width: rp.stroke_width,
                 opacity: None,
-                stroke_dasharray: series.dasharray.clone(),
+                stroke_dasharray: outline_dash,
             })));
         }
 
         if let Some(r) = rp.dot_size {
-            for &(px, py) in &pts {
-                scene.add(Primitive::Circle {
-                    cx: px,
-                    cy: py,
-                    r,
-                    fill: Color::from(color.as_str()),
-                    fill_opacity: None,
-                    stroke: None,
-                    stroke_width: None,
-                });
+            if computed.bw_mode {
+                use crate::render::bw::{bw_fill, register_pattern};
+                let (grey, pattern) = bw_fill(si);
+                let pat_url = register_pattern(scene, pattern);
+                for &(px, py) in &pts {
+                    scene.add(Primitive::Circle {
+                        cx: px,
+                        cy: py,
+                        r,
+                        fill: Color::from(grey),
+                        fill_opacity: None,
+                        stroke: None,
+                        stroke_width: None,
+                    });
+                    if !pat_url.is_empty() {
+                        scene.add(Primitive::Circle {
+                            cx: px,
+                            cy: py,
+                            r,
+                            fill: Color::from(pat_url.as_str()),
+                            fill_opacity: None,
+                            stroke: None,
+                            stroke_width: None,
+                        });
+                    }
+                }
+            } else {
+                for &(px, py) in &pts {
+                    scene.add(Primitive::Circle {
+                        cx: px,
+                        cy: py,
+                        r,
+                        fill: Color::from(color.as_str()),
+                        fill_opacity: None,
+                        stroke: None,
+                        stroke_width: None,
+                    });
+                }
             }
         }
     }
@@ -18167,6 +18324,9 @@ struct Tile {
     path: String,
     /// `true` if this tile has no children (or `max_depth` was reached).
     is_leaf: bool,
+    /// Index of the top-level root this tile descends from — used as the BW
+    /// pattern index so every tile under one root shares one hatch pattern.
+    root_idx: usize,
 }
 
 /// Squarify worst-aspect-ratio metric (Bruls et al. 2000).
@@ -18477,6 +18637,7 @@ fn collect_treemap_tiles(
     path_prefix: &str,
     leaf_idx: &mut usize,
     tiles: &mut Vec<Tile>,
+    root_idx: usize,
 ) {
     let font_size = 12.0_f64;
 
@@ -18528,6 +18689,7 @@ fn collect_treemap_tiles(
             depth,
             path: path.clone(),
             is_leaf,
+            root_idx,
         });
 
         if !node.children.is_empty() && !max_depth_reached {
@@ -18553,6 +18715,7 @@ fn collect_treemap_tiles(
                     &path,
                     leaf_idx,
                     tiles,
+                    root_idx,
                 );
             }
         }
@@ -18657,6 +18820,7 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
             depth: 0,
             path: path.clone(),
             is_leaf,
+            root_idx: i,
         });
 
         if !node.children.is_empty() && !max_depth_reached {
@@ -18682,6 +18846,7 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     &path,
                     &mut leaf_idx,
                     &mut tiles,
+                    i,
                 );
             }
         }
@@ -18735,16 +18900,19 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
             });
         }
 
-        scene.add(Primitive::Rect {
-            x: round2(tile.rect.x),
-            y: round2(tile.rect.y),
-            width: round2(tile.rect.w.max(0.0)),
-            height: round2(tile.rect.h.max(0.0)),
-            fill: Color::from(fill_color.as_str()),
-            stroke: Some(Color::from("#ffffff")),
-            stroke_width: Some(stroke_w),
-            opacity: None,
-        });
+        rect_bw(
+            scene,
+            computed,
+            tile.root_idx,
+            &fill_color,
+            round2(tile.rect.x),
+            round2(tile.rect.y),
+            round2(tile.rect.w.max(0.0)),
+            round2(tile.rect.h.max(0.0)),
+            Some(Color::from("#ffffff")),
+            Some(stroke_w),
+            None,
+        );
 
         // ── Label ─────────────────────────────────────────────────────────────
         let area = tile.rect.area();
@@ -18864,6 +19032,9 @@ struct SbArc {
     r_outer: f64,
     path: String,
     is_leaf: bool,
+    /// Index of the top-level root this arc descends from — used as the BW
+    /// pattern index so every arc under one root shares one hatch pattern.
+    root_idx: usize,
 }
 
 /// Convert compass degrees to SVG radians: 0° → north (top), clockwise.
@@ -18994,6 +19165,7 @@ fn build_sunburst_arcs(sb: &SunburstPlot, avail_r: f64) -> Vec<SbArc> {
         start_deg: f64,
         sweep_deg: f64,
         inherited_color: Option<String>,
+        root_idx: usize,
     }
 
     let mut pending: Vec<PendingNode> = Vec::new();
@@ -19010,6 +19182,7 @@ fn build_sunburst_arcs(sb: &SunburstPlot, avail_r: f64) -> Vec<SbArc> {
             start_deg: cursor,
             sweep_deg: sweep,
             inherited_color: Some(root_color),
+            root_idx: i,
         });
         cursor += sweep;
     }
@@ -19055,6 +19228,7 @@ fn build_sunburst_arcs(sb: &SunburstPlot, avail_r: f64) -> Vec<SbArc> {
                 r_outer,
                 path,
                 is_leaf,
+                root_idx: pn.root_idx,
             });
 
             if !node.children.is_empty() && !is_leaf {
@@ -19072,6 +19246,7 @@ fn build_sunburst_arcs(sb: &SunburstPlot, avail_r: f64) -> Vec<SbArc> {
                             start_deg: child_cursor,
                             sweep_deg: child_sweep,
                             inherited_color: pn.inherited_color.clone(),
+                            root_idx: pn.root_idx,
                         });
                         child_cursor += child_sweep;
                     }
@@ -19186,14 +19361,17 @@ fn add_sunburst(sb: &SunburstPlot, scene: &mut Scene, computed: &ComputedLayout)
             arc.start_deg,
             arc.sweep_deg,
         );
-        scene.add(Primitive::Path(Box::new(PathData {
-            d: path_d,
-            fill: Some(Color::from(fill_color.as_str())),
-            stroke: Color::from("#ffffff"),
-            stroke_width: 0.8,
-            opacity: None,
-            stroke_dasharray: None,
-        })));
+        path_bw(
+            scene,
+            computed,
+            arc.root_idx,
+            &fill_color,
+            path_d,
+            Color::from("#ffffff"),
+            0.8,
+            None,
+            None,
+        );
 
         // Label
         if sb.show_labels && arc.sweep_deg >= sb.min_label_angle {
@@ -19688,16 +19866,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 (center_x - frac * max_bar_w / 2.0, frac * max_bar_w)
             };
 
-            scene.add(Primitive::Rect {
-                x: bar_x,
-                y: bar_y,
-                width: bar_w,
-                height: bar_h,
-                fill: Color::from(color.as_str()),
-                stroke: None,
-                stroke_width: None,
-                opacity: None,
-            });
+            rect_bw(scene, computed, i, &color, bar_x, bar_y, bar_w, bar_h, None, None, None);
 
             // Connector (trapezoid) between this bar and the next
             if fp.show_connectors && i + 1 < n {
@@ -19726,14 +19895,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     "M {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} Z",
                     lx0, cy0, rx0, cy0, rx1, cy1, lx1, cy1
                 );
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d,
-                    fill: Some(Color::from(color.as_str())),
-                    stroke: Color::from("none"),
-                    stroke_width: 0.0,
-                    opacity: Some(fp.connector_opacity),
-                    stroke_dasharray: None,
-                })));
+                path_bw(scene, computed, i, &color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
 
                 // Conversion rate label in connector area
                 if fp.show_conversion && gap >= 10.0 {
@@ -19835,16 +19997,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         &base_color,
                     );
 
-                    scene.add(Primitive::Rect {
-                        x: center_x,
-                        y: bar_y,
-                        width: m_half_w,
-                        height: bar_h,
-                        fill: Color::from(m_color.as_str()),
-                        stroke: None,
-                        stroke_width: None,
-                        opacity: None,
-                    });
+                    rect_bw(scene, computed, i, &m_color, center_x, bar_y, m_half_w, bar_h, None, None, None);
 
                     // Mirror connector
                     if fp.show_connectors && i + 1 < mirror_stages.len() {
@@ -19863,14 +20016,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                             center_x,
                             cy1,
                         );
-                        scene.add(Primitive::Path(Box::new(PathData {
-                            d,
-                            fill: Some(Color::from(m_color.as_str())),
-                            stroke: Color::from("none"),
-                            stroke_width: 0.0,
-                            opacity: Some(fp.connector_opacity),
-                            stroke_dasharray: None,
-                        })));
+                        path_bw(scene, computed, i, &m_color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
 
                         if fp.show_conversion && gap >= 10.0 {
                             let rate = if ms.value > f64::EPSILON {
@@ -20007,16 +20153,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 (center_y - frac * max_bar_h / 2.0, frac * max_bar_h)
             };
 
-            scene.add(Primitive::Rect {
-                x: bar_x,
-                y: bar_y,
-                width: bar_w,
-                height: actual_bar_h,
-                fill: Color::from(color.as_str()),
-                stroke: None,
-                stroke_width: None,
-                opacity: None,
-            });
+            rect_bw(scene, computed, i, &color, bar_x, bar_y, bar_w, actual_bar_h, None, None, None);
 
             // Connector between adjacent bars
             if fp.show_connectors && i + 1 < n {
@@ -20045,14 +20182,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     "M {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} Z",
                     cx0, ty0, cx0, by0, cx1, by1, cx1, ty1
                 );
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d,
-                    fill: Some(Color::from(color.as_str())),
-                    stroke: Color::from("none"),
-                    stroke_width: 0.0,
-                    opacity: Some(fp.connector_opacity),
-                    stroke_dasharray: None,
-                })));
+                path_bw(scene, computed, i, &color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
 
                 if fp.show_conversion && gap >= 10.0 {
                     let rate = if stage.value > f64::EPSILON {
@@ -20140,16 +20270,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         &base_color,
                     );
 
-                    scene.add(Primitive::Rect {
-                        x: bar_x,
-                        y: center_y,
-                        width: bar_w,
-                        height: m_half_h,
-                        fill: Color::from(m_color.as_str()),
-                        stroke: None,
-                        stroke_width: None,
-                        opacity: None,
-                    });
+                    rect_bw(scene, computed, i, &m_color, bar_x, center_y, bar_w, m_half_h, None, None, None);
 
                     if fp.show_connectors && i + 1 < mirror_stages.len() {
                         let next_m_frac = mirror_stages[i + 1].value / max_val;
@@ -20167,14 +20288,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                             cx1,
                             center_y,
                         );
-                        scene.add(Primitive::Path(Box::new(PathData {
-                            d,
-                            fill: Some(Color::from(m_color.as_str())),
-                            stroke: Color::from("none"),
-                            stroke_width: 0.0,
-                            opacity: Some(fp.connector_opacity),
-                            stroke_dasharray: None,
-                        })));
+                        path_bw(scene, computed, i, &m_color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
                     }
 
                     if fp.show_values {
@@ -21126,16 +21240,8 @@ fn add_pyramid(pp: &PopulationPyramid, scene: &mut Scene, computed: &ComputedLay
                 let px_x_left = computed.map_x(-left_val);
                 let bar_x = px_x_left.min(center_x);
                 let bar_w = (center_x - px_x_left).abs();
-                scene.add(Primitive::Rect {
-                    x: bar_x,
-                    y: px_rect_y,
-                    width: bar_w,
-                    height: px_rect_h,
-                    fill: Color::from(left_color.as_str()),
-                    stroke: None,
-                    stroke_width: None,
-                    opacity,
-                });
+                let bw_idx = if n_series == 1 { 0 } else { j };
+                rect_bw(scene, computed, bw_idx, &left_color, bar_x, px_rect_y, bar_w, px_rect_h, None, None, opacity);
 
                 if pp.show_values && px_rect_h >= 10.0 && bar_w >= 16.0 {
                     let mid_y = px_rect_y + px_rect_h / 2.0 + 4.0;
@@ -21171,16 +21277,8 @@ fn add_pyramid(pp: &PopulationPyramid, scene: &mut Scene, computed: &ComputedLay
                 let px_x_right = computed.map_x(right_val);
                 let bar_x = center_x.min(px_x_right);
                 let bar_w = (px_x_right - center_x).abs();
-                scene.add(Primitive::Rect {
-                    x: bar_x,
-                    y: px_rect_y,
-                    width: bar_w,
-                    height: px_rect_h,
-                    fill: Color::from(right_color.as_str()),
-                    stroke: None,
-                    stroke_width: None,
-                    opacity,
-                });
+                let bw_idx = if n_series == 1 { 1 } else { j };
+                rect_bw(scene, computed, bw_idx, &right_color, bar_x, px_rect_y, bar_w, px_rect_h, None, None, opacity);
 
                 if pp.show_values && px_rect_h >= 10.0 && bar_w >= 16.0 {
                     let mid_y = px_rect_y + px_rect_h / 2.0 + 4.0;
@@ -21376,35 +21474,81 @@ fn add_waffle(wp: &WafflePlot, scene: &mut Scene, computed: &ComputedLayout) {
         let cx = x0 + col as f64 * cell_px + cell_px * 0.5;
         let cy = y0 + row as f64 * cell_px + cell_px * 0.5;
 
-        let fill = Color::from(match assignment {
+        let color_str = match assignment {
             Some(i) => wp.categories[*i].color.as_str(),
             None => wp.empty_color.as_str(),
-        });
+        };
 
         match wp.shape {
-            CellShape::Square => {
-                scene.add(Primitive::Rect {
+            CellShape::Square => match assignment {
+                Some(i) => rect_bw(
+                    scene,
+                    computed,
+                    *i,
+                    color_str,
+                    cx - cell_px * 0.5 + pad,
+                    cy - cell_px * 0.5 + pad,
+                    inner,
+                    inner,
+                    None,
+                    None,
+                    None,
+                ),
+                None => scene.add(Primitive::Rect {
                     x: cx - cell_px * 0.5 + pad,
                     y: cy - cell_px * 0.5 + pad,
                     width: inner,
                     height: inner,
-                    fill,
+                    fill: Color::from(color_str),
                     stroke: None,
                     stroke_width: None,
                     opacity: None,
-                });
-            }
-            CellShape::Circle => {
-                scene.add(Primitive::Circle {
+                }),
+            },
+            CellShape::Circle => match assignment {
+                Some(i) => {
+                    use crate::render::bw::{bw_fill, register_pattern};
+                    let fill = if computed.bw_mode {
+                        let (grey, _) = bw_fill(*i);
+                        Color::from(grey)
+                    } else {
+                        Color::from(color_str)
+                    };
+                    scene.add(Primitive::Circle {
+                        cx,
+                        cy,
+                        r: inner * 0.5,
+                        fill,
+                        fill_opacity: None,
+                        stroke: None,
+                        stroke_width: None,
+                    });
+                    if computed.bw_mode {
+                        let (_, pattern) = bw_fill(*i);
+                        let pat_url = register_pattern(scene, pattern);
+                        if !pat_url.is_empty() {
+                            scene.add(Primitive::Circle {
+                                cx,
+                                cy,
+                                r: inner * 0.5,
+                                fill: Color::from(pat_url.as_str()),
+                                fill_opacity: None,
+                                stroke: None,
+                                stroke_width: None,
+                            });
+                        }
+                    }
+                }
+                None => scene.add(Primitive::Circle {
                     cx,
                     cy,
                     r: inner * 0.5,
-                    fill,
+                    fill: Color::from(color_str),
                     fill_opacity: None,
                     stroke: None,
                     stroke_width: None,
-                });
-            }
+                }),
+            },
         }
     }
 
@@ -21499,7 +21643,18 @@ fn add_horizon(hp: &HorizonPlot, scene: &mut Scene, computed: &ComputedLayout) {
 
             // Opacity: lightest band has alpha 1/n_bands, darkest has alpha 1.0
             let alpha = band as f64 / hp.n_bands as f64;
-            let color_str = format!("rgb({},{},{})", pr, pg, pb);
+            // BW mode: positive/negative bands occupy the same pixel space
+            // (that's the horizon-chart folding technique), so color alone
+            // distinguishes sign here — force two fixed, distinct greys
+            // rather than differentiating by pattern (which would need to
+            // stack per band and get visually noisy). The per-band alpha
+            // ramp is kept as-is: it still reads as a magnitude gradient in
+            // greyscale exactly like it does blended over white in color mode.
+            let color_str = if computed.bw_mode {
+                "#1a1a1a".to_string()
+            } else {
+                format!("rgb({},{},{})", pr, pg, pb)
+            };
 
             // Build path
             let mut has_fill = false;
@@ -21576,7 +21731,11 @@ fn add_horizon(hp: &HorizonPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 let band_lo = (band - 1) as f64 * neg_bw;
 
                 let alpha = band as f64 / hp.n_bands as f64;
-                let color_str = format!("rgb({},{},{})", nr, ng, nb);
+                let color_str = if computed.bw_mode {
+                    "#888888".to_string()
+                } else {
+                    format!("rgb({},{},{})", nr, ng, nb)
+                };
 
                 let mut has_fill = false;
                 let mut path = String::with_capacity(pts * 24);
@@ -21992,6 +22151,11 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     gp.color.clone()
                 };
                 let bar_color = Color::from(color_str.as_str());
+                let bw_idx = task
+                    .group
+                    .as_ref()
+                    .and_then(|g| group_color_idx.get(g).copied())
+                    .unwrap_or(0);
 
                 if task.is_milestone {
                     // Diamond marker (rotated square) at task.start
@@ -22009,14 +22173,7 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         round2(cx - s),
                         round2(y_center),
                     );
-                    scene.add(Primitive::Path(Box::new(PathData {
-                        d,
-                        fill: Some(bar_color.clone()),
-                        stroke: bar_color.clone(),
-                        stroke_width: 1.0,
-                        opacity: None,
-                        stroke_dasharray: None,
-                    })));
+                    path_bw(scene, computed, bw_idx, &color_str, d, bar_color.clone(), 1.0, None, None);
                     // Milestone label drawn post-clip via add_gantt_labels
                 } else {
                     // Horizontal task bar
@@ -22025,31 +22182,13 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     let bar_width = (x_end - x_start).max(2.0);
                     let bar_y = y_center - bar_h * 0.5;
 
-                    scene.add(Primitive::Rect {
-                        x: x_start,
-                        y: bar_y,
-                        width: bar_width,
-                        height: bar_h,
-                        fill: bar_color.clone(),
-                        stroke: None,
-                        stroke_width: None,
-                        opacity: Some(0.85),
-                    });
+                    rect_bw(scene, computed, bw_idx, &color_str, x_start, bar_y, bar_width, bar_h, None, None, Some(0.85));
 
                     // Progress fill (darker inner rect)
                     if let Some(frac) = task.progress {
                         let prog_w = bar_width * frac;
                         if prog_w > 0.0 {
-                            scene.add(Primitive::Rect {
-                                x: x_start,
-                                y: bar_y,
-                                width: prog_w,
-                                height: bar_h,
-                                fill: bar_color.clone(),
-                                stroke: None,
-                                stroke_width: None,
-                                opacity: Some(1.0),
-                            });
+                            rect_bw(scene, computed, bw_idx, &color_str, x_start, bar_y, prog_w, bar_h, None, None, Some(1.0));
                             // Progress stripe boundary
                             scene.add(Primitive::Line {
                                 x1: x_start + prog_w,
