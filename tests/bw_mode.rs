@@ -690,6 +690,60 @@ fn bw_stacked_area_multi_series_distinct_patterns() {
     );
 }
 
+#[test]
+fn bw_histogram_multi_column_distinct_patterns() {
+    // Multi-column mode overlays multiple Histogram plot instances (as the CLI's
+    // `--y A,B,C` does). Before the bw_idx fix, every instance rendered with
+    // rect_bw's hardcoded index 0 and got an identical pattern.
+    let h0 = Histogram::new()
+        .with_data(vec![1.0, 1.5, 2.0, 2.0, 2.5])
+        .with_range((0.0, 10.0))
+        .with_bins(10)
+        .with_color("steelblue");
+    let h1 = Histogram::new()
+        .with_data(vec![5.0, 5.5, 6.0, 6.0, 6.5])
+        .with_range((0.0, 10.0))
+        .with_bins(10)
+        .with_color("tomato");
+    let plots = vec![Plot::Histogram(h0), Plot::Histogram(h1)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_histogram_multi.svg", svg.clone()).unwrap();
+    let pattern_count = svg.matches("<pattern").count();
+    assert!(
+        pattern_count >= 2,
+        "Two overlaid histograms should use at least 2 distinct patterns, got {pattern_count}"
+    );
+}
+
+#[test]
+fn bw_upset_dot_matrix_uses_guaranteed_contrast_not_user_colors() {
+    // The dot matrix is a binary membership indicator, not a multi-series
+    // encoding — BW mode should force dark/light contrast regardless of the
+    // user's configured dot_color/dot_empty_color.
+    use kuva::plot::UpSetPlot;
+    let mut upset = UpSetPlot::new()
+        .with_data(
+            vec!["Set A", "Set B", "Set C"],
+            vec![52usize, 47, 36],
+            vec![(0b001u64, 10usize), (0b010, 8), (0b100, 12), (0b011, 5), (0b111, 20)],
+        )
+        .with_dot_color("#4499cc");
+    upset.dot_empty_color = "#eeeeee".to_string();
+    let plots = vec![Plot::UpSet(upset)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_upset_dots.svg", svg.clone()).unwrap();
+    assert!(
+        svg.contains("#1a1a1a"),
+        "filled dots must use the guaranteed-dark BW color, not the user's dot_color"
+    );
+    assert!(
+        !svg.contains("#4499cc") && !svg.contains("#eeeeee"),
+        "BW mode must not leak the user's configured dot colors into the output"
+    );
+}
+
 // ── Sanity checks ─────────────────────────────────────────────────────────────
 
 #[test]

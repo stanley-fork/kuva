@@ -1287,7 +1287,7 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
     }
 }
 
-fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout) {
+fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout, bw_idx: usize) {
     // Precomputed path
     if let Some((edges, counts)) = &hist.precomputed {
         let max_count = counts.iter().cloned().fold(0.0_f64, f64::max).max(1.0);
@@ -1313,7 +1313,7 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout)
                     extra_attrs: None,
                 });
             }
-            rect_bw(scene, computed, 0, &hist.color, x0, y1.min(y0), (x1 - x0).abs(), (y0 - y1).abs(), None, None, None);
+            rect_bw(scene, computed, bw_idx, &hist.color, x0, y1.min(y0), (x1 - x0).abs(), (y0 - y1).abs(), None, None, None);
             if tip.is_some() {
                 scene.add(Primitive::GroupEnd);
             }
@@ -1368,7 +1368,7 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout)
                 extra_attrs: None,
             });
         }
-        rect_bw(scene, computed, 0, &hist.color, x0, y1.min(y0), rect_width, rect_height, None, None, None);
+        rect_bw(scene, computed, bw_idx, &hist.color, x0, y1.min(y0), rect_width, rect_height, None, None, None);
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
         }
@@ -8422,7 +8422,7 @@ pub fn render_histogram(hist: &Histogram, layout: &Layout) -> Scene {
     add_labels_and_title(&mut scene, &computed, layout);
     add_shaded_regions(&layout.shaded_regions, &mut scene, &computed);
 
-    add_histogram(hist, &mut scene, &computed);
+    add_histogram(hist, &mut scene, &computed, 0);
 
     add_reference_lines(&layout.reference_lines, &mut scene, &computed);
     add_text_annotations(&layout.annotations, &mut scene, &computed);
@@ -11509,6 +11509,16 @@ fn add_upset(up: &UpSetPlot, scene: &mut Scene, computed: &ComputedLayout) {
         });
     }
 
+    // The dot matrix is a binary membership indicator (filled/empty), not a
+    // multi-series encoding, so BW mode doesn't need hatch-pattern
+    // differentiation here — just guaranteed dark/light contrast regardless
+    // of the user's configured dot colors.
+    let (dot_fill_color, dot_empty_fill) = if computed.bw_mode {
+        ("#1a1a1a".to_string(), "#dddddd".to_string())
+    } else {
+        (up.dot_color.clone(), up.dot_empty_color.clone())
+    };
+
     for (i, inter) in sorted.iter().enumerate() {
         let cx = mat_l + (i as f64 + 0.5) * dot_col_w;
 
@@ -11531,7 +11541,7 @@ fn add_upset(up: &UpSetPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 y1: top_cy,
                 x2: cx,
                 y2: bot_cy,
-                stroke: Color::from(&up.dot_color),
+                stroke: Color::from(&dot_fill_color),
                 stroke_width: (dot_r * 0.5).max(2.0),
                 stroke_dasharray: None,
             });
@@ -11541,9 +11551,9 @@ fn add_upset(up: &UpSetPlot, scene: &mut Scene, computed: &ComputedLayout) {
             let cy = mat_t + (j as f64 + 0.5) * dot_row_h;
             let filled = inter.mask & (1u64 << j) != 0;
             let fill = if filled {
-                up.dot_color.clone()
+                dot_fill_color.clone()
             } else {
-                up.dot_empty_color.clone()
+                dot_empty_fill.clone()
             };
             scene.add(Primitive::Circle {
                 cx,
@@ -14096,6 +14106,7 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
     let mut series_bw_idx = 0usize;
     let mut band_bw_idx = 0usize;
     let mut density_bw_idx = 0usize;
+    let mut histogram_bw_idx = 0usize;
     for plot in plots.iter() {
         match plot {
             Plot::Scatter(s) => {
@@ -14114,7 +14125,8 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
                 add_bar(b, &mut scene, &computed);
             }
             Plot::Histogram(h) => {
-                add_histogram(h, &mut scene, &computed);
+                add_histogram(h, &mut scene, &computed, histogram_bw_idx);
+                histogram_bw_idx += 1;
             }
             Plot::Histogram2d(h) => {
                 add_histogram2d(h, &mut scene, &computed);
@@ -14540,6 +14552,7 @@ pub fn render_twin_y(primary: Vec<Plot>, secondary: Vec<Plot>, layout: Layout) -
     let mut series_bw_idx = 0usize;
     let mut band_bw_idx = 0usize;
     let mut density_bw_idx = 0usize;
+    let mut histogram_bw_idx = 0usize;
     for plot in primary.iter() {
         match plot {
             Plot::Scatter(s) => { add_scatter(s, &mut scene, &computed, scatter_bw_idx); scatter_bw_idx += 1; }
@@ -14547,7 +14560,7 @@ pub fn render_twin_y(primary: Vec<Plot>, secondary: Vec<Plot>, layout: Layout) -
             Plot::Series(s) => { add_series(s, &mut scene, &computed, series_bw_idx); series_bw_idx += 1; }
             Plot::Band(b) => { add_band(b, &mut scene, &computed, band_bw_idx); band_bw_idx += 1; }
             Plot::Bar(b) => add_bar(b, &mut scene, &computed),
-            Plot::Histogram(h) => add_histogram(h, &mut scene, &computed),
+            Plot::Histogram(h) => { add_histogram(h, &mut scene, &computed, histogram_bw_idx); histogram_bw_idx += 1; }
             Plot::Box(b) => add_boxplot(b, &mut scene, &computed),
             Plot::Violin(v) => add_violin(v, &mut scene, &computed),
             Plot::Strip(s) => add_strip(s, &mut scene, &computed),
@@ -14569,6 +14582,7 @@ pub fn render_twin_y(primary: Vec<Plot>, secondary: Vec<Plot>, layout: Layout) -
     let mut series_bw_idx = 0usize;
     let mut band_bw_idx = 0usize;
     let mut density_bw_idx = 0usize;
+    let mut histogram_bw_idx = 0usize;
     for plot in secondary.iter() {
         match plot {
             Plot::Scatter(s) => { add_scatter(s, &mut scene, &computed_y2, scatter_bw_idx); scatter_bw_idx += 1; }
@@ -14576,7 +14590,7 @@ pub fn render_twin_y(primary: Vec<Plot>, secondary: Vec<Plot>, layout: Layout) -
             Plot::Series(s) => { add_series(s, &mut scene, &computed_y2, series_bw_idx); series_bw_idx += 1; }
             Plot::Band(b) => { add_band(b, &mut scene, &computed_y2, band_bw_idx); band_bw_idx += 1; }
             Plot::Bar(b) => add_bar(b, &mut scene, &computed_y2),
-            Plot::Histogram(h) => add_histogram(h, &mut scene, &computed_y2),
+            Plot::Histogram(h) => { add_histogram(h, &mut scene, &computed_y2, histogram_bw_idx); histogram_bw_idx += 1; }
             Plot::Box(b) => add_boxplot(b, &mut scene, &computed_y2),
             Plot::Violin(v) => add_violin(v, &mut scene, &computed_y2),
             Plot::Strip(s) => add_strip(s, &mut scene, &computed_y2),
