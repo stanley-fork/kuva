@@ -61,13 +61,13 @@ impl FillPattern {
 
             FillPattern::Horizontal => concat!(
                 r#"<pattern id="kuva-fp-horiz" patternUnits="userSpaceOnUse" width="8" height="6">"#,
-                r#"<line x1="0" y1="3" x2="8" y2="3" stroke="black" stroke-width="1.2"/>"#,
+                r#"<line x1="0" y1="3" x2="8" y2="3" stroke="black" stroke-width="0.6"/>"#,
                 r#"</pattern>"#,
             ),
 
             FillPattern::Vertical => concat!(
                 r#"<pattern id="kuva-fp-vert" patternUnits="userSpaceOnUse" width="6" height="8">"#,
-                r#"<line x1="3" y1="0" x2="3" y2="8" stroke="black" stroke-width="1.2"/>"#,
+                r#"<line x1="3" y1="0" x2="3" y2="8" stroke="black" stroke-width="0.6"/>"#,
                 r#"</pattern>"#,
             ),
 
@@ -75,31 +75,31 @@ impl FillPattern {
             // shape without gaps: top-left corner, main stripe, bottom-right corner.
             FillPattern::DiagonalForward => concat!(
                 r#"<pattern id="kuva-fp-diag-fwd" patternUnits="userSpaceOnUse" width="6" height="6">"#,
-                r#"<path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke="black" stroke-width="1.2" fill="none"/>"#,
+                r#"<path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke="black" stroke-width="0.6" fill="none"/>"#,
                 r#"</pattern>"#,
             ),
 
             FillPattern::DiagonalBack => concat!(
                 r#"<pattern id="kuva-fp-diag-back" patternUnits="userSpaceOnUse" width="6" height="6">"#,
-                r#"<path d="M-1,5 l2,2 M0,0 l6,6 M5,-1 l2,2" stroke="black" stroke-width="1.2" fill="none"/>"#,
+                r#"<path d="M-1,5 l2,2 M0,0 l6,6 M5,-1 l2,2" stroke="black" stroke-width="0.6" fill="none"/>"#,
                 r#"</pattern>"#,
             ),
 
             FillPattern::Crosshatch => concat!(
                 r#"<pattern id="kuva-fp-crosshatch" patternUnits="userSpaceOnUse" width="8" height="8">"#,
-                r#"<path d="M0,4 H8 M4,0 V8" stroke="black" stroke-width="1.2" fill="none"/>"#,
+                r#"<path d="M0,4 H8 M4,0 V8" stroke="black" stroke-width="0.6" fill="none"/>"#,
                 r#"</pattern>"#,
             ),
 
             FillPattern::DiagonalCrosshatch => concat!(
                 r#"<pattern id="kuva-fp-diag-cross" patternUnits="userSpaceOnUse" width="6" height="6">"#,
-                r#"<path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2 M-1,5 l2,2 M0,0 l6,6 M5,-1 l2,2" stroke="black" stroke-width="1.2" fill="none"/>"#,
+                r#"<path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2 M-1,5 l2,2 M0,0 l6,6 M5,-1 l2,2" stroke="black" stroke-width="0.6" fill="none"/>"#,
                 r#"</pattern>"#,
             ),
 
             FillPattern::Dots => concat!(
                 r#"<pattern id="kuva-fp-dots" patternUnits="userSpaceOnUse" width="8" height="8">"#,
-                r#"<circle cx="4" cy="4" r="1.8" fill="black"/>"#,
+                r#"<circle cx="4" cy="4" r="0.9" fill="black"/>"#,
                 r#"</pattern>"#,
             ),
         }
@@ -133,8 +133,8 @@ impl FillPattern {
     /// the origin). For backends that raster shapes directly instead of
     /// resolving an SVG `<pattern>` paint server.
     pub fn hatch_coverage(self, x: f32, y: f32) -> f32 {
-        // Matches `stroke-width="1.2"` in `svg_def`.
-        const HALF_STROKE: f32 = 0.6;
+        // Matches `stroke-width="0.6"` in `svg_def`.
+        const HALF_STROKE: f32 = 0.3;
         // Antialiasing ramp width, in the same user-space units as the tile.
         const AA: f32 = 0.5;
 
@@ -189,11 +189,11 @@ impl FillPattern {
                 fwd.max(back)
             }
 
-            // Filled disk of radius 1.8 centered in an 8x8 tile.
+            // Filled disk of radius 0.9 centered in an 8x8 tile.
             FillPattern::Dots => {
                 let xm = x.rem_euclid(8.0) - 4.0;
                 let ym = y.rem_euclid(8.0) - 4.0;
-                disk_ramp((xm * xm + ym * ym).sqrt(), 1.8)
+                disk_ramp((xm * xm + ym * ym).sqrt(), 0.9)
             }
         }
     }
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn dots_peak_at_tile_center_and_fade_at_tile_corner() {
-        // Dots tile is 8x8 with a disk at (4,4), r=1.8.
+        // Dots tile is 8x8 with a disk at (4,4), r=0.9.
         assert_eq!(FillPattern::Dots.hatch_coverage(4.0, 4.0), 1.0);
         assert_eq!(FillPattern::Dots.hatch_coverage(0.0, 0.0), 0.0);
         // Periodic: (12, 12) is the same tile-local point as (4, 4).

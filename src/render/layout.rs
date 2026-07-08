@@ -3210,7 +3210,9 @@ fn colorbar_tick_values_for(plot: &Plot) -> Option<Vec<f64>> {
             Some(render_utils::generate_ticks(lo, hi, 5))
         }
         other => {
-            let info = other.colorbar_info()?;
+            // bw_mode doesn't affect min/max, only which colors label them —
+            // fine to pass false here since this fn only reads tick values.
+            let info = other.colorbar_info(false)?;
             Some(render_utils::generate_ticks(
                 info.min_value,
                 info.max_value,

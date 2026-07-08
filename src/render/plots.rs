@@ -1575,7 +1575,20 @@ impl Plot {
         }
     }
 
-    pub fn colorbar_info(&self) -> Option<ColorBarInfo> {
+    /// `bw_mode` forces every colorbar's colormap to `ColorMap::Grayscale`, matching
+    /// the data fills the renderer draws when BW mode is on (see e.g. `add_heatmap`),
+    /// so the colorbar and the data it labels stay in sync. Exception: `Scatter3D`'s
+    /// colorbar is suppressed entirely (`None`) in BW mode, because its point fills
+    /// already ignore `z_colormap` in favor of a flat marker color — showing a
+    /// colorbar for a mapping the renderer no longer uses would be misleading.
+    pub fn colorbar_info(&self, bw_mode: bool) -> Option<ColorBarInfo> {
+        let cmap_of = |c: &ColorMap| -> ColorMap {
+            if bw_mode {
+                ColorMap::Grayscale
+            } else {
+                c.clone()
+            }
+        };
         match self {
             Plot::Heatmap(hm) => {
                 let min = hm
@@ -1590,11 +1603,11 @@ impl Plot {
                     .flatten()
                     .cloned()
                     .fold(f64::NEG_INFINITY, f64::max);
-                colorbar_linear(&hm.color_map, min, max, None)
+                colorbar_linear(&cmap_of(&hm.color_map), min, max, None)
             }
             Plot::Histogram2d(h2d) => {
                 let max_count = h2d.bins.iter().flatten().copied().max().unwrap_or(1) as f64;
-                let cmap = h2d.color_map.clone();
+                let cmap = cmap_of(&h2d.color_map);
                 let log_scale = h2d.log_count;
                 if log_scale {
                     // Colorbar in log₁₀ space: ticks at integer powers of 10 labelled
@@ -1644,19 +1657,19 @@ impl Plot {
             Plot::DotPlot(dp) => {
                 let label = dp.color_legend_label.clone()?;
                 let (min, max) = dp.color_range.unwrap_or_else(|| dp.color_extent());
-                colorbar_linear(&dp.color_map, min, max, Some(label))
+                colorbar_linear(&cmap_of(&dp.color_map), min, max, Some(label))
             }
             Plot::DicePlot(dp) => {
                 let label = dp.fill_legend_label.clone()?;
                 let (min, max) = dp.fill_range.unwrap_or_else(|| dp.fill_extent());
-                colorbar_linear(&dp.color_map, min, max, Some(label))
+                colorbar_linear(&cmap_of(&dp.color_map), min, max, Some(label))
             }
             Plot::Contour(cp) => {
                 if !cp.filled {
                     return None;
                 }
                 let (z_min, z_max) = cp.z_range();
-                colorbar_linear(&cp.color_map, z_min, z_max, cp.legend_label.clone())
+                colorbar_linear(&cmap_of(&cp.color_map), z_min, z_max, cp.legend_label.clone())
             }
             Plot::Clustermap(cm) => {
                 if cm.data.is_empty() || cm.data.iter().all(|r| r.is_empty()) {
@@ -1674,22 +1687,30 @@ impl Plot {
                     .flatten()
                     .cloned()
                     .fold(f64::NEG_INFINITY, f64::max);
-                colorbar_linear(&cm.color_map, min, max, cm.legend_label.clone())
+                colorbar_linear(&cmap_of(&cm.color_map), min, max, cm.legend_label.clone())
             }
             Plot::Surface3D(s) => colorbar_from_z(
-                s.z_colormap.as_ref()?,
+                &cmap_of(s.z_colormap.as_ref()?),
                 s.data_ranges()?,
                 s.box3d.z_label.clone(),
             ),
-            Plot::Scatter3D(s) => colorbar_from_z(
-                s.z_colormap.as_ref()?,
-                s.data_ranges()?,
-                s.box3d.z_label.clone(),
-            ),
+            Plot::Scatter3D(s) => {
+                if bw_mode {
+                    // Points render as a flat marker color in BW mode (see add_scatter3d),
+                    // ignoring z_colormap entirely — a colorbar for an unused mapping
+                    // would be misleading, so suppress it.
+                    return None;
+                }
+                colorbar_from_z(
+                    s.z_colormap.as_ref()?,
+                    s.data_ranges()?,
+                    s.box3d.z_label.clone(),
+                )
+            }
             Plot::Quiver(q) => {
-                let cmap = q.color_map.as_ref()?;
+                let cmap = cmap_of(q.color_map.as_ref()?);
                 let (min, max) = q.color_range.unwrap_or_else(|| q.magnitude_extent());
-                colorbar_linear(cmap, min, max, q.color_legend_label.clone())
+                colorbar_linear(&cmap, min, max, q.color_legend_label.clone())
             }
             // Hexbin draws its own colorbar inside add_hexbin (values are only known
             // after binning).  Return None here so the generic colorbar loop in

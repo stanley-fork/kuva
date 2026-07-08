@@ -1403,7 +1403,7 @@ fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedL
     //             stroke_width: None,
     //         });
 
-    let cmap = hist2d.color_map.clone();
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { hist2d.color_map.clone() };
     for (row_idx, row) in hist2d.bins.iter().enumerate() {
         for (col_idx, &count) in row.iter().enumerate() {
             if count == 0 {
@@ -1980,7 +1980,7 @@ fn add_heatmap(heatmap: &Heatmap, scene: &mut Scene, computed: &ComputedLayout) 
     }
     let norm = |v: f64| (v - min) / (max - min + f64::EPSILON);
 
-    let cmap = heatmap.color_map.clone();
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { heatmap.color_map.clone() };
     let total = rows * cols;
 
     let (x_lo, x_hi) = heatmap.x_range.unwrap_or((0.5, cols as f64 + 0.5));
@@ -3485,10 +3485,19 @@ fn add_surface3d(s: &Surface3DPlot, scene: &mut Scene, computed: &ComputedLayout
         None
     };
 
+    let surface_cmap = if has_cmap {
+        if computed.bw_mode {
+            Some(crate::plot::ColorMap::Grayscale)
+        } else {
+            s.z_colormap.clone()
+        }
+    } else {
+        None
+    };
     for face in &faces {
         let fill = if has_cmap {
             let norm = (face.avg_z - z_min) / z_span;
-            let cmap = s.z_colormap.as_ref().unwrap();
+            let cmap = surface_cmap.as_ref().unwrap();
             if let Some((r, g, b)) = cmap.map_rgb(norm) {
                 Color::Rgb(r, g, b)
             } else {
@@ -6455,6 +6464,7 @@ fn draw_col_dendrogram(
 fn add_clustermap(cm: &Clustermap, scene: &mut Scene, computed: &ComputedLayout) {
     use crate::plot::phylo::post_order_dfs;
 
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { cm.color_map.clone() };
     let n_rows = cm.data.len();
     let n_cols = cm.data.first().map_or(0, |r| r.len());
     if n_rows == 0 || n_cols == 0 {
@@ -6745,7 +6755,7 @@ fn add_clustermap(cm: &Clustermap, scene: &mut Scene, computed: &ComputedLayout)
                 ys.push(hm_y + row_k as f64 * cell_h);
                 ws.push(cell_w * 0.99);
                 hs.push(cell_h * 0.99);
-                fills.push(Color::from(cm.color_map.map(norm_val(value))));
+                fills.push(Color::from(cmap.map(norm_val(value))));
             }
         }
         scene.add(Primitive::RectBatch {
@@ -6792,7 +6802,7 @@ fn add_clustermap(cm: &Clustermap, scene: &mut Scene, computed: &ComputedLayout)
                     y,
                     width: cell_w * 0.99,
                     height: cell_h * 0.99,
-                    fill: Color::from(cm.color_map.map(norm_val(value))),
+                    fill: Color::from(cmap.map(norm_val(value))),
                     stroke: None,
                     stroke_width: None,
                     opacity: None,
@@ -9433,6 +9443,7 @@ fn add_dot_plot(dp: &DotPlot, scene: &mut Scene, computed: &ComputedLayout) {
     // Cap effective max radius so circles never bleed outside their grid cell
     let effective_max_r = dp.max_radius.min((cell_w.min(cell_h) / 2.0) * 0.9);
 
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { dp.color_map.clone() };
     for (dpi, pt) in dp.points.iter().enumerate() {
         let xi = dp.x_categories.iter().position(|c| c == &pt.x_cat);
         let yi = dp.y_categories.iter().position(|c| c == &pt.y_cat);
@@ -9450,7 +9461,7 @@ fn add_dot_plot(dp: &DotPlot, scene: &mut Scene, computed: &ComputedLayout) {
         let norm_color = (pt.color - color_min) / (color_max - color_min + EPSILON);
 
         let r = dp.min_radius + norm_size.clamp(0.0, 1.0) * (effective_max_r - dp.min_radius);
-        let fill = dp.color_map.map(norm_color.clamp(0.0, 1.0));
+        let fill = cmap.map(norm_color.clamp(0.0, 1.0));
 
         let tip = tooltip(dp.show_tooltips, &dp.tooltip_labels, dpi, || {
             format!("{}, {}: size={:.2}", pt.x_cat, pt.y_cat, pt.size)
@@ -9480,6 +9491,7 @@ fn add_dot_plot(dp: &DotPlot, scene: &mut Scene, computed: &ComputedLayout) {
 fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
     const EPSILON: f64 = f64::EPSILON;
 
+    let dice_cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { dp.color_map.clone() };
     let n_x = dp.x_categories.len();
     let n_y = dp.y_categories.len();
     if n_x == 0 || n_y == 0 {
@@ -9659,7 +9671,7 @@ fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
             } else if has_fill {
                 let color: Color = if let Some(v) = pt.fill {
                     let norm = (v - fill_min) / (fill_max - fill_min + EPSILON);
-                    dp.color_map.map(norm.clamp(0.0, 1.0)).into()
+                    dice_cmap.map(norm.clamp(0.0, 1.0)).into()
                 } else {
                     "#e8e8e8".into()
                 };
@@ -9738,7 +9750,7 @@ fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
             } else if per_dot_mode {
                 if let Some(fill_v) = pt.dot_fills.get(k).and_then(|v| *v) {
                     let fill_norm = (fill_v - fill_min) / (fill_max - fill_min + EPSILON);
-                    let fill_color: Color = dp.color_map.map(fill_norm.clamp(0.0, 1.0)).into();
+                    let fill_color: Color = dice_cmap.map(fill_norm.clamp(0.0, 1.0)).into();
                     let dot_r = if let Some(size_v) = pt.dot_sizes.get(k).and_then(|v| *v) {
                         let size_norm = (size_v - size_min) / (size_max - size_min + EPSILON);
                         base_r * (0.25 + 0.75 * size_norm.clamp(0.0, 1.0))
@@ -10070,7 +10082,7 @@ fn add_dice_legends(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout)
     // would make the bar too short to be useful.
     if dp.fill_legend_label.is_some() {
         let (fill_min, fill_max) = dp.fill_range.unwrap_or_else(|| dp.fill_extent());
-        let cmap = dp.color_map.clone();
+        let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { dp.color_map.clone() };
         let info = ColorBarInfo {
             map_fn: std::sync::Arc::new(move |t| {
                 let norm = (t - fill_min) / (fill_max - fill_min + f64::EPSILON);
@@ -12615,9 +12627,10 @@ fn add_contour(cp: &ContourPlot, scene: &mut Scene, computed: &ComputedLayout) {
     let (z_min, z_max) = cp.z_range();
     let z_span = z_max - z_min + f64::EPSILON;
 
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { cp.color_map.clone() };
     let level_color = |level: f64| -> String {
         let norm = (level - z_min) / z_span;
-        cp.color_map.map(norm.clamp(0.0, 1.0))
+        cmap.map(norm.clamp(0.0, 1.0))
     };
 
     if cp.filled {
@@ -12644,7 +12657,7 @@ fn add_contour(cp: &ContourPlot, scene: &mut Scene, computed: &ComputedLayout) {
             y: py0,
             width: px1 - px0,
             height: py1 - py0,
-            fill: cp.color_map.map(0.0).into(),
+            fill: cmap.map(0.0).into(),
             stroke: None,
             stroke_width: None,
             opacity: None,
@@ -14534,7 +14547,7 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
     let dot_stacked = plots.iter().find_map(|p| {
         if let Plot::DotPlot(dp) = p {
             if dp.size_label.is_some() && dp.color_legend_label.is_some() {
-                p.colorbar_info().map(|info| (dp, info))
+                p.colorbar_info(computed.bw_mode).map(|info| (dp, info))
             } else {
                 None
             }
@@ -14657,7 +14670,7 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
             }
             if !special_cb_drawn {
                 for plot in plots.iter() {
-                    if let Some(info) = plot.colorbar_info() {
+                    if let Some(info) = plot.colorbar_info(computed.bw_mode) {
                         add_colorbar(&info, &mut scene, &computed);
                         break; // one colorbar per figure
                     }
@@ -18139,7 +18152,7 @@ fn add_hexbin_colorbar(hb: &HexbinPlot, scene: &mut Scene, computed: &ComputedLa
             (lo.min(*v), hi.max(*v))
         });
     let (v_min, v_max) = hb.color_range.unwrap_or((v_min_raw, v_max_raw));
-    let cmap = hb.color_map.clone();
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { hb.color_map.clone() };
 
     let cb_label = hb
         .colorbar_label
@@ -18256,13 +18269,14 @@ fn add_hexbin(hb: &HexbinPlot, scene: &mut Scene, computed: &ComputedLayout) {
     } else {
         1.0
     };
+    let hexbin_cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { hb.color_map.clone() };
     let color_for = |v: f64| -> String {
         let norm = if hb.log_color {
             ((v - v_min + 1.0).max(1.0).log10() / log_max).clamp(0.0, 1.0)
         } else {
             ((v - v_min) / v_span).clamp(0.0, 1.0)
         };
-        hb.color_map.map(norm)
+        hexbin_cmap.map(norm)
     };
 
     // ── Draw hexagons ─────────────────────────────────────────────────────────
@@ -20818,6 +20832,7 @@ const CALENDAR_TIP_JS: &str = r#"(function(){
 })();"#;
 
 fn add_calendar(cp: &CalendarPlot, scene: &mut Scene, computed: &ComputedLayout) {
+    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { cp.color_map.clone() };
     let agg_data = cp.aggregate();
     let periods = cp.detect_periods();
     if periods.is_empty() {
@@ -20986,17 +21001,30 @@ fn add_calendar(cp: &CalendarPlot, scene: &mut Scene, computed: &ComputedLayout)
             let px = grid_x + col as f64 * pitch;
             let py = grid_y + row as f64 * pitch;
 
+            // `is_missing` cells (true "no data" plus zero-with-no-explicit-zero_color)
+            // get a hatch pattern in BW mode rather than a flat grey — flat grey would
+            // sit somewhere on the same white-to-black scale as a real low value,
+            // making "no data" indistinguishable from "a small but real value".
+            let mut is_missing = false;
             let (fill_color, tip_val) = if let Some(&v) = agg_data.get(&date_str) {
                 let fill = if v == 0.0 {
-                    cp.zero_color
-                        .as_deref()
-                        .unwrap_or(&cp.missing_color)
-                        .to_string()
+                    if computed.bw_mode {
+                        is_missing = true;
+                        "#e0e0e0".to_string()
+                    } else {
+                        cp.zero_color
+                            .as_deref()
+                            .unwrap_or(&cp.missing_color)
+                            .to_string()
+                    }
                 } else {
                     let norm = ((v - v_min) / v_range).clamp(0.0, 1.0);
-                    cp.color_map.map(norm)
+                    cmap.map(norm)
                 };
                 (fill, format_val(v, &cp.aggregation))
+            } else if computed.bw_mode {
+                is_missing = true;
+                ("#e0e0e0".to_string(), "no data".to_string())
             } else {
                 (cp.missing_color.clone(), "no data".to_string())
             };
@@ -21017,6 +21045,23 @@ fn add_calendar(cp: &CalendarPlot, scene: &mut Scene, computed: &ComputedLayout)
                 stroke_width: None,
                 opacity: None,
             });
+            if is_missing {
+                use crate::render::bw::{bw_fill, register_pattern};
+                let (_, pattern) = bw_fill(0);
+                let pat_url = register_pattern(scene, pattern);
+                if !pat_url.is_empty() {
+                    scene.add(Primitive::Rect {
+                        x: px,
+                        y: py,
+                        width: cp.cell_size,
+                        height: cp.cell_size,
+                        fill: Color::from(pat_url.as_str()),
+                        stroke: None,
+                        stroke_width: None,
+                        opacity: None,
+                    });
+                }
+            }
             scene.add(Primitive::GroupEnd);
         }
 
@@ -21081,7 +21126,7 @@ fn add_calendar(cp: &CalendarPlot, scene: &mut Scene, computed: &ComputedLayout)
         let rw = bar_w / n_stops as f64;
         for i in 0..n_stops {
             let t = i as f64 / (n_stops - 1) as f64;
-            let color = cp.color_map.map(t);
+            let color = cmap.map(t);
             let rx = bar_x + (i as f64 * rw).floor();
             scene.add(Primitive::Rect {
                 x: rx,
@@ -22042,6 +22087,13 @@ fn add_quiver(q: &crate::plot::quiver::QuiverPlot, scene: &mut Scene, computed: 
         let color_str: String = if let Some(ref c) = arrow.color {
             c.clone()
         } else if let Some(ref cmap) = q.color_map {
+            let cmap_bw;
+            let cmap = if computed.bw_mode {
+                cmap_bw = crate::plot::ColorMap::Grayscale;
+                &cmap_bw
+            } else {
+                cmap
+            };
             let mag = arrow.magnitude();
             cmap.map(((mag - c_min) / c_span).clamp(0.0, 1.0))
         } else {

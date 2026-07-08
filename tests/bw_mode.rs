@@ -14,6 +14,14 @@ fn bw_svg(plots: Vec<Plot>, layout: Layout) -> String {
     SvgBackend.render_scene(&scene)
 }
 
+/// Color-mode counterpart to `bw_svg`, used by the Group 6 colormap tests to
+/// confirm the same plot construction actually produces colorful fills
+/// outside BW mode (i.e. the test data exercises the colormap meaningfully).
+fn plain_svg(plots: Vec<Plot>, layout: Layout) -> String {
+    let scene = render_multiple(plots, layout);
+    SvgBackend.render_scene(&scene)
+}
+
 /// True if the SVG contains a `<rect>` element filled with the bw-mode marker
 /// color — i.e. a `Square` marker drawn by `draw_marker`. Chart-area/clip
 /// rects never carry this fill, so this can't false-positive on chrome.
@@ -83,6 +91,34 @@ fn distinct_dash_groups_for_stroke(svg: &str, stroke: &str) -> usize {
         search_from = end.max(start + 1);
     }
     groups.len()
+}
+
+/// True if any `fill="#rrggbb"` in the SVG has unequal R/G/B channels — i.e.
+/// a genuinely colored (not grey/black/white) fill. Used for the Group 6
+/// colormap family: BW mode forces `ColorMap::Grayscale`, so a data fill
+/// derived from the colormap should always have R == G == B, while chrome
+/// (background, axis lines, gridlines) is already neutral in kuva's default
+/// theme, so this is a safe whole-SVG scan rather than needing to scope to
+/// a specific element.
+fn svg_has_non_grey_fill(svg: &str) -> bool {
+    let mut search_from = 0;
+    while let Some(rel) = svg[search_from..].find("fill=\"#") {
+        let start = search_from + rel + "fill=\"".len();
+        let end = svg[start..].find('"').map_or(svg.len(), |e| start + e);
+        let hex = &svg[start..end];
+        if hex.len() == 7 {
+            let r = u8::from_str_radix(&hex[1..3], 16);
+            let g = u8::from_str_radix(&hex[3..5], 16);
+            let b = u8::from_str_radix(&hex[5..7], 16);
+            if let (Ok(r), Ok(g), Ok(b)) = (r, g, b) {
+                if r != g || g != b {
+                    return true;
+                }
+            }
+        }
+        search_from = end.max(start + 1);
+    }
+    false
 }
 
 // ── Tier 1: fills ────────────────────────────────────────────────────────────
@@ -1387,6 +1423,205 @@ fn bw_raincloud_groups_use_distinct_patterns() {
     common::write_test_output("test_outputs/bw_raincloud.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
     assert!(pattern_count >= 2, "raincloud groups should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+// ── Group 6: continuous-value / colormap family ─────────────────────────────
+//
+// These plots encode a continuous numeric value via a `ColorMap`, not a
+// discrete per-series category, so hatch/dash/shape differentiation doesn't
+// apply. Design decision: force `ColorMap::Grayscale` in BW mode instead.
+// Each test renders the same construction twice — once plain (sanity-checking
+// that the default colormap, usually Viridis, actually produces colorful
+// fills for this data) and once with BW mode (asserting no colorful fill
+// survives).
+
+#[test]
+fn bw_histogram2d_forces_grayscale() {
+    use kuva::plot::Histogram2D;
+    let data = vec![(1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (5.0, 5.0)];
+    let build = || Histogram2D::new().with_data(data.clone(), (0.0, 6.0), (0.0, 6.0), 3, 3);
+    let plain = plain_svg(vec![Plot::Histogram2d(build())], Layout::auto_from_plots(&[Plot::Histogram2d(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Histogram2d(build())], Layout::auto_from_plots(&[Plot::Histogram2d(build())]));
+    common::write_test_output("test_outputs/bw_histogram2d.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "histogram2d bins should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_heatmap_forces_grayscale() {
+    use kuva::plot::Heatmap;
+    let build = || Heatmap::new().with_data(vec![vec![1.0, 5.0, 9.0], vec![2.0, 6.0, 3.0], vec![8.0, 4.0, 7.0]]);
+    let plots_plain = vec![Plot::Heatmap(build())];
+    let plots_bw = vec![Plot::Heatmap(build())];
+    let plain = plain_svg(plots_plain, Layout::auto_from_plots(&[Plot::Heatmap(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(plots_bw, Layout::auto_from_plots(&[Plot::Heatmap(build())]));
+    common::write_test_output("test_outputs/bw_heatmap.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "heatmap cells should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_hexbin_forces_grayscale() {
+    use kuva::plot::hexbin::HexbinPlot;
+    // Varying density per bin (not a uniform grid) so norm spans [0, 1] —
+    // a uniform grid makes every bin normalize to the same value, which
+    // would pass this assertion trivially without proving anything.
+    let mut xs: Vec<f64> = (0..40).map(|i| (i % 8) as f64).collect();
+    let mut ys: Vec<f64> = (0..40).map(|i| (i / 8) as f64).collect();
+    for _ in 0..20 {
+        xs.push(0.0);
+        ys.push(0.0);
+    }
+    let build = || HexbinPlot::new().with_data(xs.clone(), ys.clone());
+    let plain = plain_svg(vec![Plot::Hexbin(build())], Layout::auto_from_plots(&[Plot::Hexbin(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Hexbin(build())], Layout::auto_from_plots(&[Plot::Hexbin(build())]));
+    common::write_test_output("test_outputs/bw_hexbin.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "hexbin cells should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_calendar_forces_grayscale() {
+    use kuva::plot::calendar::{CalendarAgg, CalendarPlot};
+    // CalendarAgg defaults to Count (occurrences per day, ignoring the value
+    // field) — with one entry per date that collapses every day to the same
+    // count and defeats the point of varying the input values. Sum makes a
+    // single entry's value pass through unchanged.
+    let build = || {
+        CalendarPlot::new()
+            .with_data(vec![
+                ("2026-01-01", 1.0),
+                ("2026-01-02", 5.0),
+                ("2026-01-03", 10.0),
+                ("2026-01-04", 20.0),
+            ])
+            .with_aggregation(CalendarAgg::Sum)
+    };
+    let plain = plain_svg(vec![Plot::Calendar(build())], Layout::auto_from_plots(&[Plot::Calendar(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Calendar(build())], Layout::auto_from_plots(&[Plot::Calendar(build())]));
+    common::write_test_output("test_outputs/bw_calendar.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "calendar day cells should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_calendar_missing_days_use_a_pattern_not_flat_grey() {
+    // Flat grey for "no data" sits on the same white-to-black scale as a real
+    // low value, so it's ambiguous which one a viewer is looking at — reported
+    // by the user after visually reviewing the Group 6 calendar preview.
+    use kuva::plot::calendar::CalendarPlot;
+    let calendar = CalendarPlot::new().with_data(vec![("2026-06-15", 5.0)]);
+    let plots = vec![Plot::Calendar(calendar)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 1, "missing calendar days should use a hatch pattern, not a flat fill, got {pattern_count}");
+}
+
+#[test]
+fn bw_clustermap_forces_grayscale() {
+    use kuva::plot::clustermap::Clustermap;
+    let build = || {
+        Clustermap::new()
+            .with_data(vec![vec![1.0, 5.0, 9.0], vec![2.0, 6.0, 3.0], vec![8.0, 4.0, 7.0]])
+            .with_cluster_rows(false)
+            .with_cluster_cols(false)
+    };
+    let plain = plain_svg(vec![Plot::Clustermap(build())], Layout::auto_from_plots(&[Plot::Clustermap(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Clustermap(build())], Layout::auto_from_plots(&[Plot::Clustermap(build())]));
+    common::write_test_output("test_outputs/bw_clustermap.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "clustermap cells should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_surface3d_forces_grayscale() {
+    use kuva::plot::surface3d::Surface3DPlot;
+    use kuva::plot::ColorMap;
+    let build = || {
+        Surface3DPlot::new(vec![vec![1.0, 5.0, 9.0], vec![2.0, 6.0, 3.0], vec![8.0, 4.0, 7.0]])
+            .with_z_colormap(ColorMap::Viridis)
+    };
+    let plain = plain_svg(vec![Plot::Surface3D(build())], Layout::auto_from_plots(&[Plot::Surface3D(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Surface3D(build())], Layout::auto_from_plots(&[Plot::Surface3D(build())]));
+    common::write_test_output("test_outputs/bw_surface3d.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "surface3d faces should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_contour_forces_grayscale() {
+    use kuva::plot::contour::ContourPlot;
+    let z = vec![
+        vec![0.0, 1.0, 2.0, 3.0],
+        vec![1.0, 2.0, 3.0, 4.0],
+        vec![2.0, 3.0, 4.0, 5.0],
+        vec![3.0, 4.0, 5.0, 6.0],
+    ];
+    let build = || {
+        ContourPlot::new()
+            .with_grid(z.clone(), vec![0.0, 1.0, 2.0, 3.0], vec![0.0, 1.0, 2.0, 3.0])
+            .with_filled()
+    };
+    let plain = plain_svg(vec![Plot::Contour(build())], Layout::auto_from_plots(&[Plot::Contour(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Contour(build())], Layout::auto_from_plots(&[Plot::Contour(build())]));
+    common::write_test_output("test_outputs/bw_contour.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "filled contour bands should use only grayscale fills in BW mode");
+}
+
+#[test]
+fn bw_dotplot_forces_grayscale() {
+    use kuva::plot::dotplot::DotPlot;
+    let build = || {
+        DotPlot::new().with_data(vec![
+            ("A", "X", 5.0, 1.0),
+            ("B", "X", 5.0, 5.0),
+            ("A", "Y", 5.0, 9.0),
+        ])
+    };
+    let plain = plain_svg(vec![Plot::DotPlot(build())], Layout::auto_from_plots(&[Plot::DotPlot(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::DotPlot(build())], Layout::auto_from_plots(&[Plot::DotPlot(build())]));
+    common::write_test_output("test_outputs/bw_dotplot.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "dot fills should use only grayscale colors in BW mode");
+}
+
+#[test]
+fn bw_quiver_forces_grayscale() {
+    use kuva::plot::quiver::QuiverPlot;
+    use kuva::plot::ColorMap;
+    let build = || {
+        QuiverPlot::new()
+            .with_arrow(0.0, 0.0, 1.0, 1.0)
+            .with_arrow(1.0, 1.0, 3.0, 3.0)
+            .with_arrow(2.0, 2.0, 5.0, 0.0)
+            .with_color_map(ColorMap::Viridis)
+    };
+    let plain = plain_svg(vec![Plot::Quiver(build())], Layout::auto_from_plots(&[Plot::Quiver(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::Quiver(build())], Layout::auto_from_plots(&[Plot::Quiver(build())]));
+    common::write_test_output("test_outputs/bw_quiver.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "quiver arrows should use only grayscale colors in BW mode");
+}
+
+#[test]
+fn bw_diceplot_continuous_tile_forces_grayscale() {
+    // The categorical dot-legend mode was covered in Group 2
+    // (bw_diceplot_categorical_dots_use_distinct_shapes); this covers the
+    // continuous per-tile fill mode deferred to Group 6 at the time.
+    use kuva::plot::diceplot::DicePlot;
+    let build = || {
+        DicePlot::new(4).with_points(vec![
+            ("Row1", "Col1", vec![0, 1, 2, 3], Some(0.1), Some(3.0)),
+            ("Row2", "Col1", vec![0, 1, 2, 3], Some(0.9), Some(3.0)),
+        ])
+    };
+    let plain = plain_svg(vec![Plot::DicePlot(build())], Layout::auto_from_plots(&[Plot::DicePlot(build())]));
+    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let svg = bw_svg(vec![Plot::DicePlot(build())], Layout::auto_from_plots(&[Plot::DicePlot(build())]));
+    common::write_test_output("test_outputs/bw_diceplot_continuous.svg", svg.clone()).unwrap();
+    assert!(!svg_has_non_grey_fill(&svg), "continuous dice tiles should use only grayscale fills in BW mode");
 }
 
 // ── Sanity checks ─────────────────────────────────────────────────────────────
