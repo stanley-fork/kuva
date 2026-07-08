@@ -2927,6 +2927,12 @@ impl ComputedLayout {
             // boundaries rather than being rounded outward by auto_nice_range.
             let (xlo, xhi) = layout.data_x_range.unwrap_or(layout.x_range);
             (xlo, xhi)
+        } else if layout.x_categories.is_some() {
+            // Categorical x-axes must not be numerically nice-rounded: the extent
+            // is exactly [0.5, n+0.5], and rounding it outward invents phantom
+            // category slots (dead space, worst on the right). Ticks come from the
+            // category list, not the numeric range, so x_range is correct as-is.
+            (layout.x_range.0, layout.x_range.1)
         } else {
             render_utils::auto_nice_range(layout.x_range.0, layout.x_range.1, x_ticks)
         };
@@ -2936,6 +2942,10 @@ impl ComputedLayout {
         } else if layout.clamp_axis || layout.clamp_y_axis {
             let (ylo, yhi) = layout.data_y_range.unwrap_or(layout.y_range);
             render_utils::auto_nice_range(ylo, yhi, y_ticks)
+        } else if layout.y_categories.is_some() {
+            // See the x-axis note above: categorical axes use y_range as-is
+            // instead of numeric nice-rounding.
+            (layout.y_range.0, layout.y_range.1)
         } else {
             render_utils::auto_nice_range(layout.y_range.0, layout.y_range.1, y_ticks)
         };
