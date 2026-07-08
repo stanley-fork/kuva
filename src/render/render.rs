@@ -2679,12 +2679,32 @@ fn add_strip_points(
             // as the seeded SmallRng it replaces. XOR with golden-ratio constant so
             // seed=0 doesn't produce an all-zero state.
             let mut rng_state = seed ^ 0x9e3779b97f4a7c15u64;
+            // `jitter` is documented as a fraction of the slot width, so values
+            // outside [-1, 1] are out of spec; clamp the *input* rather than
+            // just the resulting offset, otherwise most samples would saturate
+            // at the two slot edges instead of spreading naturally across it.
+            let jitter = jitter.clamp(-1.0, 1.0);
+            // Slot width in pixels, used to keep the marker's rendered edge —
+            // not just its center — inside the category's own half-slot, so
+            // outermost-category points don't get half-clipped by the plot's
+            // clip-path at the exact axis boundary.
+            let slot_px = if horizontal {
+                (computed.map_y(x_center_data + 1.0) - computed.map_y(x_center_data)).abs()
+            } else {
+                (computed.map_x(x_center_data + 1.0) - computed.map_x(x_center_data)).abs()
+            };
+            let radius_data = if slot_px > 0.0 {
+                point_size / slot_px
+            } else {
+                0.0
+            };
+            let max_offset = (0.5 - radius_data).max(0.0);
             for (j, &v) in values.iter().enumerate() {
                 rng_state ^= rng_state << 13;
                 rng_state ^= rng_state >> 7;
                 rng_state ^= rng_state << 17;
                 let rand_val = (rng_state >> 11) as f64 * (1.0 / (1u64 << 53) as f64);
-                let offset: f64 = (rand_val - 0.5) * jitter;
+                let offset: f64 = ((rand_val - 0.5) * jitter).clamp(-max_offset, max_offset);
                 let (cx, cy) = if horizontal {
                     (computed.map_x(v), computed.map_y(x_center_data + offset))
                 } else {
@@ -2714,10 +2734,19 @@ fn add_strip_points(
             if horizontal {
                 let x_screen: Vec<f64> = values.iter().map(|&v| computed.map_x(v)).collect();
                 let y_offsets = render_utils::beeswarm_positions(&x_screen, point_size);
+                // Cap swarm spread at half the category's own pixel slot, minus
+                // the marker radius, so dense columns can't bleed into a
+                // neighboring category and outermost-category markers don't
+                // get half-clipped by the plot's clip-path at the axis edge.
+                let max_offset =
+                    ((computed.map_y(x_center_data + 1.0) - computed.map_y(x_center_data)).abs()
+                        / 2.0
+                        - point_size)
+                        .max(0.0);
                 let cy_center = computed.map_y(x_center_data);
                 for (j, &v) in values.iter().enumerate() {
                     let cx = computed.map_x(v);
-                    let cy = cy_center + y_offsets[j];
+                    let cy = cy_center + y_offsets[j].clamp(-max_offset, max_offset);
                     let tip = tooltip(
                         show_tooltips || computed.interactive,
                         &tooltip_labels_opt,
@@ -2740,9 +2769,18 @@ fn add_strip_points(
             } else {
                 let y_screen: Vec<f64> = values.iter().map(|&v| computed.map_y(v)).collect();
                 let x_offsets = render_utils::beeswarm_positions(&y_screen, point_size);
+                // Cap swarm spread at half the category's own pixel slot, minus
+                // the marker radius, so dense columns can't bleed into a
+                // neighboring category and outermost-category markers don't
+                // get half-clipped by the plot's clip-path at the axis edge.
+                let max_offset =
+                    ((computed.map_x(x_center_data + 1.0) - computed.map_x(x_center_data)).abs()
+                        / 2.0
+                        - point_size)
+                        .max(0.0);
                 let cx_center = computed.map_x(x_center_data);
                 for (j, &v) in values.iter().enumerate() {
-                    let cx = cx_center + x_offsets[j];
+                    let cx = cx_center + x_offsets[j].clamp(-max_offset, max_offset);
                     let tip = tooltip(
                         show_tooltips || computed.interactive,
                         &tooltip_labels_opt,

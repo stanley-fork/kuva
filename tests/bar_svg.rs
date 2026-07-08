@@ -353,3 +353,33 @@ fn test_bar_horizontal_stacked() {
     assert!(svg.contains("Alpha"));
     assert!(svg.contains("Beta"));
 }
+
+// `clamp_axis` (and `clamp_y_axis`, which shares the same code path for the
+// y-axis) must never override a categorical axis's exact [0.5, n+0.5] slot
+// extent — e.g. a normalized Histogram sharing a panel with a horizontal Bar
+// chart sets `clamp_y_axis` on the shared layout, but the bar chart's own
+// categorical y-axis must still win. `with_clamp_axis()` triggers the same
+// code path directly and deterministically, without depending on how a
+// Histogram's bounds() happens to be aggregated alongside a Bar's.
+#[test]
+fn test_clamp_axis_does_not_override_categorical_axis_extent() {
+    // 20 bars matches PR #99's own motivating example ([0.5, 20.5] getting
+    // nice-rounded outward to [0, 22]/[0, 25]) — a 3-bar range happens to
+    // already sit on a "nice" step boundary and wouldn't distinguish the bug.
+    let mut bar = BarPlot::new();
+    for i in 1..=20 {
+        bar = bar.with_bar(format!("Cat{i}"), i as f64);
+    }
+
+    let plots = vec![Plot::Bar(bar)];
+    let layout = Layout::auto_from_plots(&plots).with_clamp_axis();
+    let computed = ComputedLayout::from_layout(&layout);
+
+    assert_eq!(
+        computed.x_range,
+        (0.5, 20.5),
+        "categorical x-axis must keep its exact slot extent even when \
+         clamp_axis is also set (got {:?})",
+        computed.x_range
+    );
+}

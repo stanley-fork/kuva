@@ -2458,6 +2458,43 @@ pub struct ComputedLayout {
     pub bw_mode: bool,
 }
 
+/// Resolves one axis's final `(min, max)` from its padded `range`, its raw
+/// `data_range` (used by the modes that need the unpadded extent), and the
+/// axis-mode flags, in precedence order: log > categorical > clamp >
+/// exact-bin-width > nice-rounded default.
+///
+/// Categorical axes are checked before `clamp`/`bin_width` because their
+/// extent (exactly `[0.5, n+0.5]`) is already correct by construction and
+/// must never be nice-rounded outward — even when `clamp_axis`/`clamp_y_axis`
+/// happens to also be set (e.g. a normalized histogram sharing a panel with
+/// a horizontal bar chart sets `clamp_y_axis`, which must not override the
+/// bar chart's own categorical y-axis).
+fn resolve_axis_range(
+    range: (f64, f64),
+    data_range: Option<(f64, f64)>,
+    ticks: usize,
+    log: bool,
+    has_categories: bool,
+    clamp: bool,
+    exact_bin_width: bool,
+) -> (f64, f64) {
+    if log {
+        let (lo, hi) = data_range.unwrap_or(range);
+        render_utils::auto_nice_range_log(lo, hi)
+    } else if has_categories {
+        range
+    } else if clamp {
+        let (lo, hi) = data_range.unwrap_or(range);
+        render_utils::auto_nice_range(lo, hi, ticks)
+    } else if exact_bin_width {
+        // Histogram: use the exact data range so ticks start and end on bin
+        // boundaries rather than being rounded outward by auto_nice_range.
+        data_range.unwrap_or(range)
+    } else {
+        render_utils::auto_nice_range(range.0, range.1, ticks)
+    }
+}
+
 impl ComputedLayout {
     pub fn from_layout(layout: &Layout) -> Self {
         let s = layout.scale.max(0.1);
@@ -2916,39 +2953,24 @@ impl ComputedLayout {
         // For log scale, prefer the raw data range (before proportional padding).
         // For clamp_axis, also use the raw range so the boundary lands on the
         // tick that just contains the data with no extra step.
-        let (x_min, x_max) = if layout.log_x {
-            let (xlo, xhi) = layout.data_x_range.unwrap_or(layout.x_range);
-            render_utils::auto_nice_range_log(xlo, xhi)
-        } else if layout.clamp_axis {
-            let (xlo, xhi) = layout.data_x_range.unwrap_or(layout.x_range);
-            render_utils::auto_nice_range(xlo, xhi, x_ticks)
-        } else if layout.x_bin_width.is_some() {
-            // Histogram: use the exact data range so ticks start and end on bin
-            // boundaries rather than being rounded outward by auto_nice_range.
-            let (xlo, xhi) = layout.data_x_range.unwrap_or(layout.x_range);
-            (xlo, xhi)
-        } else if layout.x_categories.is_some() {
-            // Categorical x-axes must not be numerically nice-rounded: the extent
-            // is exactly [0.5, n+0.5], and rounding it outward invents phantom
-            // category slots (dead space, worst on the right). Ticks come from the
-            // category list, not the numeric range, so x_range is correct as-is.
-            (layout.x_range.0, layout.x_range.1)
-        } else {
-            render_utils::auto_nice_range(layout.x_range.0, layout.x_range.1, x_ticks)
-        };
-        let (y_min, y_max) = if layout.log_y {
-            let (ylo, yhi) = layout.data_y_range.unwrap_or(layout.y_range);
-            render_utils::auto_nice_range_log(ylo, yhi)
-        } else if layout.clamp_axis || layout.clamp_y_axis {
-            let (ylo, yhi) = layout.data_y_range.unwrap_or(layout.y_range);
-            render_utils::auto_nice_range(ylo, yhi, y_ticks)
-        } else if layout.y_categories.is_some() {
-            // See the x-axis note above: categorical axes use y_range as-is
-            // instead of numeric nice-rounding.
-            (layout.y_range.0, layout.y_range.1)
-        } else {
-            render_utils::auto_nice_range(layout.y_range.0, layout.y_range.1, y_ticks)
-        };
+        let (x_min, x_max) = resolve_axis_range(
+            layout.x_range,
+            layout.data_x_range,
+            x_ticks,
+            layout.log_x,
+            layout.x_categories.is_some(),
+            layout.clamp_axis,
+            layout.x_bin_width.is_some(),
+        );
+        let (y_min, y_max) = resolve_axis_range(
+            layout.y_range,
+            layout.data_y_range,
+            y_ticks,
+            layout.log_y,
+            layout.y_categories.is_some(),
+            layout.clamp_axis || layout.clamp_y_axis,
+            false,
+        );
 
         // Apply explicit axis-range overrides (after auto-ranging).
         let x_min = layout.x_axis_min.unwrap_or(x_min);
@@ -2956,19 +2978,17 @@ impl ComputedLayout {
         let y_min = layout.y_axis_min.unwrap_or(y_min);
         let y_max = layout.y_axis_max.unwrap_or(y_max);
 
-        let y2_range = if let Some((ylo, yhi)) = layout.y2_range {
-            if layout.log_y2 {
-                let (ylo, yhi) = layout.data_y2_range.unwrap_or((ylo, yhi));
-                Some(render_utils::auto_nice_range_log(ylo, yhi))
-            } else if layout.clamp_axis {
-                let (ylo, yhi) = layout.data_y2_range.unwrap_or((ylo, yhi));
-                Some(render_utils::auto_nice_range(ylo, yhi, y_ticks))
-            } else {
-                Some(render_utils::auto_nice_range(ylo, yhi, y_ticks))
-            }
-        } else {
-            None
-        };
+        let y2_range = layout.y2_range.map(|range| {
+            resolve_axis_range(
+                range,
+                layout.data_y2_range,
+                y_ticks,
+                layout.log_y2,
+                false,
+                layout.clamp_axis,
+                false,
+            )
+        });
 
         // Quantise legend line-height to a whole number of terminal rows so that
         // every legend entry maps to a distinct row without gaps.
