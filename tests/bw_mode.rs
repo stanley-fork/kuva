@@ -1242,6 +1242,153 @@ fn bw_horizon_pos_neg_are_not_colored() {
     assert!(svg.contains("#888888"), "negative bands should use a distinct fixed BW grey");
 }
 
+// ── Group 5: composite/pixel-space, most bespoke ────────────────────────────
+
+#[test]
+fn bw_chord_nodes_use_distinct_patterns() {
+    use kuva::plot::chord::ChordPlot;
+    let chord = ChordPlot::new()
+        .with_matrix(vec![vec![0.0, 10.0, 5.0], vec![10.0, 0.0, 3.0], vec![5.0, 3.0, 0.0]])
+        .with_labels(vec!["A", "B", "C"]);
+    let plots = vec![Plot::Chord(chord)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_chord.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "chord nodes should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_sankey_nodes_use_distinct_patterns() {
+    use kuva::plot::sankey::SankeyPlot;
+    let sankey = SankeyPlot::new()
+        .with_link("Source A", "Target", 10.0)
+        .with_link("Source B", "Target", 5.0);
+    let plots = vec![Plot::Sankey(sankey)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_sankey.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "sankey nodes/links should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_sankey_node_rects_have_visible_border() {
+    // Links share their source node's pattern (see bw_sankey_nodes_use_distinct_patterns),
+    // so without an outline the node rect visually disappears into its own outgoing
+    // ribbon — reported directly by the user after visually checking Group 5.
+    use kuva::plot::sankey::SankeyPlot;
+    let sankey = SankeyPlot::new().with_link("Source A", "Target", 10.0);
+    let plots = vec![Plot::Sankey(sankey)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    assert!(
+        svg.contains("stroke=\"#1a1a1a\" stroke-width=\"2\""),
+        "sankey node rects should have a visible dark border in BW mode"
+    );
+}
+
+#[test]
+fn bw_synteny_sequences_use_distinct_patterns() {
+    use kuva::plot::synteny::SyntenyPlot;
+    let synteny = SyntenyPlot::new()
+        .with_sequences(vec![("Seq1", 100.0), ("Seq2", 100.0)])
+        .with_block(0, 10.0, 40.0, 1, 10.0, 40.0);
+    let plots = vec![Plot::Synteny(synteny)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_synteny.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "synteny sequence bars should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_synteny_bars_have_visible_border() {
+    // Block index and sequence index are independent, so a ribbon can share
+    // its sequence bar's pattern (as in this exact 2-sequence/1-block case,
+    // both index 0) — without an outline the bar visually disappears into
+    // the ribbon it sits on top of.
+    use kuva::plot::synteny::SyntenyPlot;
+    let synteny = SyntenyPlot::new()
+        .with_sequences(vec![("Seq1", 100.0), ("Seq2", 100.0)])
+        .with_block(0, 10.0, 40.0, 1, 10.0, 40.0);
+    let plots = vec![Plot::Synteny(synteny)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    assert!(
+        svg.contains("stroke=\"#1a1a1a\" stroke-width=\"2\""),
+        "synteny sequence bars should have a visible dark border in BW mode"
+    );
+}
+
+#[test]
+fn bw_network_groups_use_distinct_patterns() {
+    use kuva::plot::network::NetworkPlot;
+    let network = NetworkPlot::new()
+        .with_node_group("N1", "GroupA")
+        .with_node_group("N2", "GroupB")
+        .with_edge("N1", "N2", 1.0);
+    let plots = vec![Plot::Network(network)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_network.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "network node groups should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_joint_groups_use_distinct_patterns() {
+    use kuva::plot::jointplot::JointPlot;
+    let joint = JointPlot::new()
+        .with_group("Group1", vec![1.0, 2.0, 3.0, 2.0], vec![1.0, 2.0, 1.5, 2.5], "steelblue")
+        .with_group("Group2", vec![4.0, 5.0, 6.0, 5.0], vec![4.0, 5.0, 4.5, 5.5], "tomato");
+    let plots = vec![Plot::Joint(joint)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_joint.svg", svg.clone()).unwrap();
+    // Joint's marginal panels are appended to the scene *after* the inner
+    // scatter sub-scene's own <g clip-path> group closes, so
+    // distinct_patterns_in_plot_body (which assumes one clip group wraps all
+    // data) would truncate before reaching them. The scatter markers use
+    // bw_shape (no patterns) and the custom group legend uses bw_shape too
+    // (see the DicePlot/Group2 legend fix), so a plain pattern-def count is
+    // safe here — nothing else in this SVG registers a pattern.
+    let pattern_count = svg.matches("<pattern").count();
+    assert!(pattern_count >= 2, "joint marginal histograms should use at least 2 distinct patterns, got {pattern_count}");
+}
+
+#[test]
+fn bw_joint_standalone_render_jointplot_respects_bw_mode() {
+    // render_jointplot() builds its own stub ComputedLayout independent of
+    // render_multiple's dispatch path — it must copy layout.bw_mode across,
+    // or bw_mode silently has no effect when called this way.
+    use kuva::plot::jointplot::JointPlot;
+    use kuva::render::render::render_jointplot;
+    let joint = JointPlot::new()
+        .with_group("Group1", vec![1.0, 2.0, 3.0, 2.0], vec![1.0, 2.0, 1.5, 2.5], "steelblue")
+        .with_group("Group2", vec![4.0, 5.0, 6.0, 5.0], vec![4.0, 5.0, 4.5, 5.5], "tomato");
+    let layout = Layout::new((0.0, 7.0), (0.0, 7.0)).with_bw_mode();
+    let scene = render_jointplot(joint, layout);
+    let svg = SvgBackend.render_scene(&scene);
+    common::write_test_output("test_outputs/bw_joint_standalone.svg", svg.clone()).unwrap();
+    assert!(!svg.contains("steelblue") && !svg.contains("tomato"), "group colors should not leak through the standalone render_jointplot path in BW mode");
+    assert!(svg.contains("<pattern"), "standalone render_jointplot should still emit BW patterns");
+}
+
+#[test]
+fn bw_raincloud_groups_use_distinct_patterns() {
+    use kuva::plot::raincloud::RaincloudPlot;
+    let raincloud = RaincloudPlot::new()
+        .with_group("Control", vec![1.0, 2.0, 2.5, 3.0, 2.2, 2.8, 1.8])
+        .with_group("Treated", vec![4.0, 5.0, 4.5, 5.5, 4.2, 4.8, 5.2]);
+    let plots = vec![Plot::Raincloud(raincloud)];
+    let layout = Layout::auto_from_plots(&plots);
+    let svg = bw_svg(plots, layout);
+    common::write_test_output("test_outputs/bw_raincloud.svg", svg.clone()).unwrap();
+    let pattern_count = distinct_patterns_in_plot_body(&svg);
+    assert!(pattern_count >= 2, "raincloud groups should use at least 2 distinct patterns, got {pattern_count}");
+}
+
 // ── Sanity checks ─────────────────────────────────────────────────────────────
 
 #[test]

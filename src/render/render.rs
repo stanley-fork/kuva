@@ -5846,14 +5846,8 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                             }
                         }
                         path_data.push('Z');
-                        scene.add(Primitive::Path(Box::new(PathData {
-                            d: path_data,
-                            fill: Some(Color::from(color)),
-                            stroke: Color::from(color),
-                            stroke_width: 0.5,
-                            opacity: Some(rp.cloud_alpha),
-                            stroke_dasharray: None,
-                        })));
+                        let cloud_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(color) };
+                        path_bw(scene, computed, i, color, path_data, cloud_stroke, 0.5, Some(rp.cloud_alpha), None);
                     }
                 }
             }
@@ -5887,16 +5881,7 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                 let xlow = computed.map_x(lower_w);
                 let xhigh = computed.map_x(upper_w);
 
-                scene.add(Primitive::Rect {
-                    x: xq1.min(xq3),
-                    y: y0.min(y1),
-                    width: (xq3 - xq1).abs(),
-                    height: (y1 - y0).abs(),
-                    fill: Color::from(color),
-                    stroke: None,
-                    stroke_width: None,
-                    opacity: None,
-                });
+                rect_bw(scene, computed, i, color, xq1.min(xq3), y0.min(y1), (xq3 - xq1).abs(), (y1 - y0).abs(), None, None, None);
                 scene.add(Primitive::Line {
                     x1: xmed,
                     y1: y0.min(y1),
@@ -5906,23 +5891,28 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                     stroke_width: 1.5,
                     stroke_dasharray: None,
                 });
+                let (whisker_stroke, whisker_dash) = if computed.bw_mode {
+                    (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+                } else {
+                    (Color::from(color), None)
+                };
                 scene.add(Primitive::Line {
                     x1: xlow,
                     y1: ymid,
                     x2: xq1,
                     y2: ymid,
-                    stroke: Color::from(color),
+                    stroke: whisker_stroke.clone(),
                     stroke_width: 1.0,
-                    stroke_dasharray: None,
+                    stroke_dasharray: whisker_dash.clone(),
                 });
                 scene.add(Primitive::Line {
                     x1: xq3,
                     y1: ymid,
                     x2: xhigh,
                     y2: ymid,
-                    stroke: Color::from(color),
+                    stroke: whisker_stroke.clone(),
                     stroke_width: 1.0,
-                    stroke_dasharray: None,
+                    stroke_dasharray: whisker_dash.clone(),
                 });
                 let cap_half = box_half_px * 0.5;
                 for &xc in &[xlow, xhigh] {
@@ -5931,9 +5921,9 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                         y1: ymid - cap_half,
                         x2: xc,
                         y2: ymid + cap_half,
-                        stroke: Color::from(color),
+                        stroke: whisker_stroke.clone(),
                         stroke_width: 1.0,
-                        stroke_dasharray: None,
+                        stroke_dasharray: whisker_dash.clone(),
                     });
                 }
             }
@@ -6024,14 +6014,8 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                     }
                     path_data.push('Z');
 
-                    scene.add(Primitive::Path(Box::new(PathData {
-                        d: path_data,
-                        fill: Some(Color::from(color)),
-                        stroke: Color::from(color),
-                        stroke_width: 0.5,
-                        opacity: Some(rp.cloud_alpha),
-                        stroke_dasharray: None,
-                    })));
+                    let cloud_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(color) };
+                    path_bw(scene, computed, i, color, path_data, cloud_stroke, 0.5, Some(rp.cloud_alpha), None);
                 }
             }
         }
@@ -6069,16 +6053,7 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
             let yhigh = computed.map_y(upper_w);
 
             // IQR box
-            scene.add(Primitive::Rect {
-                x: x0,
-                y: yq3.min(yq1),
-                width: (x1 - x0).abs(),
-                height: (yq1 - yq3).abs(),
-                fill: Color::from(color),
-                stroke: None,
-                stroke_width: None,
-                opacity: None,
-            });
+            rect_bw(scene, computed, i, color, x0, yq3.min(yq1), (x1 - x0).abs(), (yq1 - yq3).abs(), None, None, None);
 
             // Median line (white so it stands out on the coloured box)
             scene.add(Primitive::Line {
@@ -6091,15 +6066,20 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                 stroke_dasharray: None,
             });
 
+            let (whisker_stroke, whisker_dash) = if computed.bw_mode {
+                (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+            } else {
+                (Color::from(color), None)
+            };
             // Lower whisker
             scene.add(Primitive::Line {
                 x1: xmid,
                 y1: ylow,
                 x2: xmid,
                 y2: yq1,
-                stroke: Color::from(color),
+                stroke: whisker_stroke.clone(),
                 stroke_width: 1.0,
-                stroke_dasharray: None,
+                stroke_dasharray: whisker_dash.clone(),
             });
             // Upper whisker
             scene.add(Primitive::Line {
@@ -6107,9 +6087,9 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                 y1: yq3,
                 x2: xmid,
                 y2: yhigh,
-                stroke: Color::from(color),
+                stroke: whisker_stroke.clone(),
                 stroke_width: 1.0,
-                stroke_dasharray: None,
+                stroke_dasharray: whisker_dash.clone(),
             });
 
             // Whisker caps
@@ -6120,9 +6100,9 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                     y1: y,
                     x2: xmid + cap_half,
                     y2: y,
-                    stroke: Color::from(color),
+                    stroke: whisker_stroke.clone(),
                     stroke_width: 1.0,
-                    stroke_dasharray: None,
+                    stroke_dasharray: whisker_dash.clone(),
                 });
             }
         }
@@ -12799,14 +12779,7 @@ fn add_chord(chord: &ChordPlot, scene: &mut Scene, computed: &ComputedLayout) {
              L {x2i} {y2i} A {inner_r} {inner_r} 0 {laf} 0 {x1i} {y1i} Z"
         );
         let color = node_color(i);
-        scene.add(Primitive::Path(Box::new(PathData {
-            d,
-            fill: Some(color.into()),
-            stroke: "none".into(),
-            stroke_width: 0.0,
-            opacity: None,
-            stroke_dasharray: None,
-        })));
+        path_bw(scene, computed, i, &color, d, Color::None, 0.0, None, None);
     }
 
     // ── Draw labels ──
@@ -12907,14 +12880,7 @@ fn add_chord(chord: &ChordPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     "M {x1} {y1} A {inner_r} {inner_r} 0 {laf} 1 {x2} {y2} \
                      C {cx} {cy} {cx} {cy} {x1} {y1} Z"
                 );
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d,
-                    fill: Some(node_color(i).into()),
-                    stroke: "none".into(),
-                    stroke_width: 0.0,
-                    opacity: Some(chord.ribbon_opacity),
-                    stroke_dasharray: None,
-                })));
+                path_bw(scene, computed, i, &node_color(i), d, Color::None, 0.0, Some(chord.ribbon_opacity), None);
                 continue;
             }
 
@@ -12960,14 +12926,7 @@ fn add_chord(chord: &ChordPlot, scene: &mut Scene, computed: &ComputedLayout) {
                  C {cx} {cy} {cx} {cy} {xi1} {yi1} Z"
             );
 
-            scene.add(Primitive::Path(Box::new(PathData {
-                d,
-                fill: Some(node_color(i).into()),
-                stroke: "none".into(),
-                stroke_width: 0.0,
-                opacity: Some(chord.ribbon_opacity),
-                stroke_dasharray: None,
-            })));
+            path_bw(scene, computed, i, &node_color(i), d, Color::None, 0.0, Some(chord.ribbon_opacity), None);
         }
     }
 }
@@ -13311,17 +13270,28 @@ fn add_sankey(sankey: &SankeyPlot, scene: &mut Scene, computed: &ComputedLayout)
 
     // ── Step 5: Draw node rectangles (labels deferred to Step 7, after ribbons) ──
     let max_col = col.iter().copied().max().unwrap_or(0);
+    // In BW mode, links share their source node's pattern (see Step 6), so
+    // the node rect and its own outgoing ribbon can be visually identical —
+    // a dark outline keeps the node's rectangle boundary legible against them.
+    let (node_stroke, node_stroke_width) = if computed.bw_mode {
+        (Some(Color::from("#1a1a1a")), Some(2.0))
+    } else {
+        (None, None)
+    };
     for i in 0..n {
-        scene.add(Primitive::Rect {
-            x: node_x[i],
-            y: node_y[i],
-            width: sankey.node_width,
-            height: node_h[i].max(1.0),
-            fill: node_color(i).into(),
-            stroke: None,
-            stroke_width: None,
-            opacity: None,
-        });
+        rect_bw(
+            scene,
+            computed,
+            i,
+            &node_color(i),
+            node_x[i],
+            node_y[i],
+            sankey.node_width,
+            node_h[i].max(1.0),
+            node_stroke.clone(),
+            node_stroke_width,
+            None,
+        );
     }
 
     // ── Step 6: Draw ribbons ──
@@ -13380,28 +13350,36 @@ fn add_sankey(sankey: &SankeyPlot, scene: &mut Scene, computed: &ComputedLayout)
              C {cx_mid} {y_tgt_bot} {cx_mid} {y_src_bot} {x_src} {y_src_bot} Z"
         );
 
-        let fill = match &sankey.link_color {
-            SankeyLinkColor::Source => node_color(src),
-            SankeyLinkColor::PerLink => link.color.clone().unwrap_or_else(|| node_color(src)),
-            SankeyLinkColor::Gradient => {
-                let grad_id = format!("grad_{link_i}");
-                let src_color = node_color(src);
-                let tgt_color = node_color(tgt);
-                scene.defs.push(format!(
-                    r#"<linearGradient id="{grad_id}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="{src_color}"/><stop offset="100%" stop-color="{tgt_color}"/></linearGradient>"#
-                ));
-                format!("url(#{grad_id})")
-            }
-        };
+        if computed.bw_mode {
+            // Gradients don't translate to hatch patterns, and PerLink colors
+            // aren't a stable small index — in BW mode every link mode
+            // collapses to "pattern by source node", the most meaningful
+            // single category for a Sankey diagram's flows.
+            path_bw(scene, computed, src, &node_color(src), d, Color::None, 0.0, Some(sankey.link_opacity), None);
+        } else {
+            let fill = match &sankey.link_color {
+                SankeyLinkColor::Source => node_color(src),
+                SankeyLinkColor::PerLink => link.color.clone().unwrap_or_else(|| node_color(src)),
+                SankeyLinkColor::Gradient => {
+                    let grad_id = format!("grad_{link_i}");
+                    let src_color = node_color(src);
+                    let tgt_color = node_color(tgt);
+                    scene.defs.push(format!(
+                        r#"<linearGradient id="{grad_id}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="{src_color}"/><stop offset="100%" stop-color="{tgt_color}"/></linearGradient>"#
+                    ));
+                    format!("url(#{grad_id})")
+                }
+            };
 
-        scene.add(Primitive::Path(Box::new(PathData {
-            d,
-            fill: Some(fill.into()),
-            stroke: "none".into(),
-            stroke_width: 0.0,
-            opacity: Some(sankey.link_opacity),
-            stroke_dasharray: None,
-        })));
+            scene.add(Primitive::Path(Box::new(PathData {
+                d,
+                fill: Some(fill.into()),
+                stroke: "none".into(),
+                stroke_width: 0.0,
+                opacity: Some(sankey.link_opacity),
+                stroke_dasharray: None,
+            })));
+        }
 
         // ── Flow label ──
         if sankey.flow_labels || sankey.flow_percent {
@@ -15455,17 +15433,19 @@ fn add_synteny(synteny: &SyntenyPlot, scene: &mut Scene, computed: &ComputedLayo
             )
         };
 
-        scene.elements.push(Primitive::Path(Box::new(PathData {
-            d,
-            fill: Some(Color::from(&color)),
-            stroke: color.into(),
-            stroke_width: 0.3,
-            opacity: Some(synteny.block_opacity),
-            stroke_dasharray: None,
-        })));
+        let ribbon_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&color) };
+        path_bw(scene, computed, block_idx, &color, d, ribbon_stroke, 0.3, Some(synteny.block_opacity), None);
     }
 
     // Step 2 — Draw sequence bars (on top of ribbons)
+    // In BW mode, ribbons can share a bar's own pattern (the block index and
+    // the sequence index are independent, so they sometimes coincide), so a
+    // dark outline keeps each bar's rectangle boundary legible against them.
+    let (bar_stroke, bar_stroke_width) = if computed.bw_mode {
+        (Some(Color::from("#1a1a1a")), Some(2.0))
+    } else {
+        (None, None)
+    };
     for (i, seq) in synteny.sequences.iter().enumerate() {
         let bar_color = seq.color.clone().unwrap_or_else(|| "#555555".to_string());
         let x_right = if synteny.shared_scale && global_max > 0.0 {
@@ -15473,16 +15453,19 @@ fn add_synteny(synteny: &SyntenyPlot, scene: &mut Scene, computed: &ComputedLayo
         } else {
             bar_x_right
         };
-        scene.elements.push(Primitive::Rect {
-            x: bar_x_left,
-            y: bar_top[i],
-            width: (x_right - bar_x_left).max(0.0),
-            height: bar_h,
-            fill: bar_color.into(),
-            stroke: None,
-            stroke_width: None,
-            opacity: None,
-        });
+        rect_bw(
+            scene,
+            computed,
+            i,
+            &bar_color,
+            bar_x_left,
+            bar_top[i],
+            (x_right - bar_x_left).max(0.0),
+            bar_h,
+            bar_stroke.clone(),
+            bar_stroke_width,
+            None,
+        );
     }
 
     // Step 3 — Bar labels (right-anchored, flush to left of bars)
@@ -16117,16 +16100,19 @@ fn joint_draw_top_marginal(
                     let px0 = scatter_computed.map_x(*b0);
                     let px1 = scatter_computed.map_x(*b1);
                     let bar_h = (*count as f64 / max_c) * usable_h;
-                    scene.add(Primitive::Rect {
-                        x: px0 + 0.5,
-                        y: panel_bottom - bar_h,
-                        width: (px1 - px0 - 1.0).max(1.0),
-                        height: bar_h,
-                        fill: Color::from(&*color_str),
-                        stroke: None,
-                        stroke_width: None,
-                        opacity: Some(jp.marginal_alpha),
-                    });
+                    rect_bw(
+                        scene,
+                        scatter_computed,
+                        gi,
+                        &color_str,
+                        px0 + 0.5,
+                        panel_bottom - bar_h,
+                        (px1 - px0 - 1.0).max(1.0),
+                        bar_h,
+                        None,
+                        None,
+                        Some(jp.marginal_alpha),
+                    );
                 }
             }
             MarginalType::Density => {
@@ -16157,14 +16143,8 @@ fn joint_draw_top_marginal(
                     path.push_str(&format!(" L {px:.1} {py:.1}"));
                 }
                 path.push_str(&format!(" L {last_x:.1} {panel_bottom:.1} Z"));
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d: path,
-                    fill: Some(Color::from(&*color_str)),
-                    stroke: Color::from(&*color_str),
-                    stroke_width: 1.5,
-                    opacity: Some(jp.marginal_alpha),
-                    stroke_dasharray: None,
-                })));
+                let stroke = if scatter_computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&*color_str) };
+                path_bw(scene, scatter_computed, gi, &color_str, path, stroke, 1.5, Some(jp.marginal_alpha), None);
             }
         }
     }
@@ -16224,16 +16204,19 @@ fn joint_draw_right_marginal(
                     let py_top = scatter_offset_y + scatter_computed.map_y(*b1);
                     let bar_w = (*count as f64 / max_c) * usable_w;
                     let bar_h = (py_bottom - py_top - 1.0).max(1.0);
-                    scene.add(Primitive::Rect {
-                        x: panel_left,
-                        y: py_top + 0.5,
-                        width: bar_w,
-                        height: bar_h,
-                        fill: Color::from(&*color_str),
-                        stroke: None,
-                        stroke_width: None,
-                        opacity: Some(jp.marginal_alpha),
-                    });
+                    rect_bw(
+                        scene,
+                        scatter_computed,
+                        gi,
+                        &color_str,
+                        panel_left,
+                        py_top + 0.5,
+                        bar_w,
+                        bar_h,
+                        None,
+                        None,
+                        Some(jp.marginal_alpha),
+                    );
                 }
             }
             MarginalType::Density => {
@@ -16264,14 +16247,8 @@ fn joint_draw_right_marginal(
                     path.push_str(&format!(" L {px:.1} {py:.1}"));
                 }
                 path.push_str(&format!(" L {panel_left:.1} {last_py:.1} Z"));
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d: path,
-                    fill: Some(Color::from(&*color_str)),
-                    stroke: Color::from(&*color_str),
-                    stroke_width: 1.5,
-                    opacity: Some(jp.marginal_alpha),
-                    stroke_dasharray: None,
-                })));
+                let stroke = if scatter_computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&*color_str) };
+                path_bw(scene, scatter_computed, gi, &color_str, path, stroke, 1.5, Some(jp.marginal_alpha), None);
             }
         }
     }
@@ -16391,6 +16368,9 @@ fn add_jointplot(
             .with_width(scatter_canvas_w)
             .with_height(scatter_canvas_h)
             .with_theme(computed.theme.clone());
+        if computed.bw_mode {
+            sl = sl.with_bw_mode();
+        }
         if draw_scatter_labels {
             if let Some(ref xl) = jp.x_label {
                 sl = sl.with_x_label(xl.clone());
@@ -16486,7 +16466,7 @@ fn add_jointplot(
             let bs = scatter_computed.body_size as f64;
             let mut cur_y = scatter_offset_y + scatter_computed.margin_top + 10.0;
 
-            let entries: Vec<(String, String)> = jp
+            let entries: Vec<(String, String, usize)> = jp
                 .groups
                 .iter()
                 .enumerate()
@@ -16497,7 +16477,7 @@ fn add_jointplot(
                         } else {
                             g.scatter.color.clone()
                         };
-                        (lbl.clone(), col)
+                        (lbl.clone(), col, gi)
                     })
                 })
                 .collect();
@@ -16530,18 +16510,23 @@ fn add_jointplot(
                     stroke_width: Some(1.0),
                     opacity: None,
                 });
-                for (lbl, col) in entries {
+                for (lbl, col, gi) in entries {
                     // Top-align the swatch in its row and centre the label on it.
                     let swatch_cy = cur_y + swatch_size / 2.0;
-                    scene.add(Primitive::Circle {
-                        cx: legend_x + 5.0,
-                        cy: swatch_cy,
-                        r,
-                        fill: Color::from(&*col),
-                        fill_opacity: None,
-                        stroke: None,
-                        stroke_width: None,
-                    });
+                    if scatter_computed.bw_mode {
+                        let marker = crate::render::bw::bw_shape(gi);
+                        draw_marker(scene, marker, legend_x + 5.0, swatch_cy, r, "#1a1a1a", None, None, None);
+                    } else {
+                        scene.add(Primitive::Circle {
+                            cx: legend_x + 5.0,
+                            cy: swatch_cy,
+                            r,
+                            fill: Color::from(&*col),
+                            fill_opacity: None,
+                            stroke: None,
+                            stroke_width: None,
+                        });
+                    }
                     scene.add(Primitive::Text {
                         x: legend_x + 18.0,
                         y: swatch_cy + center_offset(bs, FontStyle::Regular),
@@ -16609,10 +16594,13 @@ pub fn render_jointplot(jp: crate::plot::jointplot::JointPlot, layout: Layout) -
     }
 
     // Build a ComputedLayout using width/height so add_jointplot can access theme etc.
-    let stub_layout = Layout::new((0.0, 1.0), (0.0, 1.0))
+    let mut stub_layout = Layout::new((0.0, 1.0), (0.0, 1.0))
         .with_width(width)
         .with_height(height)
         .with_theme(layout.theme.clone());
+    if layout.bw_mode {
+        stub_layout = stub_layout.with_bw_mode();
+    }
     let computed = ComputedLayout::from_layout(&stub_layout);
 
     add_jointplot(
@@ -16935,6 +16923,16 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
         }
         fallback[i % fallback.len()].to_string()
     };
+    // BW pattern index: nodes sharing a group share one pattern; ungrouped
+    // nodes fall back to their own index (mirrors get_color's lookup order).
+    let bw_idx = |i: usize| -> usize {
+        if let Some(ref g) = net.nodes[i].group {
+            if let Some(pos) = group_map.iter().position(|(gn, _)| gn == g) {
+                return pos;
+            }
+        }
+        i
+    };
 
     // Weight range for mapping to stroke width.
     let (w_min, w_max) = if net.edges.is_empty() {
@@ -16987,7 +16985,11 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
             min_stroke + (edge.weight - w_min) / w_range * (max_stroke - min_stroke)
         };
         let opacity = net.edge_opacity;
-        let edge_color = edge.color.clone().unwrap_or_else(|| "#888888".to_string());
+        let edge_color = if computed.bw_mode {
+            "#1a1a1a".to_string()
+        } else {
+            edge.color.clone().unwrap_or_else(|| "#888888".to_string())
+        };
 
         // Wrap line + arrowhead in a group so opacity applies uniformly.
         scene.add(Primitive::GroupStart {
@@ -17220,27 +17222,56 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
         let color = get_color(i);
         match node.shape {
             NodeShape::Circle => {
-                scene.add(Primitive::Circle {
-                    cx: round2(px[i]),
-                    cy: round2(py[i]),
-                    r,
-                    fill: color.into(),
-                    fill_opacity: None,
-                    stroke: Some("#ffffff".into()),
-                    stroke_width: Some(1.5),
-                });
+                if computed.bw_mode {
+                    use crate::render::bw::{bw_fill, register_pattern};
+                    let (grey, pattern) = bw_fill(bw_idx(i));
+                    scene.add(Primitive::Circle {
+                        cx: round2(px[i]),
+                        cy: round2(py[i]),
+                        r,
+                        fill: Color::from(grey),
+                        fill_opacity: None,
+                        stroke: Some("#ffffff".into()),
+                        stroke_width: Some(1.5),
+                    });
+                    let pat_url = register_pattern(scene, pattern);
+                    if !pat_url.is_empty() {
+                        scene.add(Primitive::Circle {
+                            cx: round2(px[i]),
+                            cy: round2(py[i]),
+                            r,
+                            fill: Color::from(pat_url.as_str()),
+                            fill_opacity: None,
+                            stroke: None,
+                            stroke_width: None,
+                        });
+                    }
+                } else {
+                    scene.add(Primitive::Circle {
+                        cx: round2(px[i]),
+                        cy: round2(py[i]),
+                        r,
+                        fill: color.into(),
+                        fill_opacity: None,
+                        stroke: Some("#ffffff".into()),
+                        stroke_width: Some(1.5),
+                    });
+                }
             }
             NodeShape::Square => {
-                scene.add(Primitive::Rect {
-                    x: round2(px[i] - r),
-                    y: round2(py[i] - r),
-                    width: r * 2.0,
-                    height: r * 2.0,
-                    fill: color.into(),
-                    stroke: Some("#ffffff".into()),
-                    stroke_width: Some(1.5),
-                    opacity: None,
-                });
+                rect_bw(
+                    scene,
+                    computed,
+                    bw_idx(i),
+                    &color,
+                    round2(px[i] - r),
+                    round2(py[i] - r),
+                    r * 2.0,
+                    r * 2.0,
+                    Some(Color::from("#ffffff")),
+                    Some(1.5),
+                    None,
+                );
             }
             NodeShape::Diamond => {
                 let d = format!(
@@ -17254,14 +17285,7 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
                     px[i] - r * 1.2,
                     py[i],
                 );
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d,
-                    fill: Some(color.into()),
-                    stroke: "#ffffff".into(),
-                    stroke_width: 1.5,
-                    opacity: None,
-                    stroke_dasharray: None,
-                })));
+                path_bw(scene, computed, bw_idx(i), &color, d, Color::from("#ffffff"), 1.5, None, None);
             }
             NodeShape::Triangle => {
                 let h = r * 1.4;
@@ -17274,14 +17298,7 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
                     px[i] - h * 0.87,
                     py[i] + h * 0.5,
                 );
-                scene.add(Primitive::Path(Box::new(PathData {
-                    d,
-                    fill: Some(color.into()),
-                    stroke: "#ffffff".into(),
-                    stroke_width: 1.5,
-                    opacity: None,
-                    stroke_dasharray: None,
-                })));
+                path_bw(scene, computed, bw_idx(i), &color, d, Color::from("#ffffff"), 1.5, None, None);
             }
         }
     }
