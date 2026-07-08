@@ -48,3 +48,35 @@ jobs:
 
       - name: Clippy (CLI + all backends)
         run: cargo ci-clippy
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: cargo ci-fmt
+
+  msrv:
+    name: MSRV build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build library (no features) at MSRV
+        run: cargo +${{ steps.msrv.outputs.version }} build
+
+      - name: Build library (CLI + all backends) at MSRV
+        run: cargo +${{ steps.msrv.outputs.version }} build --features cli,full
