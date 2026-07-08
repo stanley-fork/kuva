@@ -168,6 +168,33 @@ impl XLabelPlacer {
     }
 }
 
+/// Extend a major-tick list with one "phantom" major just beyond each end so that
+/// [`render_utils::generate_minor_ticks`] also fills the leading/trailing partial
+/// intervals when the axis range doesn't stop on a major tick. Minors that fall
+/// outside the axis range are dropped at draw time. Phantom spacing follows the
+/// tick pattern — geometric for log axes (the decade ratio), arithmetic otherwise
+/// — so log decades keep their 2..9 spacing past the last power of ten.
+fn majors_with_phantom_ends(ticks: &[f64], log: bool) -> Vec<f64> {
+    if ticks.len() < 2 {
+        return ticks.to_vec();
+    }
+    let n = ticks.len();
+    let (lo, hi) = if log {
+        let ratio_lo = ticks[1] / ticks[0];
+        let ratio_hi = ticks[n - 1] / ticks[n - 2];
+        (ticks[0] / ratio_lo, ticks[n - 1] * ratio_hi)
+    } else {
+        let step_lo = ticks[1] - ticks[0];
+        let step_hi = ticks[n - 1] - ticks[n - 2];
+        (ticks[0] - step_lo, ticks[n - 1] + step_hi)
+    };
+    let mut out = Vec::with_capacity(n + 2);
+    out.push(lo);
+    out.extend_from_slice(ticks);
+    out.push(hi);
+    out
+}
+
 pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout) {
     let map_x = |x| computed.map_x(x);
     let map_y = |y| computed.map_y(y);
@@ -201,12 +228,21 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
         render_utils::generate_ticks(computed.y_range.0, computed.y_range.1, computed.y_ticks)
     };
 
-    let x_minor = computed
-        .minor_ticks
-        .map(|n| render_utils::generate_minor_ticks(&x_ticks, n));
-    let y_minor = computed
-        .minor_ticks
-        .map(|n| render_utils::generate_minor_ticks(&y_ticks, n));
+    // Generate minors as if one more major existed just beyond each end so the
+    // bands past the outer majors get filled, then drop any that fall outside the
+    // axis range. The filtered lists feed both the gridlines and the tick marks.
+    let x_minor = computed.minor_ticks.map(|n| {
+        render_utils::generate_minor_ticks(&majors_with_phantom_ends(&x_ticks, layout.log_x), n)
+            .into_iter()
+            .filter(|t| *t >= computed.x_range.0 && *t <= computed.x_range.1)
+            .collect::<Vec<f64>>()
+    });
+    let y_minor = computed.minor_ticks.map(|n| {
+        render_utils::generate_minor_ticks(&majors_with_phantom_ends(&y_ticks, layout.log_y), n)
+            .into_iter()
+            .filter(|t| *t >= computed.y_range.0 && *t <= computed.y_range.1)
+            .collect::<Vec<f64>>()
+    });
 
     // Draw minor gridlines (before major so major renders on top)
     if computed.show_minor_grid && layout.x_categories.is_none() {
