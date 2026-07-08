@@ -1113,6 +1113,36 @@ check "bw upset" \
     "$BIN" upset "$DATA/upset.tsv" --bw \
         --title "BW UpSet"
 
+# ── minor gridlines ───────────────────────────────────────────────────────────
+# Minor gridlines must cover the WHOLE plot area, including the band beyond the
+# last major tick when the axis range doesn't end on one. Data is generated inline
+# (points along a curve) rather than committed. Two cases, because linear and log
+# axes take different minor-tick code paths:
+#   * linear: range -3..24 (X) / 0..48 (Y); majors every 5 / 10; minors every 1 / 2.
+#             X starts below its first major (0) and neither axis ends on a major,
+#             so both the leading (-3..0 on X) and trailing (20..24 X, 40..48 Y)
+#             bands must fill.
+#   * log Y:  range 1-3000 with --minor-ticks 9, so each decade gets the standard
+#             2..9 log minors (linear subdivision by 9 lands on them); the partial
+#             top decade (1000-3000) must be covered too.
+MINOR_LIN_DATA="${TMPDIR:-/tmp}/kuva_minorgrid_lin_$$.tsv"
+{ printf 'x\ty\n'; for x in $(seq 1 24); do printf '%s\t%s\n' "$x" "$((x * 2))"; done; } > "$MINOR_LIN_DATA"
+check "minor gridlines linear coverage" \
+    "$BIN" scatter "$MINOR_LIN_DATA" --x x --y y \
+        --x-min -3 --x-max 24 --y-min 0 --y-max 48 \
+        --x-tick-step 5 --y-tick-step 10 --minor-ticks 5 --minor-grid \
+        --title "Minor Gridlines (linear)" --x-label "X" --y-label "Y"
+rm -f "$MINOR_LIN_DATA"
+
+MINOR_LOG_DATA="${TMPDIR:-/tmp}/kuva_minorgrid_log_$$.tsv"
+{ printf 'x\ty\n'; for x in $(seq 1 24); do printf '%s\t%s\n' "$x" "$((x * x * 3))"; done; } > "$MINOR_LOG_DATA"
+check "minor gridlines log coverage" \
+    "$BIN" scatter "$MINOR_LOG_DATA" --x x --y y \
+        --log-y --y-min 1 --y-max 3000 --x-min 0 --x-max 25 --x-tick-step 5 \
+        --minor-ticks 9 --minor-grid \
+        --title "Minor Gridlines (log Y)" --x-label "X" --y-label "Y (log)"
+rm -f "$MINOR_LOG_DATA"
+
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
