@@ -18,6 +18,7 @@ use std::sync::OnceLock;
 
 use fontdue::{Font, FontSettings, Metrics};
 
+use crate::plot::FillPattern;
 use crate::render::color::Color as KColor;
 use crate::render::render::{Primitive, Scene, TextAnchor};
 
@@ -151,6 +152,49 @@ impl Canvas {
                 let xc = partial_cov(x, x + w, px);
                 if xc > 0.0 {
                     self.blend(px, py, c, xc * yc);
+                }
+            }
+        }
+    }
+
+    /// Like [`Canvas::fill_rect`], but rasterizes a BW-mode hatch pattern
+    /// instead of a flat color. `x, y, w, h` are screen-space (already scaled
+    /// and translated); `tx, ty, s` invert that transform per-pixel so the
+    /// pattern is sampled in the same local coordinate space the SVG backend's
+    /// `patternUnits="userSpaceOnUse"` tile would use.
+    #[allow(clippy::too_many_arguments)]
+    fn fill_rect_patterned(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        tx: f32,
+        ty: f32,
+        s: f32,
+        pattern: FillPattern,
+        clip: Clip,
+    ) {
+        let x0 = (x.floor() as i32).max(clip.x0);
+        let y0 = (y.floor() as i32).max(clip.y0);
+        let x1 = ((x + w).ceil() as i32).min(clip.x1);
+        let y1 = ((y + h).ceil() as i32).min(clip.y1);
+        let black = Rgba::opaque(0, 0, 0);
+        for py in y0..y1 {
+            let yc = partial_cov(y, y + h, py);
+            if yc <= 0.0 {
+                continue;
+            }
+            let local_y = py as f32 / s - ty;
+            for px in x0..x1 {
+                let xc = partial_cov(x, x + w, px);
+                if xc <= 0.0 {
+                    continue;
+                }
+                let local_x = px as f32 / s - tx;
+                let hatch = pattern.hatch_coverage(local_x, local_y);
+                if hatch > 0.0 {
+                    self.blend(px, py, black, xc * yc * hatch);
                 }
             }
         }
@@ -592,8 +636,36 @@ impl Canvas {
     // even-odd fill.
 
     fn fill_polygon(&mut self, pts: &[(f32, f32)], c: Rgba, clip: Clip) {
+        for (span_start, span_end, py) in Self::polygon_spans(pts, clip) {
+            self.fill_span_aa(span_start, span_end, py, c, clip);
+        }
+    }
+
+    /// Like [`Canvas::fill_polygon`], but rasterizes a BW-mode hatch pattern
+    /// instead of a flat color. `tx, ty, s` invert the screen-space transform
+    /// per-pixel so the pattern samples in the same local coordinate space an
+    /// SVG `patternUnits="userSpaceOnUse"` tile would use.
+    fn fill_polygon_patterned(
+        &mut self,
+        pts: &[(f32, f32)],
+        tx: f32,
+        ty: f32,
+        s: f32,
+        pattern: FillPattern,
+        clip: Clip,
+    ) {
+        for (span_start, span_end, py) in Self::polygon_spans(pts, clip) {
+            self.fill_span_aa_patterned(span_start, span_end, py, tx, ty, s, pattern, clip);
+        }
+    }
+
+    /// AET scanline fill (nonzero winding rule): computes the filled
+    /// `(span_start, span_end, row)` spans of `pts` without touching pixels,
+    /// so callers can fill them with either a flat color or a pattern.
+    fn polygon_spans(pts: &[(f32, f32)], clip: Clip) -> Vec<(f32, f32, i32)> {
+        let mut spans = Vec::new();
         if pts.len() < 3 {
-            return;
+            return spans;
         }
 
         let y_lo = pts.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
@@ -601,7 +673,7 @@ impl Canvas {
         let scan_y0 = (y_lo.floor() as i32).max(clip.y0);
         let scan_y1 = (y_hi.ceil() as i32).min(clip.y1 - 1);
         if scan_y0 > scan_y1 {
-            return;
+            return spans;
         }
 
         struct AetEdge {
@@ -676,7 +748,7 @@ impl Canvas {
                     if !was_inside && is_inside {
                         span_start = x;
                     } else if was_inside && !is_inside {
-                        self.fill_span_aa(span_start, x, py, c, clip);
+                        spans.push((span_start, x, py));
                     }
                 }
             }
@@ -685,6 +757,8 @@ impl Canvas {
                 e.x += e.inv_slope;
             }
         }
+
+        spans
     }
 
     /// Fill the horizontal span [x_lo, x_hi] at scanline row `py`.
@@ -719,6 +793,62 @@ impl Canvas {
         let right_cov = x_hi - ix_hi as f32;
         if right_cov > 0.0 {
             self.blend_c(ix_hi, py, c, right_cov.min(1.0), clip);
+        }
+    }
+
+    /// Like [`Canvas::fill_span_aa`], but samples a BW-mode hatch pattern per
+    /// pixel instead of blending a flat color. See [`Canvas::fill_rect_patterned`]
+    /// for the `tx, ty, s` local-coordinate inversion.
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    fn fill_span_aa_patterned(
+        &mut self,
+        x_lo: f32,
+        x_hi: f32,
+        py: i32,
+        tx: f32,
+        ty: f32,
+        s: f32,
+        pattern: FillPattern,
+        clip: Clip,
+    ) {
+        if x_hi <= x_lo {
+            return;
+        }
+        let black = Rgba::opaque(0, 0, 0);
+        let local_y = py as f32 / s - ty;
+
+        let ix_lo = x_lo.floor() as i32;
+        let ix_hi = x_hi.floor() as i32;
+        let blend_hatch = |canvas: &mut Self, px: i32, edge_cov: f32| {
+            let local_x = px as f32 / s - tx;
+            let hatch = pattern.hatch_coverage(local_x, local_y);
+            if hatch > 0.0 {
+                canvas.blend_c(px, py, black, edge_cov * hatch, clip);
+            }
+        };
+
+        if ix_lo == ix_hi {
+            let cov = (x_hi - x_lo).min(1.0);
+            blend_hatch(self, ix_lo, cov);
+            return;
+        }
+
+        // Left partial pixel: how much of [ix_lo, ix_lo+1) is right of x_lo
+        let left_cov = ((ix_lo + 1) as f32 - x_lo).min(1.0);
+        blend_hatch(self, ix_lo, left_cov);
+
+        // Interior
+        let int_lo = (ix_lo + 1).max(clip.x0);
+        let int_hi = ix_hi.min(clip.x1);
+        for px in int_lo..int_hi {
+            blend_hatch(self, px, 1.0);
+        }
+
+        // Right partial pixel: how much of [ix_hi, ix_hi+1) is left of x_hi
+        let right_cov = x_hi - ix_hi as f32;
+        if right_cov > 0.0 {
+            blend_hatch(self, ix_hi, right_cov.min(1.0));
         }
     }
 
@@ -1506,6 +1636,20 @@ fn css_to_rgba(s: &str) -> Option<Rgba> {
     kcolor_to_rgba(&KColor::from(s))
 }
 
+/// If `c` is a `fill="url(#kuva-fp-...)"` reference to one of `bw.rs`'s hatch
+/// patterns, returns the pattern. The raster backend can't resolve an SVG
+/// `<pattern>` paint server, so BW-mode pattern overlays are rasterized
+/// directly via [`FillPattern::hatch_coverage`] instead.
+fn pattern_from_fill(c: &KColor) -> Option<FillPattern> {
+    match c {
+        KColor::Css(s) => {
+            let id = s.strip_prefix("url(#")?.strip_suffix(')')?;
+            FillPattern::from_id(id)
+        }
+        _ => None,
+    }
+}
+
 // ── Transform stack helper ────────────────────────────────────────────────────
 
 fn parse_translate(t: &str) -> (f32, f32) {
@@ -1657,6 +1801,8 @@ impl RasterBackend {
                             rgba
                         };
                         canvas.fill_rect(fx, fy, fw, fh, rgba, clip);
+                    } else if let Some(pattern) = pattern_from_fill(fill) {
+                        canvas.fill_rect_patterned(fx, fy, fw, fh, tx, ty, s, pattern, clip);
                     }
                     if let Some(sc) = stroke {
                         if let Some(sc_rgba) = kcolor_to_rgba(sc) {
@@ -1822,6 +1968,17 @@ impl RasterBackend {
                             }
                             for sub in &subs {
                                 canvas.fill_polygon(&transform_pts(sub), rgba, clip);
+                            }
+                        } else if let Some(pattern) = pattern_from_fill(fc) {
+                            for sub in &subs {
+                                canvas.fill_polygon_patterned(
+                                    &transform_pts(sub),
+                                    tx,
+                                    ty,
+                                    s,
+                                    pattern,
+                                    clip,
+                                );
                             }
                         }
                     }
