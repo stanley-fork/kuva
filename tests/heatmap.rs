@@ -57,7 +57,10 @@ fn heatmap_value_labels_shrink_to_fit_cells() {
         for i in 1..rows {
             data.push(vec![i as f64, (i * 2) as f64, (i * 3) as f64]);
         }
-        let hm = Heatmap::new().with_data(data).with_values().with_color_map(ColorMap::Viridis);
+        let hm = Heatmap::new()
+            .with_data(data)
+            .with_values()
+            .with_color_map(ColorMap::Viridis);
         let plots = vec![Plot::Heatmap(hm)];
         let layout = Layout::auto_from_plots(&plots).with_height(300.0);
         SvgBackend.render_scene(&render_multiple(plots, layout))
@@ -65,7 +68,10 @@ fn heatmap_value_labels_shrink_to_fit_cells() {
 
     let roomy = value_font_size(&render(3), marker).expect("roomy grid draws the value");
     let dense = value_font_size(&render(30), marker).expect("dense grid draws a shrunken value");
-    assert!(dense < roomy, "value must shrink in shorter cells ({dense} !< {roomy})");
+    assert!(
+        dense < roomy,
+        "value must shrink in shorter cells ({dense} !< {roomy})"
+    );
     assert!(
         value_font_size(&render(70), marker).is_none(),
         "sub-floor cells must drop the value labels rather than overflow"
@@ -87,15 +93,22 @@ fn heatmap_wide_outlier_does_not_blank_every_value() {
         if outlier {
             row[5] = 1_000_000.0;
         }
-        let hm =
-            Heatmap::new().with_data(vec![row]).with_values().with_color_map(ColorMap::Viridis);
+        let hm = Heatmap::new()
+            .with_data(vec![row])
+            .with_values()
+            .with_color_map(ColorMap::Viridis);
         let plots = vec![Plot::Heatmap(hm)];
-        let layout = Layout::auto_from_plots(&plots).with_width(420.0).with_height(140.0);
+        let layout = Layout::auto_from_plots(&plots)
+            .with_width(420.0)
+            .with_height(140.0);
         SvgBackend.render_scene(&render_multiple(plots, layout))
     };
 
     let baseline = count(&render(false), "0.50");
-    assert!(baseline >= 9, "sanity: short values draw without an outlier (got {baseline})");
+    assert!(
+        baseline >= 9,
+        "sanity: short values draw without an outlier (got {baseline})"
+    );
 
     let with = render(true);
     assert!(

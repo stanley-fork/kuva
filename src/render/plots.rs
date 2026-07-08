@@ -1669,7 +1669,12 @@ impl Plot {
                     return None;
                 }
                 let (z_min, z_max) = cp.z_range();
-                colorbar_linear(&cmap_of(&cp.color_map), z_min, z_max, cp.legend_label.clone())
+                colorbar_linear(
+                    &cmap_of(&cp.color_map),
+                    z_min,
+                    z_max,
+                    cp.legend_label.clone(),
+                )
             }
             Plot::Clustermap(cm) => {
                 if cm.data.is_empty() || cm.data.iter().all(|r| r.is_empty()) {

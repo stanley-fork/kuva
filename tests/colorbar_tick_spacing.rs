@@ -19,7 +19,14 @@ fn render_svg(plots: Vec<Plot>, layout: Layout) -> String {
 fn make_hexbin_with_peak(peak_count: usize) -> Vec<Plot> {
     let mut x = vec![2.5_f64; peak_count];
     let mut y = vec![2.5_f64; peak_count];
-    for (sx, sy) in [(0.2, 0.2), (4.8, 0.3), (0.3, 4.7), (4.6, 4.8), (4.9, 2.5), (0.1, 2.6)] {
+    for (sx, sy) in [
+        (0.2, 0.2),
+        (4.8, 0.3),
+        (0.3, 4.7),
+        (4.6, 4.8),
+        (4.9, 2.5),
+        (0.1, 2.6),
+    ] {
         x.push(sx);
         y.push(sy);
     }
@@ -87,7 +94,11 @@ fn test_suppressed_tick_label_still_draws_tick_mark() {
     let layout_300 = Layout::auto_from_plots(&plots_300);
     let svg_300 = render_svg(plots_300, layout_300);
 
-    common::write_test_output("test_outputs/colorbar_tick_mark_suppressed_112.svg", &svg_112).unwrap();
+    common::write_test_output(
+        "test_outputs/colorbar_tick_mark_suppressed_112.svg",
+        &svg_112,
+    )
+    .unwrap();
     common::write_test_output("test_outputs/colorbar_tick_mark_full_300.svg", &svg_300).unwrap();
 
     let line_count_112 = svg_112.matches("<line").count();
@@ -107,7 +118,14 @@ fn make_hexbin_large_range(peak_count: usize) -> Vec<Plot> {
     // produce a bare ">1</text>" that would confuse the colorbar label check.
     let mut x = vec![30.0_f64; peak_count];
     let mut y = vec![30.0_f64; peak_count];
-    for (sx, sy) in [(11.0, 11.0), (49.0, 12.0), (11.0, 48.0), (48.0, 49.0), (49.0, 30.0), (11.0, 29.0)] {
+    for (sx, sy) in [
+        (11.0, 11.0),
+        (49.0, 12.0),
+        (11.0, 48.0),
+        (48.0, 49.0),
+        (49.0, 30.0),
+        (11.0, 29.0),
+    ] {
         x.push(sx);
         y.push(sy);
     }

@@ -405,8 +405,14 @@ fn figure_title_band_and_baseline_scale_with_title_size() {
     // The baseline drops so a 48px title clears its ascenders (~44.5px) instead of
     // clipping at the old fixed y=22, and scales relative to the small title.
     let yb = common::text_y(&big, "TITLEMARK");
-    assert!(yb > 44.0, "title_size 48 baseline {yb:.1} must clear ascenders");
-    assert!(yb > common::text_y(&small, "TITLEMARK"), "baseline must scale with title_size");
+    assert!(
+        yb > 44.0,
+        "title_size 48 baseline {yb:.1} must clear ascenders"
+    );
+    assert!(
+        yb > common::text_y(&small, "TITLEMARK"),
+        "baseline must scale with title_size"
+    );
 }
 
 #[test]
@@ -838,7 +844,10 @@ fn figure_legend_right_top() {
         svg.contains("Alpha") && svg.contains("Beta"),
         "legend entries missing"
     );
-    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01, "right legend expands width");
+    assert!(
+        (svg_dim(&svg, "width") - 1124.12).abs() < 0.01,
+        "right legend expands width"
+    );
     assert_eq!(
         svg_dim(&svg, "height"),
         400.0,
@@ -877,7 +886,10 @@ fn figure_legend_left_top() {
         svg.contains("Alpha") && svg.contains("Beta"),
         "legend entries missing"
     );
-    assert!((svg_dim(&svg, "width") - 1124.12).abs() < 0.01, "left legend expands width");
+    assert!(
+        (svg_dim(&svg, "width") - 1124.12).abs() < 0.01,
+        "left legend expands width"
+    );
     assert_eq!(
         svg_dim(&svg, "height"),
         400.0,

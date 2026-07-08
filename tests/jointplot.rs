@@ -54,7 +54,10 @@ fn test_jointplot_title_baseline_scales_with_title_size() {
         SvgBackend.render_scene(&render_jointplot(jp, layout))
     };
     let big = common::text_y(&build(48), "JPTITLE");
-    assert!(big > 44.0, "title_size 48 baseline {big:.1} must clear ascenders (was 24.5)");
+    assert!(
+        big > 44.0,
+        "title_size 48 baseline {big:.1} must clear ascenders (was 24.5)"
+    );
     assert!(
         big > common::text_y(&build(16), "JPTITLE"),
         "baseline must scale with title_size"

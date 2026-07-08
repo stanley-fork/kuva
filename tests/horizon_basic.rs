@@ -23,7 +23,10 @@ fn text_x(svg: &str, content: &str) -> f64 {
 /// is exactly `content` (used to find the value label drawn after a "+"/"-" sign).
 fn next_text_x(svg: &str, after_content: &str) -> f64 {
     let needle = format!(">{after_content}</text>");
-    let close = svg.find(&needle).unwrap_or_else(|| panic!("no <text> with content {after_content:?}")) + needle.len();
+    let close = svg
+        .find(&needle)
+        .unwrap_or_else(|| panic!("no <text> with content {after_content:?}"))
+        + needle.len();
     let open = svg[close..].find("<text ").expect("a following <text>") + close;
     let tag_start = open + "<text ".len();
     let key = "x=\"";

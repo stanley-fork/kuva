@@ -1,7 +1,7 @@
 pub mod alluvial_order;
-pub mod bw;
 pub mod annotations;
 pub mod axis;
+pub mod bw;
 pub mod color;
 pub mod datetime;
 pub mod figure;

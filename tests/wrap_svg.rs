@@ -463,8 +463,11 @@ fn legend_height_cap_shows_overflow_line() {
     };
     // Find the overflow text element and its x position.
     let marker = out.find(">… (+").expect("overflow text element present");
-    let overflow_text: String =
-        out[marker + 1..].split('<').next().unwrap_or_default().to_string();
+    let overflow_text: String = out[marker + 1..]
+        .split('<')
+        .next()
+        .unwrap_or_default()
+        .to_string();
     let overflow_x: f64 = out[..marker]
         .rfind("x=\"")
         .and_then(|pos| out[pos + 3..].split('"').next())

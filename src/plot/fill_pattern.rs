@@ -37,14 +37,14 @@ impl FillPattern {
     /// Returns an empty string for [`FillPattern::Solid`].
     pub fn id(self) -> &'static str {
         match self {
-            FillPattern::Solid              => "",
-            FillPattern::Horizontal         => "kuva-fp-horiz",
-            FillPattern::Vertical           => "kuva-fp-vert",
-            FillPattern::DiagonalForward    => "kuva-fp-diag-fwd",
-            FillPattern::DiagonalBack       => "kuva-fp-diag-back",
-            FillPattern::Crosshatch         => "kuva-fp-crosshatch",
+            FillPattern::Solid => "",
+            FillPattern::Horizontal => "kuva-fp-horiz",
+            FillPattern::Vertical => "kuva-fp-vert",
+            FillPattern::DiagonalForward => "kuva-fp-diag-fwd",
+            FillPattern::DiagonalBack => "kuva-fp-diag-back",
+            FillPattern::Crosshatch => "kuva-fp-crosshatch",
             FillPattern::DiagonalCrosshatch => "kuva-fp-diag-cross",
-            FillPattern::Dots               => "kuva-fp-dots",
+            FillPattern::Dots => "kuva-fp-dots",
         }
     }
 
@@ -214,7 +214,11 @@ mod tests {
             FillPattern::DiagonalCrosshatch,
             FillPattern::Dots,
         ] {
-            assert_eq!(FillPattern::from_id(p.id()), Some(p), "{p:?} should round-trip through its id");
+            assert_eq!(
+                FillPattern::from_id(p.id()),
+                Some(p),
+                "{p:?} should round-trip through its id"
+            );
         }
     }
 
@@ -264,7 +268,10 @@ mod tests {
         // forward x+y=3 -> off-line (dist 3, max off); back x-y=-1 -> dist 1.
         let fwd = FillPattern::DiagonalForward.hatch_coverage(1.0, 2.0);
         let back = FillPattern::DiagonalBack.hatch_coverage(1.0, 2.0);
-        assert!(fwd < back, "forward ({fwd}) should be farther off-line than back ({back}) at (1,2)");
+        assert!(
+            fwd < back,
+            "forward ({fwd}) should be farther off-line than back ({back}) at (1,2)"
+        );
     }
 
     #[test]

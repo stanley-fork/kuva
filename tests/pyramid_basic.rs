@@ -290,7 +290,12 @@ fn test_pyramid_bar_width() {
                 continue;
             }
             if let Some(hpos) = head.find("height=\"") {
-                if let Ok(v) = head[hpos + 8..].split('"').next().unwrap_or("").parse::<f64>() {
+                if let Ok(v) = head[hpos + 8..]
+                    .split('"')
+                    .next()
+                    .unwrap_or("")
+                    .parse::<f64>()
+                {
                     return v;
                 }
             }

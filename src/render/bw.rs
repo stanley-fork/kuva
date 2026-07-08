@@ -1,5 +1,5 @@
-use crate::plot::{FillPattern, MarkerShape};
 use crate::plot::line::LineStyle;
+use crate::plot::{FillPattern, MarkerShape};
 use crate::render::render::Scene;
 
 /// Grey shade sequence for BW mode.
@@ -50,7 +50,7 @@ const BW_SHAPES: &[MarkerShape] = &[
 /// distinguishable.
 pub fn bw_fill(i: usize) -> (&'static str, FillPattern) {
     let grey = BW_GREYS[i % BW_GREYS.len()];
-    let pat  = BW_PATTERNS[i % BW_PATTERNS.len()];
+    let pat = BW_PATTERNS[i % BW_PATTERNS.len()];
     (grey, pat)
 }
 

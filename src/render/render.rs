@@ -6,9 +6,8 @@ use crate::render::palette::Palette;
 use crate::render::plots::Plot;
 use crate::render::render_utils::{self, linear_regression, pearson_corr, percentile};
 use crate::render::text_metrics::{
-    ascent, cap_height, center_offset, measure_text_width, mean_char_width, text_height,
-    widest_text_width,
-    FontStyle,
+    ascent, cap_height, center_offset, mean_char_width, measure_text_width, text_height,
+    widest_text_width, FontStyle,
 };
 use crate::render::theme::Theme;
 use std::collections::HashMap;
@@ -75,7 +74,16 @@ fn rect_bw(
     } else {
         Color::from(color_str)
     };
-    scene.add(Primitive::Rect { x, y, width: w, height: h, fill, stroke, stroke_width, opacity });
+    scene.add(Primitive::Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+        fill,
+        stroke,
+        stroke_width,
+        opacity,
+    });
     if computed.bw_mode {
         let (_, pattern) = bw_fill(bw_idx);
         let pat_url = register_pattern(scene, pattern);
@@ -655,7 +663,17 @@ fn add_band(band: &BandPlot, scene: &mut Scene, computed: &ComputedLayout, bw_id
         path.push(' ');
     }
     path.push('Z');
-    path_bw(scene, computed, bw_idx, &band.color, path, Color::None, 0.0, Some(band.opacity), None);
+    path_bw(
+        scene,
+        computed,
+        bw_idx,
+        &band.color,
+        path,
+        Color::None,
+        0.0,
+        Some(band.opacity),
+        None,
+    );
 }
 
 fn add_scatter(scatter: &ScatterPlot, scene: &mut Scene, computed: &ComputedLayout, bw_idx: usize) {
@@ -687,7 +705,11 @@ fn add_scatter(scatter: &ScatterPlot, scene: &mut Scene, computed: &ComputedLayo
             .iter()
             .map(|point| (computed.map_x(point.x), computed.map_y(point.y)))
             .unzip();
-        let batch_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(scatter.color.as_str()) };
+        let batch_fill = if computed.bw_mode {
+            Color::from("#1a1a1a")
+        } else {
+            Color::from(scatter.color.as_str())
+        };
         scene.add(Primitive::CircleBatch {
             cx: cx_vec,
             cy: cy_vec,
@@ -746,7 +768,11 @@ fn add_scatter(scatter: &ScatterPlot, scene: &mut Scene, computed: &ComputedLayo
                 });
             }
             let pt_color = if computed.bw_mode { "#1a1a1a" } else { color };
-            let marker = if computed.bw_mode { crate::render::bw::bw_shape(bw_idx) } else { scatter.marker };
+            let marker = if computed.bw_mode {
+                crate::render::bw::bw_shape(bw_idx)
+            } else {
+                scatter.marker
+            };
             draw_marker(
                 scene,
                 marker,
@@ -944,7 +970,17 @@ fn add_line(line: &LinePlot, scene: &mut Scene, computed: &ComputedLayout, bw_id
             fill_d.push_str(&format!(
                 "L {last_x} {baseline_y} L {first_x} {baseline_y} Z"
             ));
-            path_bw(scene, computed, bw_idx, &line.color, fill_d, Color::None, 0.0, Some(line.fill_opacity), None);
+            path_bw(
+                scene,
+                computed,
+                bw_idx,
+                &line.color,
+                fill_d,
+                Color::None,
+                0.0,
+                Some(line.fill_opacity),
+                None,
+            );
         }
 
         let (line_stroke, line_da) = if computed.bw_mode {
@@ -1053,7 +1089,11 @@ fn add_series(series: &SeriesPlot, scene: &mut Scene, computed: &ComputedLayout,
     } else {
         (Color::from(&series.color), None)
     };
-    let ser_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&series.color) };
+    let ser_fill = if computed.bw_mode {
+        Color::from("#1a1a1a")
+    } else {
+        Color::from(&series.color)
+    };
 
     match series.style {
         SeriesStyle::Line => {
@@ -1142,7 +1182,19 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         });
                     }
                     let bw_idx = if group.bars.len() == 1 { i } else { j };
-                    rect_bw(scene, computed, bw_idx, &bar_val.color, x0.min(x1), y0.min(y1), (x1 - x0).abs(), (y1 - y0).abs(), None, None, None);
+                    rect_bw(
+                        scene,
+                        computed,
+                        bw_idx,
+                        &bar_val.color,
+                        x0.min(x1),
+                        y0.min(y1),
+                        (x1 - x0).abs(),
+                        (y1 - y0).abs(),
+                        None,
+                        None,
+                        None,
+                    );
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1181,7 +1233,19 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         });
                     }
                     let bw_idx = if group.bars.len() == 1 { i } else { j };
-                    rect_bw(scene, computed, bw_idx, &bar_val.color, x0.min(x1), y0.min(y1), (x1 - x0).abs(), (y1 - y0).abs(), None, None, None);
+                    rect_bw(
+                        scene,
+                        computed,
+                        bw_idx,
+                        &bar_val.color,
+                        x0.min(x1),
+                        y0.min(y1),
+                        (x1 - x0).abs(),
+                        (y1 - y0).abs(),
+                        None,
+                        None,
+                        None,
+                    );
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1226,7 +1290,19 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         });
                     }
                     let bw_idx = if group.bars.len() == 1 { i } else { j };
-                    rect_bw(scene, computed, bw_idx, &bar_val.color, x0, y1.min(y0), (x1 - x0).abs(), (y0 - y1).abs(), None, None, None);
+                    rect_bw(
+                        scene,
+                        computed,
+                        bw_idx,
+                        &bar_val.color,
+                        x0,
+                        y1.min(y0),
+                        (x1 - x0).abs(),
+                        (y0 - y1).abs(),
+                        None,
+                        None,
+                        None,
+                    );
                     if bar.show_tooltips || computed.interactive {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1276,7 +1352,19 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         });
                     }
                     let bw_idx = if group.bars.len() == 1 { i } else { j };
-                    rect_bw(scene, computed, bw_idx, &bar_val.color, x0, y1.min(y0), (x1 - x0).abs(), (y0 - y1).abs(), None, None, None);
+                    rect_bw(
+                        scene,
+                        computed,
+                        bw_idx,
+                        &bar_val.color,
+                        x0,
+                        y1.min(y0),
+                        (x1 - x0).abs(),
+                        (y0 - y1).abs(),
+                        None,
+                        None,
+                        None,
+                    );
                     if bar.show_tooltips || computed.interactive {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1313,7 +1401,19 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout,
                     extra_attrs: None,
                 });
             }
-            rect_bw(scene, computed, bw_idx, &hist.color, x0, y1.min(y0), (x1 - x0).abs(), (y0 - y1).abs(), None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                bw_idx,
+                &hist.color,
+                x0,
+                y1.min(y0),
+                (x1 - x0).abs(),
+                (y0 - y1).abs(),
+                None,
+                None,
+                None,
+            );
             if tip.is_some() {
                 scene.add(Primitive::GroupEnd);
             }
@@ -1368,7 +1468,19 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout,
                 extra_attrs: None,
             });
         }
-        rect_bw(scene, computed, bw_idx, &hist.color, x0, y1.min(y0), rect_width, rect_height, None, None, None);
+        rect_bw(
+            scene,
+            computed,
+            bw_idx,
+            &hist.color,
+            x0,
+            y1.min(y0),
+            rect_width,
+            rect_height,
+            None,
+            None,
+            None,
+        );
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
         }
@@ -1403,7 +1515,11 @@ fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedL
     //             stroke_width: None,
     //         });
 
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { hist2d.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        hist2d.color_map.clone()
+    };
     for (row_idx, row) in hist2d.bins.iter().enumerate() {
         for (col_idx, &count) in row.iter().enumerate() {
             if count == 0 {
@@ -1496,7 +1612,19 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             let xhigh = computed.map_x(upper_whisker);
             let ymid = computed.map_y(cat);
 
-            rect_bw(scene, computed, i, color, xq1.min(xq3), y0.min(y1), (xq3 - xq1).abs(), (y1 - y0).abs(), None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                i,
+                color,
+                xq1.min(xq3),
+                y0.min(y1),
+                (xq3 - xq1).abs(),
+                (y1 - y0).abs(),
+                None,
+                None,
+                None,
+            );
             // Median: vertical line
             scene.add(Primitive::Line {
                 x1: xmed,
@@ -1549,7 +1677,19 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             let xmid = computed.map_x(cat);
 
             // Box
-            rect_bw(scene, computed, i, color, x0, yq3.min(yq1), (x1 - x0).abs(), (yq1 - yq3).abs(), None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                i,
+                color,
+                x0,
+                yq3.min(yq1),
+                (x1 - x0).abs(),
+                (yq1 - yq3).abs(),
+                None,
+                None,
+                None,
+            );
 
             // Median line
             scene.add(Primitive::Line {
@@ -1711,7 +1851,17 @@ fn add_violin(violin: &ViolinPlot, scene: &mut Scene, computed: &ComputedLayout)
         }
         path_data.push('Z');
 
-        path_bw(scene, computed, i, color, path_data, Color::from(&theme.violin_border), 0.5, None, None);
+        path_bw(
+            scene,
+            computed,
+            i,
+            color,
+            path_data,
+            Color::from(&theme.violin_border),
+            0.5,
+            None,
+            None,
+        );
     }
 
     // Overlay strip/swarm points after violin shapes
@@ -1826,8 +1976,22 @@ fn add_pie(pie: &PiePlot, scene: &mut Scene, computed: &ComputedLayout) {
                 extra_attrs: None,
             });
         }
-        let stroke_col = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&slice.color) };
-        path_bw(scene, computed, slice_i, &slice.color, path_data, stroke_col, 1.0, None, None);
+        let stroke_col = if computed.bw_mode {
+            Color::from("#1a1a1a")
+        } else {
+            Color::from(&slice.color)
+        };
+        path_bw(
+            scene,
+            computed,
+            slice_i,
+            &slice.color,
+            path_data,
+            stroke_col,
+            1.0,
+            None,
+            None,
+        );
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
         }
@@ -1980,7 +2144,11 @@ fn add_heatmap(heatmap: &Heatmap, scene: &mut Scene, computed: &ComputedLayout) 
     }
     let norm = |v: f64| (v - min) / (max - min + f64::EPSILON);
 
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { heatmap.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        heatmap.color_map.clone()
+    };
     let total = rows * cols;
 
     let (x_lo, x_hi) = heatmap.x_range.unwrap_or((0.5, cols as f64 + 0.5));
@@ -2118,8 +2286,8 @@ fn add_heatmap(heatmap: &Heatmap, scene: &mut Scene, computed: &ComputedLayout) 
         // short-valued grid) would shrink the whole grid below the legibility floor, hold
         // the floor and drop only the individual values too wide for their own cell —
         // rather than blanking every label.
-        let widest = widest_text_width(values.iter().map(|s| s.as_str()), base, FontStyle::Regular)
-            .max(1.0);
+        let widest =
+            widest_text_width(values.iter().map(|s| s.as_str()), base, FontStyle::Regular).max(1.0);
         let ideal = base * v_fit.min(cell0.full_w / widest);
         let fs = ideal.max(5.0);
         let drop_overflow = ideal < 5.0;
@@ -2238,23 +2406,24 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
     };
     // BW pattern index per STR template character — `template` is a HashMap
     // with no defined iteration order, so sort keys for a stable index.
-    let template_bw_idx: HashMap<char, usize> = brickplot.template.as_ref().map_or_else(
-        HashMap::new,
-        |template| {
-            let mut keys: Vec<char> = template.keys().copied().collect();
-            keys.sort_unstable();
-            keys.into_iter().enumerate().map(|(i, c)| (c, i)).collect()
-        },
-    );
+    let template_bw_idx: HashMap<char, usize> =
+        brickplot
+            .template
+            .as_ref()
+            .map_or_else(HashMap::new, |template| {
+                let mut keys: Vec<char> = template.keys().copied().collect();
+                keys.sort_unstable();
+                keys.into_iter().enumerate().map(|(i, c)| (c, i)).collect()
+            });
 
     // Helper: draw one brick rect. `yr` is the y-flipped row index for pixel mapping.
     let draw_brick = |scene: &mut Scene,
-                       x_start: f64,
-                       width: f64,
-                       yr: usize,
-                       eff_offset: f64,
-                       bw_idx: usize,
-                       color_str: &str| {
+                      x_start: f64,
+                      width: f64,
+                      yr: usize,
+                      eff_offset: f64,
+                      bw_idx: usize,
+                      color_str: &str| {
         let x0 = computed.map_x(x_start - eff_offset);
         let x1 = computed.map_x(x_start + width - eff_offset);
         let y0 = computed.map_y(yr as f64 + 1.0);
@@ -2317,7 +2486,15 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
                 .get(&value)
                 .expect("BrickPlot value not found in template colormap");
             let bw_idx = *template_bw_idx.get(&value).unwrap_or(&0);
-            draw_brick(scene, x_start, width, yr, eff_offset, bw_idx, color.as_str());
+            draw_brick(
+                scene,
+                x_start,
+                width,
+                yr,
+                eff_offset,
+                bw_idx,
+                color.as_str(),
+            );
             x_pos += width;
         }
 
@@ -2360,7 +2537,8 @@ fn add_brickplot(brickplot: &BrickPlot, scene: &mut Scene, computed: &ComputedLa
                 let y1 = computed.map_y(yr as f64);
                 scene.add(Primitive::Text {
                     x: x0 + ((x1 - x0).abs() / 2.0),
-                    y: y0 + ((y1 - y0).abs() / 2.0)
+                    y: y0
+                        + ((y1 - y0).abs() / 2.0)
                         + center_offset(computed.body_size as f64, FontStyle::Regular),
                     content: format!("{}", value),
                     size: computed.body_size,
@@ -3374,7 +3552,11 @@ fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout
     // distinguish multiple Scatter3D instances in one figure. z-colormap and
     // per-point `colors` schemes still lose their per-point color information
     // in BW mode (there's no clean series index to fall back to per point).
-    let bw_marker = if computed.bw_mode { crate::render::bw::bw_shape(bw_idx) } else { s.marker };
+    let bw_marker = if computed.bw_mode {
+        crate::render::bw::bw_shape(bw_idx)
+    } else {
+        s.marker
+    };
 
     for pp in &projected {
         let i = pp.idx;
@@ -3594,7 +3776,10 @@ fn add_forest(forest: &ForestPlot, scene: &mut Scene, computed: &ComputedLayout)
 
         let color_str = row.color.as_deref().unwrap_or(&forest.color);
         let (line_stroke, line_dash) = if computed.bw_mode {
-            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+            (
+                Color::from("#1a1a1a"),
+                crate::render::bw::bw_dash(i).dasharray(),
+            )
         } else {
             (Color::from(color_str), None)
         };
@@ -3742,7 +3927,8 @@ fn add_lollipop(
             scene.add(Primitive::Text {
                 x: x_left + width / 2.0,
                 // Centre on the *drawn* size (0.75×body), not the parent body_size.
-                y: y_top + height / 2.0
+                y: y_top
+                    + height / 2.0
                     + center_offset(computed.body_size as f64 * 0.75, FontStyle::Regular),
                 content: label.clone(),
                 size: (computed.body_size as f64 * 0.75) as u32,
@@ -3778,7 +3964,10 @@ fn add_lollipop(
 
         // Stem.
         let (stem_stroke, stem_dash) = if computed.bw_mode {
-            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+            (
+                Color::from("#1a1a1a"),
+                crate::render::bw::bw_dash(i).dasharray(),
+            )
         } else {
             (color.clone(), None)
         };
@@ -3949,7 +4138,17 @@ fn add_survival(
             }
             d.push_str(" Z");
 
-            path_bw(scene, computed, i, color_str, d, Color::None, 0.0, Some(sp.ci_alpha), None);
+            path_bw(
+                scene,
+                computed,
+                i,
+                color_str,
+                d,
+                Color::None,
+                0.0,
+                Some(sp.ci_alpha),
+                None,
+            );
         }
 
         // ── Step function line ────────────────────────────────────────────
@@ -3989,7 +4188,11 @@ fn add_survival(
         if sp.show_censoring {
             let ticks = censoring_levels(&group.times, &group.events, &km);
             let half = sp.censoring_size;
-            let tick_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { color.clone() };
+            let tick_stroke = if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                color.clone()
+            };
             for (t, s) in ticks {
                 let cx = computed.map_x(t);
                 let cy = computed.map_y(s);
@@ -4105,7 +4308,17 @@ fn add_roc(roc: &RocPlot, scene: &mut Scene, computed: &ComputedLayout) {
             }
             d.push_str(" Z");
 
-            path_bw(scene, computed, i, color_str, d, Color::None, 0.0, Some(group.ci_alpha), None);
+            path_bw(
+                scene,
+                computed,
+                i,
+                color_str,
+                d,
+                Color::None,
+                0.0,
+                Some(group.ci_alpha),
+                None,
+            );
         }
 
         // ── ROC curve path ────────────────────────────────────────────────────
@@ -4306,7 +4519,11 @@ fn add_slope(sp: &crate::plot::slope::SlopePlot, scene: &mut Scene, computed: &C
         } else {
             (color.clone(), None)
         };
-        let dot_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { color.clone() };
+        let dot_fill = if computed.bw_mode {
+            Color::from("#1a1a1a")
+        } else {
+            color.clone()
+        };
         scene.add(Primitive::Path(Box::new(PathData {
             d,
             fill: None,
@@ -4796,7 +5013,10 @@ fn add_parallel(pp: &ParallelPlot, scene: &mut Scene, computed: &ComputedLayout)
             pp.color.clone()
         };
         let (stroke, stroke_dasharray) = if computed.bw_mode {
-            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(row_group_idx).dasharray())
+            (
+                Color::from("#1a1a1a"),
+                crate::render::bw::bw_dash(row_group_idx).dasharray(),
+            )
         } else {
             (Color::from(color_str.as_str()), None)
         };
@@ -4846,7 +5066,10 @@ fn add_parallel(pp: &ParallelPlot, scene: &mut Scene, computed: &ComputedLayout)
 
             let color_str = pp.color_for_group_idx(gi);
             let (stroke, stroke_dasharray) = if computed.bw_mode {
-                (Color::from("#1a1a1a"), crate::render::bw::bw_dash(gi).dasharray())
+                (
+                    Color::from("#1a1a1a"),
+                    crate::render::bw::bw_dash(gi).dasharray(),
+                )
             } else {
                 (Color::from(color_str.as_str()), None)
             };
@@ -5482,7 +5705,8 @@ fn add_venn(vp: &VennPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 } else {
                     0.0
                 };
-                let count_text_w = measure_text_width(&count_str, label_size as f64, FontStyle::Regular);
+                let count_text_w =
+                    measure_text_width(&count_str, label_size as f64, FontStyle::Regular);
                 let text_gap = if vp.show_set_indicators { 4.0 } else { 0.0 };
 
                 let nx = lnx; // reuse: direction from centroid toward label
@@ -5683,7 +5907,8 @@ fn add_venn(vp: &VennPlot, scene: &mut Scene, computed: &ComputedLayout) {
 
             let label_x = bx + nx * label_margin;
             // Small baseline adjustment so the text visual centre aligns with the point
-            let label_y = by + ny * label_margin + center_offset(label_size_big as f64, FontStyle::Regular);
+            let label_y =
+                by + ny * label_margin + center_offset(label_size_big as f64, FontStyle::Regular);
 
             let anchor = if nx < -0.25 {
                 TextAnchor::End
@@ -5893,8 +6118,22 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                             }
                         }
                         path_data.push('Z');
-                        let cloud_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(color) };
-                        path_bw(scene, computed, i, color, path_data, cloud_stroke, 0.5, Some(rp.cloud_alpha), None);
+                        let cloud_stroke = if computed.bw_mode {
+                            Color::from("#1a1a1a")
+                        } else {
+                            Color::from(color)
+                        };
+                        path_bw(
+                            scene,
+                            computed,
+                            i,
+                            color,
+                            path_data,
+                            cloud_stroke,
+                            0.5,
+                            Some(rp.cloud_alpha),
+                            None,
+                        );
                     }
                 }
             }
@@ -5928,7 +6167,19 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                 let xlow = computed.map_x(lower_w);
                 let xhigh = computed.map_x(upper_w);
 
-                rect_bw(scene, computed, i, color, xq1.min(xq3), y0.min(y1), (xq3 - xq1).abs(), (y1 - y0).abs(), None, None, None);
+                rect_bw(
+                    scene,
+                    computed,
+                    i,
+                    color,
+                    xq1.min(xq3),
+                    y0.min(y1),
+                    (xq3 - xq1).abs(),
+                    (y1 - y0).abs(),
+                    None,
+                    None,
+                    None,
+                );
                 scene.add(Primitive::Line {
                     x1: xmed,
                     y1: y0.min(y1),
@@ -5939,7 +6190,10 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                     stroke_dasharray: None,
                 });
                 let (whisker_stroke, whisker_dash) = if computed.bw_mode {
-                    (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+                    (
+                        Color::from("#1a1a1a"),
+                        crate::render::bw::bw_dash(i).dasharray(),
+                    )
                 } else {
                     (Color::from(color), None)
                 };
@@ -6061,8 +6315,22 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
                     }
                     path_data.push('Z');
 
-                    let cloud_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(color) };
-                    path_bw(scene, computed, i, color, path_data, cloud_stroke, 0.5, Some(rp.cloud_alpha), None);
+                    let cloud_stroke = if computed.bw_mode {
+                        Color::from("#1a1a1a")
+                    } else {
+                        Color::from(color)
+                    };
+                    path_bw(
+                        scene,
+                        computed,
+                        i,
+                        color,
+                        path_data,
+                        cloud_stroke,
+                        0.5,
+                        Some(rp.cloud_alpha),
+                        None,
+                    );
                 }
             }
         }
@@ -6100,7 +6368,19 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
             let yhigh = computed.map_y(upper_w);
 
             // IQR box
-            rect_bw(scene, computed, i, color, x0, yq3.min(yq1), (x1 - x0).abs(), (yq1 - yq3).abs(), None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                i,
+                color,
+                x0,
+                yq3.min(yq1),
+                (x1 - x0).abs(),
+                (yq1 - yq3).abs(),
+                None,
+                None,
+                None,
+            );
 
             // Median line (white so it stands out on the coloured box)
             scene.add(Primitive::Line {
@@ -6114,7 +6394,10 @@ fn add_raincloud(rp: &RaincloudPlot, scene: &mut Scene, computed: &ComputedLayou
             });
 
             let (whisker_stroke, whisker_dash) = if computed.bw_mode {
-                (Color::from("#1a1a1a"), crate::render::bw::bw_dash(i).dasharray())
+                (
+                    Color::from("#1a1a1a"),
+                    crate::render::bw::bw_dash(i).dasharray(),
+                )
             } else {
                 (Color::from(color), None)
             };
@@ -6502,7 +6785,11 @@ fn draw_col_dendrogram(
 fn add_clustermap(cm: &Clustermap, scene: &mut Scene, computed: &ComputedLayout) {
     use crate::plot::phylo::post_order_dfs;
 
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { cm.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        cm.color_map.clone()
+    };
     let n_rows = cm.data.len();
     let n_cols = cm.data.first().map_or(0, |r| r.len());
     if n_rows == 0 || n_cols == 0 {
@@ -6857,7 +7144,9 @@ fn add_clustermap(cm: &Clustermap, scene: &mut Scene, computed: &ComputedLayout)
             for (col_k, &value) in row.iter().enumerate() {
                 scene.add(Primitive::Text {
                     x: hm_x + (col_k as f64 + 0.5) * cell_w,
-                    y: hm_y + (row_k as f64 + 0.5) * cell_h + center_offset(computed.body_size as f64, FontStyle::Regular),
+                    y: hm_y
+                        + (row_k as f64 + 0.5) * cell_h
+                        + center_offset(computed.body_size as f64, FontStyle::Regular),
                     content: format!("{:.2}", value),
                     size: computed.body_size,
                     anchor: TextAnchor::Middle,
@@ -6972,11 +7261,35 @@ fn add_waterfall(waterfall: &WaterfallPlot, scene: &mut Scene, computed: &Comput
                 });
             }
             let bw_idx = match &bar.kind {
-                WaterfallKind::Delta => if bar.value >= 0.0 { 0 } else { 1 },
+                WaterfallKind::Delta => {
+                    if bar.value >= 0.0 {
+                        0
+                    } else {
+                        1
+                    }
+                }
                 WaterfallKind::Total => 2,
-                WaterfallKind::Difference { from, to } => if to >= from { 0 } else { 1 },
+                WaterfallKind::Difference { from, to } => {
+                    if to >= from {
+                        0
+                    } else {
+                        1
+                    }
+                }
             };
-            rect_bw(scene, computed, bw_idx, &color, x0, y_screen_hi, (x1 - x0).abs(), bar_height, None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                bw_idx,
+                &color,
+                x0,
+                y_screen_hi,
+                (x1 - x0).abs(),
+                bar_height,
+                None,
+                None,
+                None,
+            );
             if tip.is_some() {
                 scene.add(Primitive::GroupEnd);
             }
@@ -7076,12 +7389,39 @@ fn render_legend_entry(
             if computed.bw_mode {
                 use crate::render::bw::{bw_fill, register_pattern};
                 let (grey, pattern) = bw_fill(bw_idx);
-                scene.add(Primitive::Rect { x: sx, y: sy, width: sw, height: sh, fill: Color::from(grey), stroke: None, stroke_width: None, opacity: None });
+                scene.add(Primitive::Rect {
+                    x: sx,
+                    y: sy,
+                    width: sw,
+                    height: sh,
+                    fill: Color::from(grey),
+                    stroke: None,
+                    stroke_width: None,
+                    opacity: None,
+                });
                 register_pattern(scene, pattern);
                 let pid = pattern.id();
-                scene.add(Primitive::Rect { x: sx, y: sy, width: sw, height: sh, fill: Color::from(&format!("url(#{pid})")), stroke: None, stroke_width: None, opacity: None });
+                scene.add(Primitive::Rect {
+                    x: sx,
+                    y: sy,
+                    width: sw,
+                    height: sh,
+                    fill: Color::from(&format!("url(#{pid})")),
+                    stroke: None,
+                    stroke_width: None,
+                    opacity: None,
+                });
             } else {
-                scene.add(Primitive::Rect { x: sx, y: sy, width: sw, height: sh, fill: Color::from(&entry.color), stroke: None, stroke_width: None, opacity: None });
+                scene.add(Primitive::Rect {
+                    x: sx,
+                    y: sy,
+                    width: sw,
+                    height: sh,
+                    fill: Color::from(&entry.color),
+                    stroke: None,
+                    stroke_width: None,
+                    opacity: None,
+                });
             }
         }
         LegendShape::Line => {
@@ -7102,7 +7442,11 @@ fn render_legend_entry(
             });
         }
         LegendShape::Circle => {
-            let fill = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&entry.color) };
+            let fill = if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                Color::from(&entry.color)
+            };
             scene.add(Primitive::Circle {
                 cx: legend_x + computed.legend_swatch_x + computed.legend_swatch_r,
                 cy: swatch_cy,
@@ -7114,9 +7458,16 @@ fn render_legend_entry(
             });
         }
         LegendShape::Marker(marker) => {
-            let color = if computed.bw_mode { "#1a1a1a" } else { &entry.color };
-            let effective_marker =
-                if computed.bw_mode { crate::render::bw::bw_shape(bw_idx) } else { marker };
+            let color = if computed.bw_mode {
+                "#1a1a1a"
+            } else {
+                &entry.color
+            };
+            let effective_marker = if computed.bw_mode {
+                crate::render::bw::bw_shape(bw_idx)
+            } else {
+                marker
+            };
             draw_marker(
                 scene,
                 effective_marker,
@@ -7131,7 +7482,11 @@ fn render_legend_entry(
         }
         LegendShape::CircleSize(r) => {
             let draw_r = r.min(computed.legend_swatch_half);
-            let fill = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&entry.color) };
+            let fill = if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                Color::from(&entry.color)
+            };
             scene.add(Primitive::Circle {
                 cx: legend_x + computed.legend_swatch_x + computed.legend_swatch_r,
                 cy: swatch_cy,
@@ -7339,7 +7694,8 @@ fn add_legend_at(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout, 
         String::new()
     };
     let box_width = if overflow > 0 {
-        let min_w = measure_text_width(&overflow_label, 12.0, FontStyle::Regular) + 18.0 + legend_padding;
+        let min_w =
+            measure_text_width(&overflow_label, 12.0, FontStyle::Regular) + 18.0 + legend_padding;
         legend_width.max(min_w)
     } else {
         legend_width
@@ -7375,7 +7731,11 @@ fn add_legend_at(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout, 
         match entry.shape {
             LegendShape::CircleSize(r) => {
                 // Magnitude legend, not a category — dark fill only, no shape swap.
-                let fill = if computed.bw_mode { Color::from("#1a1a1a") } else { entry.color.clone().into() };
+                let fill = if computed.bw_mode {
+                    Color::from("#1a1a1a")
+                } else {
+                    entry.color.clone().into()
+                };
                 scene.add(Primitive::Circle {
                     cx: swatch_x + 5.0,
                     cy: swatch_y + line_height / 2.0 - 2.0,
@@ -7416,10 +7776,28 @@ fn add_legend_at(legend: &Legend, scene: &mut Scene, computed: &ComputedLayout, 
                 if computed.bw_mode {
                     use crate::render::bw::{bw_fill, register_pattern};
                     let (grey, pattern) = bw_fill(bw_idx);
-                    scene.add(Primitive::Rect { x: swatch_x, y: swatch_y, width: 12.0, height: 12.0, fill: Color::from(grey), stroke: None, stroke_width: None, opacity: None });
+                    scene.add(Primitive::Rect {
+                        x: swatch_x,
+                        y: swatch_y,
+                        width: 12.0,
+                        height: 12.0,
+                        fill: Color::from(grey),
+                        stroke: None,
+                        stroke_width: None,
+                        opacity: None,
+                    });
                     register_pattern(scene, pattern);
                     let pid = pattern.id();
-                    scene.add(Primitive::Rect { x: swatch_x, y: swatch_y, width: 12.0, height: 12.0, fill: Color::from(&format!("url(#{pid})")), stroke: None, stroke_width: None, opacity: None });
+                    scene.add(Primitive::Rect {
+                        x: swatch_x,
+                        y: swatch_y,
+                        width: 12.0,
+                        height: 12.0,
+                        fill: Color::from(&format!("url(#{pid})")),
+                        stroke: None,
+                        stroke_width: None,
+                        opacity: None,
+                    });
                 } else {
                     scene.add(Primitive::Rect {
                         x: swatch_x,
@@ -7596,10 +7974,9 @@ fn add_legend_with_offset(
     // Hug the content: a row's leading counts only *between* rows, not below the last
     // one, so the box has just `legend_padding` above the first entry and below the last
     // (line_height is the row pitch; the swatch is the row's ink height).
-    let computed_height = (entry_rows + title_rows) as f64 * line_height
-        + inter_group_extra
-        + legend_padding * 2.0
-        - (line_height - computed.legend_swatch_size);
+    let computed_height =
+        (entry_rows + title_rows) as f64 * line_height + inter_group_extra + legend_padding * 2.0
+            - (line_height - computed.legend_swatch_size);
     let legend_height = computed.legend_height_override.unwrap_or(computed_height);
 
     let plot_left = computed.margin_left;
@@ -7751,8 +8128,8 @@ fn add_legend_with_offset(
 
     let mut cur_y = legend_y;
     let wrap_max = computed.legend_wrap;
-    let text_baseline_offset =
-        computed.legend_swatch_size / 2.0 + center_offset(computed.body_size as f64, FontStyle::Regular);
+    let text_baseline_offset = computed.legend_swatch_size / 2.0
+        + center_offset(computed.body_size as f64, FontStyle::Regular);
 
     // Optional top title
     if let Some(ref title) = legend.title {
@@ -7937,7 +8314,8 @@ fn add_colorbar_at(
     // width (where the reserved band is only a few px) a multi-digit label can still
     // overrun — legibility wins over the no-clip guarantee there.
     let label_anchor_x = bar_x + bar_width + computed.tick_mark_major;
-    let avail_label_w = (computed.width - label_anchor_x - 2.0 * computed.axis_stroke_width).max(1.0);
+    let avail_label_w =
+        (computed.width - label_anchor_x - 2.0 * computed.axis_stroke_width).max(1.0);
     let widest_label_w = tick_entries
         .iter()
         .map(|(_, l)| l.chars().count())
@@ -8129,7 +8507,17 @@ fn add_volcano(vp: &VolcanoPlot, scene: &mut Scene, computed: &ComputedLayout) {
             } else {
                 (MarkerShape::Circle, color.as_str())
             };
-            draw_marker(scene, marker, cx, cy, vp.point_size, fill_str, None, None, None);
+            draw_marker(
+                scene,
+                marker,
+                cx,
+                cy,
+                vp.point_size,
+                fill_str,
+                None,
+                None,
+                None,
+            );
             if tip.is_some() || computed.interactive {
                 scene.add(Primitive::GroupEnd);
             }
@@ -8262,7 +8650,11 @@ fn add_manhattan(mp: &ManhattanPlot, scene: &mut Scene, computed: &ComputedLayou
     let gw_y = mp.genome_wide;
     if gw_y >= computed.y_range.0 && gw_y <= computed.y_range.1 {
         let sy = computed.map_y(gw_y);
-        let stroke = if computed.bw_mode { "#1a1a1a".into() } else { "#cc3333".into() };
+        let stroke = if computed.bw_mode {
+            "#1a1a1a".into()
+        } else {
+            "#cc3333".into()
+        };
         scene.add(Primitive::Line {
             x1: plot_left,
             y1: sy,
@@ -8350,7 +8742,17 @@ fn add_manhattan(mp: &ManhattanPlot, scene: &mut Scene, computed: &ComputedLayou
             } else {
                 (MarkerShape::Circle, color.clone())
             };
-            draw_marker(scene, marker, cx, cy, mp.point_size, &fill_str, None, None, None);
+            draw_marker(
+                scene,
+                marker,
+                cx,
+                cy,
+                mp.point_size,
+                &fill_str,
+                None,
+                None,
+                None,
+            );
             if tip.is_some() {
                 scene.add(Primitive::GroupEnd);
             }
@@ -8822,14 +9224,28 @@ fn add_density(dp: &DensityPlot, computed: &ComputedLayout, scene: &mut Scene, b
             round2(first_px),
             round2(y_baseline),
         );
-        path_bw(scene, computed, bw_idx, &dp.color, fill_path, Color::None, 0.0, Some(dp.opacity), None);
+        path_bw(
+            scene,
+            computed,
+            bw_idx,
+            &dp.color,
+            fill_path,
+            Color::None,
+            0.0,
+            Some(dp.opacity),
+            None,
+        );
     }
 
     // Emit the outline
     scene.add(Primitive::Path(Box::new(PathData {
         d: path.trim_end().to_string(),
         fill: None,
-        stroke: if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&dp.color) },
+        stroke: if computed.bw_mode {
+            Color::from("#1a1a1a")
+        } else {
+            Color::from(&dp.color)
+        },
         stroke_width: dp.stroke_width,
         opacity: None,
         stroke_dasharray: dp.line_dash.clone(),
@@ -8943,7 +9359,17 @@ fn add_ecdf(ep: &crate::plot::ecdf::EcdfPlot, computed: &ComputedLayout, scene: 
             }
             d.push_str(" Z");
 
-            path_bw(scene, computed, i, color_str, d, Color::None, 0.0, Some(ep.band_alpha), None);
+            path_bw(
+                scene,
+                computed,
+                i,
+                color_str,
+                d,
+                Color::None,
+                0.0,
+                Some(ep.band_alpha),
+                None,
+            );
         }
 
         let (ecdf_stroke, ecdf_da) = if computed.bw_mode {
@@ -9130,7 +9556,11 @@ fn add_qqplot(qp: &crate::plot::qq::QQPlot, computed: &ComputedLayout, scene: &m
 
                 // Scatter points
                 let fill_op = qp.fill_opacity;
-                let pt_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { color.clone() };
+                let pt_fill = if computed.bw_mode {
+                    Color::from("#1a1a1a")
+                } else {
+                    color.clone()
+                };
                 for k in 0..n {
                     scene.add(Primitive::Circle {
                         cx: computed.map_x(theoretical[k]),
@@ -9197,7 +9627,17 @@ fn add_qqplot(qp: &crate::plot::qq::QQPlot, computed: &ComputedLayout, scene: &m
                     } else {
                         "#aaaaaa"
                     };
-                    path_bw(scene, computed, 0, band_color_str, d, Color::None, 0.0, Some(qp.ci_alpha), None);
+                    path_bw(
+                        scene,
+                        computed,
+                        0,
+                        band_color_str,
+                        d,
+                        Color::None,
+                        0.0,
+                        Some(qp.ci_alpha),
+                        None,
+                    );
                 }
             }
 
@@ -9251,7 +9691,11 @@ fn add_qqplot(qp: &crate::plot::qq::QQPlot, computed: &ComputedLayout, scene: &m
 
                 // Scatter points
                 let fill_op = qp.fill_opacity;
-                let pt_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { color.clone() };
+                let pt_fill = if computed.bw_mode {
+                    Color::from("#1a1a1a")
+                } else {
+                    color.clone()
+                };
                 for (k, &pval) in pvals.iter().enumerate() {
                     let expected_p = (k as f64 + 0.5) / n as f64;
                     let x_val = -expected_p.log10();
@@ -9414,14 +9858,28 @@ fn add_ridgeline(rp: &RidgelinePlot, computed: &ComputedLayout, scene: &mut Scen
                 "{} L {} {} L {} {} Z",
                 outline, s_last_px, s_y_center, s_first_px, s_y_center,
             );
-            path_bw(scene, computed, i, color, fill_path, Color::None, 0.0, Some(rp.opacity), None);
+            path_bw(
+                scene,
+                computed,
+                i,
+                color,
+                fill_path,
+                Color::None,
+                0.0,
+                Some(rp.opacity),
+                None,
+            );
         }
 
         // Emit outline
         scene.add(Primitive::Path(Box::new(PathData {
             d: outline,
             fill: None,
-            stroke: if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(color) },
+            stroke: if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                Color::from(color)
+            },
             stroke_width: rp.stroke_width,
             opacity: None,
             stroke_dasharray: rp.line_dash.clone(),
@@ -9481,7 +9939,11 @@ fn add_dot_plot(dp: &DotPlot, scene: &mut Scene, computed: &ComputedLayout) {
     // Cap effective max radius so circles never bleed outside their grid cell
     let effective_max_r = dp.max_radius.min((cell_w.min(cell_h) / 2.0) * 0.9);
 
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { dp.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        dp.color_map.clone()
+    };
     for (dpi, pt) in dp.points.iter().enumerate() {
         let xi = dp.x_categories.iter().position(|c| c == &pt.x_cat);
         let yi = dp.y_categories.iter().position(|c| c == &pt.y_cat);
@@ -9529,7 +9991,11 @@ fn add_dot_plot(dp: &DotPlot, scene: &mut Scene, computed: &ComputedLayout) {
 fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
     const EPSILON: f64 = f64::EPSILON;
 
-    let dice_cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { dp.color_map.clone() };
+    let dice_cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        dp.color_map.clone()
+    };
     let n_x = dp.x_categories.len();
     let n_y = dp.y_categories.len();
     if n_x == 0 || n_y == 0 {
@@ -9783,7 +10249,9 @@ fn add_diceplot(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout) {
                     } else {
                         (MarkerShape::Circle, color)
                     };
-                    draw_marker(scene, marker, dot_cx, dot_cy, cell_dot_r, fill_str, None, None, None);
+                    draw_marker(
+                        scene, marker, dot_cx, dot_cy, cell_dot_r, fill_str, None, None, None,
+                    );
                 }
             } else if per_dot_mode {
                 if let Some(fill_v) = pt.dot_fills.get(k).and_then(|v| *v) {
@@ -9968,7 +10436,9 @@ fn add_dice_position_legend(
         let label = dp.category_labels.get(k).map(|s| s.as_str()).unwrap_or("");
         scene.add(Primitive::Text {
             x: pip_cx,
-            y: pip_cy + die_cell_pip_h / 2.0 + label_area_h / 2.0
+            y: pip_cy
+                + die_cell_pip_h / 2.0
+                + label_area_h / 2.0
                 + center_offset(label_size as f64, FontStyle::Regular),
             content: label.to_string(),
             size: label_size,
@@ -10120,7 +10590,11 @@ fn add_dice_legends(dp: &DicePlot, scene: &mut Scene, computed: &ComputedLayout)
     // would make the bar too short to be useful.
     if dp.fill_legend_label.is_some() {
         let (fill_min, fill_max) = dp.fill_range.unwrap_or_else(|| dp.fill_extent());
-        let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { dp.color_map.clone() };
+        let cmap = if computed.bw_mode {
+            crate::plot::ColorMap::Grayscale
+        } else {
+            dp.color_map.clone()
+        };
         let info = ColorBarInfo {
             map_fn: std::sync::Arc::new(move |t| {
                 let norm = (t - fill_min) / (fill_max - fill_min + f64::EPSILON);
@@ -10212,7 +10686,8 @@ fn add_dot_stacked_legends(
         // Centre the swatch on the row. The sibling legend paths dropped the legacy
         // `- 1.0` rect nudge; this Circle path has no rect, so match them.
         let swatch_cy = legend_y + computed.legend_swatch_size / 2.0;
-        let text_baseline = swatch_cy + center_offset(computed.body_size as f64, FontStyle::Regular);
+        let text_baseline =
+            swatch_cy + center_offset(computed.body_size as f64, FontStyle::Regular);
         scene.add(Primitive::Text {
             x: legend_x + computed.legend_text_x,
             y: text_baseline,
@@ -11487,8 +11962,11 @@ fn add_upset(up: &UpSetPlot, scene: &mut Scene, computed: &ComputedLayout) {
     let label_size = computed.label_size as f64;
 
     // Left panel layout (left → right): [bar_area][count_gap][name_area]
-    let name_area = (widest_text_width(up.set_names.iter().map(|n| n.as_str()), tick_size, FontStyle::Regular)
-        + 10.0)
+    let name_area = (widest_text_width(
+        up.set_names.iter().map(|n| n.as_str()),
+        tick_size,
+        FontStyle::Regular,
+    ) + 10.0)
         .clamp(40.0, 120.0);
     let bar_area = if up.show_set_sizes {
         (pw * 0.18).clamp(50.0, 150.0)
@@ -11560,7 +12038,19 @@ fn add_upset(up: &UpSetPlot, scene: &mut Scene, computed: &ComputedLayout) {
             let bar_w = size as f64 / max_set * bar_area;
 
             // Bars grow leftward from the right edge (zero baseline at bar_x_end).
-            rect_bw(scene, computed, 0, &up.bar_color, bar_x_end - bar_w, cy - bar_half_h, bar_w, bar_half_h * 2.0, None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                0,
+                &up.bar_color,
+                bar_x_end - bar_w,
+                cy - bar_half_h,
+                bar_w,
+                bar_half_h * 2.0,
+                None,
+                None,
+                None,
+            );
 
             if up.show_counts {
                 // Fixed position in the count_gap zone — never encroaches on name_area.
@@ -11679,7 +12169,19 @@ fn add_upset(up: &UpSetPlot, scene: &mut Scene, computed: &ComputedLayout) {
         let bar_x = cx - bar_half_w;
         let bar_y = bar_y_max - bar_h;
 
-        rect_bw(scene, computed, 0, &up.bar_color, bar_x, bar_y, bar_half_w * 2.0, bar_h, None, None, None);
+        rect_bw(
+            scene,
+            computed,
+            0,
+            &up.bar_color,
+            bar_x,
+            bar_y,
+            bar_half_w * 2.0,
+            bar_h,
+            None,
+            None,
+            None,
+        );
 
         // Suppress count label when the column is too narrow to show it without overlap.
         // Each digit needs ~tick_size * 0.6 px; two-digit numbers need ~1.2 * tick_size.
@@ -11835,7 +12337,17 @@ fn add_stacked_area(sa: &StackedAreaPlot, scene: &mut Scene, computed: &Computed
         }
         path.push('Z');
 
-        path_bw(scene, computed, k, &color, path, Color::None, 0.0, Some(sa.fill_opacity), None);
+        path_bw(
+            scene,
+            computed,
+            k,
+            &color,
+            path,
+            Color::None,
+            0.0,
+            Some(sa.fill_opacity),
+            None,
+        );
 
         if sa.show_strokes {
             let mut stroke_path = String::with_capacity(n * 16);
@@ -11850,7 +12362,11 @@ fn add_stacked_area(sa: &StackedAreaPlot, scene: &mut Scene, computed: &Computed
                 stroke_path.push_str(rb.format(round2(sy)));
                 stroke_path.push(' ');
             }
-            let stroke_col = if computed.bw_mode { Color::from("#1a1a1a") } else { color.into() };
+            let stroke_col = if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                color.into()
+            };
             scene.add(Primitive::Path(Box::new(PathData {
                 d: stroke_path,
                 fill: None,
@@ -12052,7 +12568,17 @@ fn add_streamgraph(
             d
         };
 
-        path_bw(scene, computed, orig_idx, &color, path_d, Color::None, 0.0, Some(sg.fill_opacity), None);
+        path_bw(
+            scene,
+            computed,
+            orig_idx,
+            &color,
+            path_d,
+            Color::None,
+            0.0,
+            Some(sg.fill_opacity),
+            None,
+        );
 
         // Optional inter-stream stroke along the upper edge
         if sg.stroke_between {
@@ -12276,7 +12802,10 @@ fn add_candlestick(cp: &CandlestickPlot, scene: &mut Scene, computed: &ComputedL
 
         // Wick
         let (wick_stroke, wick_dash) = if computed.bw_mode {
-            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(bw_idx).dasharray())
+            (
+                Color::from("#1a1a1a"),
+                crate::render::bw::bw_dash(bw_idx).dasharray(),
+            )
         } else {
             (Color::from(&color), None)
         };
@@ -12294,7 +12823,11 @@ fn add_candlestick(cp: &CandlestickPlot, scene: &mut Scene, computed: &ComputedL
         let body_top = map_y_price(candle.open.max(candle.close));
         let body_bottom = map_y_price(candle.open.min(candle.close));
         let body_h = (body_bottom - body_top).max(1.0);
-        let body_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&color) };
+        let body_stroke = if computed.bw_mode {
+            Color::from("#1a1a1a")
+        } else {
+            Color::from(&color)
+        };
         rect_bw(
             scene,
             computed,
@@ -12665,7 +13198,11 @@ fn add_contour(cp: &ContourPlot, scene: &mut Scene, computed: &ComputedLayout) {
     let (z_min, z_max) = cp.z_range();
     let z_span = z_max - z_min + f64::EPSILON;
 
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { cp.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        cp.color_map.clone()
+    };
     let level_color = |level: f64| -> String {
         let norm = (level - z_min) / z_span;
         cmap.map(norm.clamp(0.0, 1.0))
@@ -12840,7 +13377,9 @@ fn add_chord(chord: &ChordPlot, scene: &mut Scene, computed: &ComputedLayout) {
     for i in 0..n {
         let mid = node_start[i] + node_span[i] / 2.0;
         let lx = cx + label_gap * mid.cos();
-        let ly = cy + label_gap * mid.sin() + center_offset(computed.body_size as f64, FontStyle::Regular);
+        let ly = cy
+            + label_gap * mid.sin()
+            + center_offset(computed.body_size as f64, FontStyle::Regular);
 
         let label = if let Some(l) = chord.labels.get(i) {
             l.clone()
@@ -12931,7 +13470,17 @@ fn add_chord(chord: &ChordPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     "M {x1} {y1} A {inner_r} {inner_r} 0 {laf} 1 {x2} {y2} \
                      C {cx} {cy} {cx} {cy} {x1} {y1} Z"
                 );
-                path_bw(scene, computed, i, &node_color(i), d, Color::None, 0.0, Some(chord.ribbon_opacity), None);
+                path_bw(
+                    scene,
+                    computed,
+                    i,
+                    &node_color(i),
+                    d,
+                    Color::None,
+                    0.0,
+                    Some(chord.ribbon_opacity),
+                    None,
+                );
                 continue;
             }
 
@@ -12977,7 +13526,17 @@ fn add_chord(chord: &ChordPlot, scene: &mut Scene, computed: &ComputedLayout) {
                  C {cx} {cy} {cx} {cy} {xi1} {yi1} Z"
             );
 
-            path_bw(scene, computed, i, &node_color(i), d, Color::None, 0.0, Some(chord.ribbon_opacity), None);
+            path_bw(
+                scene,
+                computed,
+                i,
+                &node_color(i),
+                d,
+                Color::None,
+                0.0,
+                Some(chord.ribbon_opacity),
+                None,
+            );
         }
     }
 }
@@ -13406,7 +13965,17 @@ fn add_sankey(sankey: &SankeyPlot, scene: &mut Scene, computed: &ComputedLayout)
             // aren't a stable small index — in BW mode every link mode
             // collapses to "pattern by source node", the most meaningful
             // single category for a Sankey diagram's flows.
-            path_bw(scene, computed, src, &node_color(src), d, Color::None, 0.0, Some(sankey.link_opacity), None);
+            path_bw(
+                scene,
+                computed,
+                src,
+                &node_color(src),
+                d,
+                Color::None,
+                0.0,
+                Some(sankey.link_opacity),
+                None,
+            );
         } else {
             let fill = match &sankey.link_color {
                 SankeyLinkColor::Source => node_color(src),
@@ -13467,7 +14036,8 @@ fn add_sankey(sankey: &SankeyPlot, scene: &mut Scene, computed: &ComputedLayout)
             let ribbon_h_at_t = y_bot_at_t - y_top_at_t;
             if ribbon_h_at_t >= sankey.flow_label_min_height {
                 let label_x = x_src + t * (x_tgt - x_src);
-                let label_y = (y_top_at_t + y_bot_at_t) / 2.0 + center_offset(ts, FontStyle::Regular);
+                let label_y =
+                    (y_top_at_t + y_bot_at_t) / 2.0 + center_offset(ts, FontStyle::Regular);
                 let text = if sankey.flow_percent {
                     format!("{:.1}%", (link.value / out_flow[src]) * 100.0)
                 } else {
@@ -13501,7 +14071,9 @@ fn add_sankey(sankey: &SankeyPlot, scene: &mut Scene, computed: &ComputedLayout)
         let _ = max_col;
         scene.add(Primitive::Text {
             x: lx,
-            y: node_y[i] + node_h[i] / 2.0 + center_offset(computed.body_size as f64, FontStyle::Regular),
+            y: node_y[i]
+                + node_h[i] / 2.0
+                + center_offset(computed.body_size as f64, FontStyle::Regular),
             content: sankey.nodes[i].label.clone(),
             size: computed.body_size,
             anchor,
@@ -14286,8 +14858,11 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
         computed.dice_x_label_pos = Some((gx0 + gw / 2.0, x_label_y));
 
         // y-label: centred on grid height, just left of the tick labels
-        let max_y_px =
-            widest_text_width(dp.y_categories.iter().map(|s| s.as_str()), ts, FontStyle::Regular);
+        let max_y_px = widest_text_width(
+            dp.y_categories.iter().map(|s| s.as_str()),
+            ts,
+            FontStyle::Regular,
+        );
         let y_label_x = (gx0 - tl - tlm - max_y_px - 6.0 - ls * 0.5).max(ls * 0.5 + 4.0);
         computed.dice_y_label_pos = Some((y_label_x, gy0 + gh / 2.0));
     }
@@ -14785,16 +15360,34 @@ pub fn render_twin_y(primary: Vec<Plot>, secondary: Vec<Plot>, layout: Layout) -
     let mut histogram_bw_idx = 0usize;
     for plot in primary.iter() {
         match plot {
-            Plot::Scatter(s) => { add_scatter(s, &mut scene, &computed, scatter_bw_idx); scatter_bw_idx += 1; }
-            Plot::Line(l) => { add_line(l, &mut scene, &computed, line_bw_idx); line_bw_idx += 1; }
-            Plot::Series(s) => { add_series(s, &mut scene, &computed, series_bw_idx); series_bw_idx += 1; }
-            Plot::Band(b) => { add_band(b, &mut scene, &computed, band_bw_idx); band_bw_idx += 1; }
+            Plot::Scatter(s) => {
+                add_scatter(s, &mut scene, &computed, scatter_bw_idx);
+                scatter_bw_idx += 1;
+            }
+            Plot::Line(l) => {
+                add_line(l, &mut scene, &computed, line_bw_idx);
+                line_bw_idx += 1;
+            }
+            Plot::Series(s) => {
+                add_series(s, &mut scene, &computed, series_bw_idx);
+                series_bw_idx += 1;
+            }
+            Plot::Band(b) => {
+                add_band(b, &mut scene, &computed, band_bw_idx);
+                band_bw_idx += 1;
+            }
             Plot::Bar(b) => add_bar(b, &mut scene, &computed),
-            Plot::Histogram(h) => { add_histogram(h, &mut scene, &computed, histogram_bw_idx); histogram_bw_idx += 1; }
+            Plot::Histogram(h) => {
+                add_histogram(h, &mut scene, &computed, histogram_bw_idx);
+                histogram_bw_idx += 1;
+            }
             Plot::Box(b) => add_boxplot(b, &mut scene, &computed),
             Plot::Violin(v) => add_violin(v, &mut scene, &computed),
             Plot::Strip(s) => add_strip(s, &mut scene, &computed),
-            Plot::Density(d) => { add_density(d, &computed, &mut scene, density_bw_idx); density_bw_idx += 1; }
+            Plot::Density(d) => {
+                add_density(d, &computed, &mut scene, density_bw_idx);
+                density_bw_idx += 1;
+            }
             Plot::StackedArea(s) => add_stacked_area(s, &mut scene, &computed),
             Plot::Waterfall(w) => add_waterfall(w, &mut scene, &computed),
             Plot::Candlestick(c) => add_candlestick(c, &mut scene, &computed),
@@ -14815,16 +15408,34 @@ pub fn render_twin_y(primary: Vec<Plot>, secondary: Vec<Plot>, layout: Layout) -
     let mut histogram_bw_idx = 0usize;
     for plot in secondary.iter() {
         match plot {
-            Plot::Scatter(s) => { add_scatter(s, &mut scene, &computed_y2, scatter_bw_idx); scatter_bw_idx += 1; }
-            Plot::Line(l) => { add_line(l, &mut scene, &computed_y2, line_bw_idx); line_bw_idx += 1; }
-            Plot::Series(s) => { add_series(s, &mut scene, &computed_y2, series_bw_idx); series_bw_idx += 1; }
-            Plot::Band(b) => { add_band(b, &mut scene, &computed_y2, band_bw_idx); band_bw_idx += 1; }
+            Plot::Scatter(s) => {
+                add_scatter(s, &mut scene, &computed_y2, scatter_bw_idx);
+                scatter_bw_idx += 1;
+            }
+            Plot::Line(l) => {
+                add_line(l, &mut scene, &computed_y2, line_bw_idx);
+                line_bw_idx += 1;
+            }
+            Plot::Series(s) => {
+                add_series(s, &mut scene, &computed_y2, series_bw_idx);
+                series_bw_idx += 1;
+            }
+            Plot::Band(b) => {
+                add_band(b, &mut scene, &computed_y2, band_bw_idx);
+                band_bw_idx += 1;
+            }
             Plot::Bar(b) => add_bar(b, &mut scene, &computed_y2),
-            Plot::Histogram(h) => { add_histogram(h, &mut scene, &computed_y2, histogram_bw_idx); histogram_bw_idx += 1; }
+            Plot::Histogram(h) => {
+                add_histogram(h, &mut scene, &computed_y2, histogram_bw_idx);
+                histogram_bw_idx += 1;
+            }
             Plot::Box(b) => add_boxplot(b, &mut scene, &computed_y2),
             Plot::Violin(v) => add_violin(v, &mut scene, &computed_y2),
             Plot::Strip(s) => add_strip(s, &mut scene, &computed_y2),
-            Plot::Density(d) => { add_density(d, &computed_y2, &mut scene, density_bw_idx); density_bw_idx += 1; }
+            Plot::Density(d) => {
+                add_density(d, &computed_y2, &mut scene, density_bw_idx);
+                density_bw_idx += 1;
+            }
             Plot::StackedArea(s) => add_stacked_area(s, &mut scene, &computed_y2),
             Plot::Streamgraph(sg) => add_streamgraph(sg, &mut scene, &computed_y2),
             Plot::Waterfall(w) => add_waterfall(w, &mut scene, &computed_y2),
@@ -15086,7 +15697,10 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
     }
     let bw_stroke = |i: usize| -> (Color, Option<String>) {
         if computed.bw_mode {
-            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(node_bw_idx[i]).dasharray())
+            (
+                Color::from("#1a1a1a"),
+                crate::render::bw::bw_dash(node_bw_idx[i]).dasharray(),
+            )
         } else {
             (Color::from(&node_color[i]), None)
         }
@@ -15257,7 +15871,11 @@ fn add_phylo_tree(tree: &PhyloTree, scene: &mut Scene, computed: &ComputedLayout
     }
 
     // ── Step 6: root marker ───────────────────────────────────────────────────
-    let root_fill = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&tree.branch_color) };
+    let root_fill = if computed.bw_mode {
+        Color::from("#1a1a1a")
+    } else {
+        Color::from(&tree.branch_color)
+    };
     scene.elements.push(Primitive::Circle {
         cx: px[tree.root],
         cy: py[tree.root],
@@ -15484,8 +16102,22 @@ fn add_synteny(synteny: &SyntenyPlot, scene: &mut Scene, computed: &ComputedLayo
             )
         };
 
-        let ribbon_stroke = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&color) };
-        path_bw(scene, computed, block_idx, &color, d, ribbon_stroke, 0.3, Some(synteny.block_opacity), None);
+        let ribbon_stroke = if computed.bw_mode {
+            Color::from("#1a1a1a")
+        } else {
+            Color::from(&color)
+        };
+        path_bw(
+            scene,
+            computed,
+            block_idx,
+            &color,
+            d,
+            ribbon_stroke,
+            0.3,
+            Some(synteny.block_opacity),
+            None,
+        );
     }
 
     // Step 2 — Draw sequence bars (on top of ribbons)
@@ -15778,7 +16410,11 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         series.marker_stroke_width.map(|_| Color::from("#1a1a1a")),
                     )
                 } else {
-                    (MarkerShape::Circle, color_str.clone(), series.marker_stroke_width.map(|_| color.clone()))
+                    (
+                        MarkerShape::Circle,
+                        color_str.clone(),
+                        series.marker_stroke_width.map(|_| color.clone()),
+                    )
                 };
                 for (j, (&(px, py), (&r_val, &theta_val))) in pts
                     .iter()
@@ -15798,7 +16434,17 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                             extra_attrs: None,
                         });
                     }
-                    draw_marker(scene, marker, px, py, r_dot, &fill_str, series.marker_opacity, stroke.clone(), series.marker_stroke_width);
+                    draw_marker(
+                        scene,
+                        marker,
+                        px,
+                        py,
+                        r_dot,
+                        &fill_str,
+                        series.marker_opacity,
+                        stroke.clone(),
+                        series.marker_stroke_width,
+                    );
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -15811,7 +16457,10 @@ fn add_polar(pp: &PolarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 }
                 let path_d = build_path(&pts);
                 let (stroke_color, dash) = if computed.bw_mode {
-                    (Color::from("#1a1a1a"), crate::render::bw::bw_dash(si).dasharray())
+                    (
+                        Color::from("#1a1a1a"),
+                        crate::render::bw::bw_dash(si).dasharray(),
+                    )
                 } else {
                     (color, series.line_dash.clone())
                 };
@@ -16058,7 +16707,11 @@ fn add_ternary(tp: &TernaryPlot, scene: &mut Scene, computed: &ComputedLayout) {
             (pt.a, pt.b, pt.c)
         };
 
-        let group_idx = pt.group.as_ref().and_then(|g| groups.iter().position(|x| x == g)).unwrap_or(0);
+        let group_idx = pt
+            .group
+            .as_ref()
+            .and_then(|g| groups.iter().position(|x| x == g))
+            .unwrap_or(0);
         let color_str = if pt.group.is_some() {
             palette[group_idx % palette.len()].to_string()
         } else {
@@ -16073,7 +16726,11 @@ fn add_ternary(tp: &TernaryPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 tp.marker_stroke_width.map(|_| Color::from("#1a1a1a")),
             )
         } else {
-            (MarkerShape::Circle, color_str.clone(), tp.marker_stroke_width.map(|_| color.clone()))
+            (
+                MarkerShape::Circle,
+                color_str.clone(),
+                tp.marker_stroke_width.map(|_| color.clone()),
+            )
         };
         let (px, py) = bary_to_px(a, b, c);
         let tip = tooltip(tp.show_tooltips, &tp.tooltip_labels, tpi, || {
@@ -16086,7 +16743,17 @@ fn add_ternary(tp: &TernaryPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 extra_attrs: None,
             });
         }
-        draw_marker(scene, marker, px, py, tp.marker_size, &fill_str, tp.marker_opacity, stroke, tp.marker_stroke_width);
+        draw_marker(
+            scene,
+            marker,
+            px,
+            py,
+            tp.marker_size,
+            &fill_str,
+            tp.marker_opacity,
+            stroke,
+            tp.marker_stroke_width,
+        );
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
         }
@@ -16194,8 +16861,22 @@ fn joint_draw_top_marginal(
                     path.push_str(&format!(" L {px:.1} {py:.1}"));
                 }
                 path.push_str(&format!(" L {last_x:.1} {panel_bottom:.1} Z"));
-                let stroke = if scatter_computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&*color_str) };
-                path_bw(scene, scatter_computed, gi, &color_str, path, stroke, 1.5, Some(jp.marginal_alpha), None);
+                let stroke = if scatter_computed.bw_mode {
+                    Color::from("#1a1a1a")
+                } else {
+                    Color::from(&*color_str)
+                };
+                path_bw(
+                    scene,
+                    scatter_computed,
+                    gi,
+                    &color_str,
+                    path,
+                    stroke,
+                    1.5,
+                    Some(jp.marginal_alpha),
+                    None,
+                );
             }
         }
     }
@@ -16298,8 +16979,22 @@ fn joint_draw_right_marginal(
                     path.push_str(&format!(" L {px:.1} {py:.1}"));
                 }
                 path.push_str(&format!(" L {panel_left:.1} {last_py:.1} Z"));
-                let stroke = if scatter_computed.bw_mode { Color::from("#1a1a1a") } else { Color::from(&*color_str) };
-                path_bw(scene, scatter_computed, gi, &color_str, path, stroke, 1.5, Some(jp.marginal_alpha), None);
+                let stroke = if scatter_computed.bw_mode {
+                    Color::from("#1a1a1a")
+                } else {
+                    Color::from(&*color_str)
+                };
+                path_bw(
+                    scene,
+                    scatter_computed,
+                    gi,
+                    &color_str,
+                    path,
+                    stroke,
+                    1.5,
+                    Some(jp.marginal_alpha),
+                    None,
+                );
             }
         }
     }
@@ -16341,7 +17036,9 @@ fn jointplot_title_baseline(layout: &Layout) -> f64 {
 /// it the same content-hugging width (swatch + gap + measured text + padding).
 fn jointplot_legend_width(jp: &crate::plot::jointplot::JointPlot, body_size: f64) -> f64 {
     widest_text_width(
-        jp.groups.iter().filter_map(|g| g.scatter.legend_label.as_deref()),
+        jp.groups
+            .iter()
+            .filter_map(|g| g.scatter.legend_label.as_deref()),
         body_size,
         FontStyle::Regular,
     ) + 41.0
@@ -16566,7 +17263,17 @@ fn add_jointplot(
                     let swatch_cy = cur_y + swatch_size / 2.0;
                     if scatter_computed.bw_mode {
                         let marker = crate::render::bw::bw_shape(gi);
-                        draw_marker(scene, marker, legend_x + 5.0, swatch_cy, r, "#1a1a1a", None, None, None);
+                        draw_marker(
+                            scene,
+                            marker,
+                            legend_x + 5.0,
+                            swatch_cy,
+                            r,
+                            "#1a1a1a",
+                            None,
+                            None,
+                            None,
+                        );
                     } else {
                         scene.add(Primitive::Circle {
                             cx: legend_x + 5.0,
@@ -16767,7 +17474,9 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
             let seg_top = seg_y - seg_h;
             let color = mp.color_for_row_idx(ri);
 
-            rect_bw(scene, computed, ri, &color, col_x, seg_top, col_w, seg_h, None, None, None);
+            rect_bw(
+                scene, computed, ri, &color, col_x, seg_top, col_w, seg_h, None, None, None,
+            );
 
             // Label inside cell
             let show_label = mp.show_percents || mp.show_values;
@@ -16785,7 +17494,9 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     < col_w * 0.9
                 {
                     let cx = col_x + col_w / 2.0;
-                    let cy = seg_top + seg_h / 2.0 + center_offset(label_size as f64, FontStyle::Regular);
+                    let cy = seg_top
+                        + seg_h / 2.0
+                        + center_offset(label_size as f64, FontStyle::Regular);
                     scene.add(Primitive::Text {
                         x: cx,
                         y: cy,
@@ -17336,7 +18047,17 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
                     px[i] - r * 1.2,
                     py[i],
                 );
-                path_bw(scene, computed, bw_idx(i), &color, d, Color::from("#ffffff"), 1.5, None, None);
+                path_bw(
+                    scene,
+                    computed,
+                    bw_idx(i),
+                    &color,
+                    d,
+                    Color::from("#ffffff"),
+                    1.5,
+                    None,
+                    None,
+                );
             }
             NodeShape::Triangle => {
                 let h = r * 1.4;
@@ -17349,7 +18070,17 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
                     px[i] - h * 0.87,
                     py[i] + h * 0.5,
                 );
-                path_bw(scene, computed, bw_idx(i), &color, d, Color::from("#ffffff"), 1.5, None, None);
+                path_bw(
+                    scene,
+                    computed,
+                    bw_idx(i),
+                    &color,
+                    d,
+                    Color::from("#ffffff"),
+                    1.5,
+                    None,
+                    None,
+                );
             }
         }
     }
@@ -17362,7 +18093,8 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
             for (i, node) in net.nodes.iter().enumerate() {
                 let r = node.size.unwrap_or(net.node_radius);
                 // Largest font whose measured label width fits the node diameter.
-                let label_w_per_px = measure_text_width(&node.label, 1.0, FontStyle::Regular).max(1e-6);
+                let label_w_per_px =
+                    measure_text_width(&node.label, 1.0, FontStyle::Regular).max(1e-6);
                 let max_fs = ((2.0 * r) / label_w_per_px).floor() as u32;
                 let fs = max_fs.min(font_size).max(6);
                 scene.add(Primitive::Text {
@@ -17419,7 +18151,8 @@ fn add_network(net: &NetworkPlot, scene: &mut Scene, computed: &ComputedLayout) 
                         (px[i], TextAnchor::Middle)
                     };
                     // Vertical: shift in the outward y direction; apply baseline offset.
-                    let ly = py[i] + fuy * gap + center_offset(font_size as f64, FontStyle::Regular);
+                    let ly =
+                        py[i] + fuy * gap + center_offset(font_size as f64, FontStyle::Regular);
                     (lx, ly, node.label.clone(), lw, anchor)
                 })
                 .collect();
@@ -17759,7 +18492,10 @@ fn add_radar(rp: &crate::plot::radar::RadarPlot, scene: &mut Scene, computed: &C
     for (si, series) in rp.series.iter().enumerate() {
         let color = series.color.clone().unwrap_or_else(|| pal[si].to_string());
         let (outline_stroke, outline_dash) = if computed.bw_mode {
-            (Color::from("#1a1a1a"), crate::render::bw::bw_dash(si).dasharray())
+            (
+                Color::from("#1a1a1a"),
+                crate::render::bw::bw_dash(si).dasharray(),
+            )
         } else {
             (Color::from(color.as_str()), series.dasharray.clone())
         };
@@ -17935,7 +18671,9 @@ fn add_radar(rp: &crate::plot::radar::RadarPlot, scene: &mut Scene, computed: &C
                     .unwrap_or_else(|| pal[si].to_string());
                 scene.add(Primitive::Text {
                     x: round2(cx + radial * th.cos()),
-                    y: round2(cy + radial * th.sin() + center_offset(label_sz as f64, FontStyle::Regular)),
+                    y: round2(
+                        cy + radial * th.sin() + center_offset(label_sz as f64, FontStyle::Regular),
+                    ),
                     content: text.clone(),
                     size: label_sz,
                     anchor,
@@ -18190,7 +18928,11 @@ fn add_hexbin_colorbar(hb: &HexbinPlot, scene: &mut Scene, computed: &ComputedLa
             (lo.min(*v), hi.max(*v))
         });
     let (v_min, v_max) = hb.color_range.unwrap_or((v_min_raw, v_max_raw));
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { hb.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        hb.color_map.clone()
+    };
 
     let cb_label = hb
         .colorbar_label
@@ -18210,42 +18952,38 @@ fn add_hexbin_colorbar(hb: &HexbinPlot, scene: &mut Scene, computed: &ComputedLa
     // the raw count (`value`); supplying `(position, value)` pairs lets `add_colorbar_at`
     // format the labels through `Layout::with_colorbar_tick_format`.
     #[allow(clippy::type_complexity)]
-    let (map_min, map_max, cb_map_fn, tick_values): (
-        f64,
-        f64,
-        MapFn,
-        Option<Vec<(f64, f64)>>,
-    ) = if hb.log_color {
-        let log_max = (v_max - v_min + 1.0).max(1.0).log10().max(f64::EPSILON);
-        let mut ticks = Vec::new();
-        let mut k = 0u32;
-        loop {
-            let count = 10_f64.powi(k as i32);
-            if count > v_max - v_min {
-                break;
+    let (map_min, map_max, cb_map_fn, tick_values): (f64, f64, MapFn, Option<Vec<(f64, f64)>>) =
+        if hb.log_color {
+            let log_max = (v_max - v_min + 1.0).max(1.0).log10().max(f64::EPSILON);
+            let mut ticks = Vec::new();
+            let mut k = 0u32;
+            loop {
+                let count = 10_f64.powi(k as i32);
+                if count > v_max - v_min {
+                    break;
+                }
+                ticks.push(((count + 1.0).log10(), count));
+                k += 1;
             }
-            ticks.push(((count + 1.0).log10(), count));
-            k += 1;
-        }
-        ticks.push((log_max, v_max - v_min));
-        ticks.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9);
-        let lmax = log_max;
-        (
-            0.0,
-            lmax,
-            Arc::new(move |t: f64| cmap.map((t / lmax).clamp(0.0, 1.0))),
-            Some(ticks),
-        )
-    } else {
-        let span = (v_max - v_min).max(f64::EPSILON);
-        let cmin = v_min;
-        (
-            v_min,
-            v_max,
-            Arc::new(move |t: f64| cmap.map(((t - cmin) / span).clamp(0.0, 1.0))),
-            None,
-        )
-    };
+            ticks.push((log_max, v_max - v_min));
+            ticks.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9);
+            let lmax = log_max;
+            (
+                0.0,
+                lmax,
+                Arc::new(move |t: f64| cmap.map((t / lmax).clamp(0.0, 1.0))),
+                Some(ticks),
+            )
+        } else {
+            let span = (v_max - v_min).max(f64::EPSILON);
+            let cmin = v_min;
+            (
+                v_min,
+                v_max,
+                Arc::new(move |t: f64| cmap.map(((t - cmin) / span).clamp(0.0, 1.0))),
+                None,
+            )
+        };
 
     let cb_info = ColorBarInfo {
         map_fn: cb_map_fn,
@@ -18307,7 +19045,11 @@ fn add_hexbin(hb: &HexbinPlot, scene: &mut Scene, computed: &ComputedLayout) {
     } else {
         1.0
     };
-    let hexbin_cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { hb.color_map.clone() };
+    let hexbin_cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        hb.color_map.clone()
+    };
     let color_for = |v: f64| -> String {
         let norm = if hb.log_color {
             ((v - v_min + 1.0).max(1.0).log10() / log_max).clamp(0.0, 1.0)
@@ -19017,7 +19759,9 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 } else {
                     (
                         tile.rect.x + tile.rect.w * 0.5,
-                        tile.rect.y + tile.rect.h * 0.5 + center_offset(font_size as f64, FontStyle::Regular),
+                        tile.rect.y
+                            + tile.rect.h * 0.5
+                            + center_offset(font_size as f64, FontStyle::Regular),
                         TextAnchor::Middle,
                         false,
                     )
@@ -19451,8 +20195,9 @@ fn add_sunburst(sb: &SunburstPlot, scene: &mut Scene, computed: &ComputedLayout)
             let font_size = 11u32;
             // Available arc width at midpoint
             let arc_len = arc.sweep_deg.to_radians() * r_mid;
-            let max_chars =
-                ((arc_len * 0.88) / mean_char_width(font_size as f64)).floor().max(0.0) as usize;
+            let max_chars = ((arc_len * 0.88) / mean_char_width(font_size as f64))
+                .floor()
+                .max(0.0) as usize;
             let label = if max_chars > 2 && arc.label.chars().count() > max_chars {
                 let truncated: String = arc
                     .label
@@ -19713,7 +20458,11 @@ fn add_bump(bp: &BumpPlot, scene: &mut Scene, computed: &ComputedLayout, layout:
             let s = &series[si];
             let is_highlighted = highlight.is_none_or(|hl| s.name == hl);
             let color = if computed.bw_mode {
-                if highlight.is_some() && !is_highlighted { "#bbbbbb".to_string() } else { "#1a1a1a".to_string() }
+                if highlight.is_some() && !is_highlighted {
+                    "#bbbbbb".to_string()
+                } else {
+                    "#1a1a1a".to_string()
+                }
             } else if highlight.is_some() && !is_highlighted {
                 "#bbbbbb".to_string()
             } else {
@@ -19738,7 +20487,11 @@ fn add_bump(bp: &BumpPlot, scene: &mut Scene, computed: &ComputedLayout, layout:
             let s = &series[si];
             let is_highlighted = highlight.is_none_or(|hl| s.name == hl);
             let color = if computed.bw_mode {
-                if highlight.is_some() && !is_highlighted { "#bbbbbb".to_string() } else { "#1a1a1a".to_string() }
+                if highlight.is_some() && !is_highlighted {
+                    "#bbbbbb".to_string()
+                } else {
+                    "#1a1a1a".to_string()
+                }
             } else if highlight.is_some() && !is_highlighted {
                 "#bbbbbb".to_string()
             } else {
@@ -19935,7 +20688,9 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 (center_x - frac * max_bar_w / 2.0, frac * max_bar_w)
             };
 
-            rect_bw(scene, computed, i, &color, bar_x, bar_y, bar_w, bar_h, None, None, None);
+            rect_bw(
+                scene, computed, i, &color, bar_x, bar_y, bar_w, bar_h, None, None, None,
+            );
 
             // Connector (trapezoid) between this bar and the next
             if fp.show_connectors && i + 1 < n {
@@ -19964,7 +20719,17 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     "M {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} Z",
                     lx0, cy0, rx0, cy0, rx1, cy1, lx1, cy1
                 );
-                path_bw(scene, computed, i, &color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
+                path_bw(
+                    scene,
+                    computed,
+                    i,
+                    &color,
+                    d,
+                    Color::None,
+                    0.0,
+                    Some(fp.connector_opacity),
+                    None,
+                );
 
                 // Conversion rate label in connector area
                 if fp.show_conversion && gap >= 10.0 {
@@ -20066,7 +20831,10 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         &base_color,
                     );
 
-                    rect_bw(scene, computed, i, &m_color, center_x, bar_y, m_half_w, bar_h, None, None, None);
+                    rect_bw(
+                        scene, computed, i, &m_color, center_x, bar_y, m_half_w, bar_h, None, None,
+                        None,
+                    );
 
                     // Mirror connector
                     if fp.show_connectors && i + 1 < mirror_stages.len() {
@@ -20085,7 +20853,17 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                             center_x,
                             cy1,
                         );
-                        path_bw(scene, computed, i, &m_color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
+                        path_bw(
+                            scene,
+                            computed,
+                            i,
+                            &m_color,
+                            d,
+                            Color::None,
+                            0.0,
+                            Some(fp.connector_opacity),
+                            None,
+                        );
 
                         if fp.show_conversion && gap >= 10.0 {
                             let rate = if ms.value > f64::EPSILON {
@@ -20137,7 +20915,9 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         };
                         scene.add(Primitive::Text {
                             x: lx,
-                            y: bar_y + bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular),
+                            y: bar_y
+                                + bar_h / 2.0
+                                + center_offset(font_size as f64, FontStyle::Regular),
                             content: label,
                             size: font_size,
                             anchor,
@@ -20150,7 +20930,9 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     // Mirror stage label (right side)
                     scene.add(Primitive::Text {
                         x: center_x + max_bar_w / 2.0 + 6.0,
-                        y: bar_y + bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular),
+                        y: bar_y
+                            + bar_h / 2.0
+                            + center_offset(font_size as f64, FontStyle::Regular),
                         content: ms.label.clone(),
                         size: font_size,
                         anchor: TextAnchor::Start,
@@ -20222,7 +21004,19 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 (center_y - frac * max_bar_h / 2.0, frac * max_bar_h)
             };
 
-            rect_bw(scene, computed, i, &color, bar_x, bar_y, bar_w, actual_bar_h, None, None, None);
+            rect_bw(
+                scene,
+                computed,
+                i,
+                &color,
+                bar_x,
+                bar_y,
+                bar_w,
+                actual_bar_h,
+                None,
+                None,
+                None,
+            );
 
             // Connector between adjacent bars
             if fp.show_connectors && i + 1 < n {
@@ -20251,7 +21045,17 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     "M {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} L {:.2},{:.2} Z",
                     cx0, ty0, cx0, by0, cx1, by1, cx1, ty1
                 );
-                path_bw(scene, computed, i, &color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
+                path_bw(
+                    scene,
+                    computed,
+                    i,
+                    &color,
+                    d,
+                    Color::None,
+                    0.0,
+                    Some(fp.connector_opacity),
+                    None,
+                );
 
                 if fp.show_conversion && gap >= 10.0 {
                     let rate = if stage.value > f64::EPSILON {
@@ -20290,7 +21094,9 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 let (lx, ly, anchor, color_text) = if text_fits {
                     (
                         bar_x + bar_w / 2.0,
-                        bar_y + actual_bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular),
+                        bar_y
+                            + actual_bar_h / 2.0
+                            + center_offset(font_size as f64, FontStyle::Regular),
                         TextAnchor::Middle,
                         Color::from("#ffffff"),
                     )
@@ -20339,7 +21145,10 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         &base_color,
                     );
 
-                    rect_bw(scene, computed, i, &m_color, bar_x, center_y, bar_w, m_half_h, None, None, None);
+                    rect_bw(
+                        scene, computed, i, &m_color, bar_x, center_y, bar_w, m_half_h, None, None,
+                        None,
+                    );
 
                     if fp.show_connectors && i + 1 < mirror_stages.len() {
                         let next_m_frac = mirror_stages[i + 1].value / max_val;
@@ -20357,7 +21166,17 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                             cx1,
                             center_y,
                         );
-                        path_bw(scene, computed, i, &m_color, d, Color::None, 0.0, Some(fp.connector_opacity), None);
+                        path_bw(
+                            scene,
+                            computed,
+                            i,
+                            &m_color,
+                            d,
+                            Color::None,
+                            0.0,
+                            Some(fp.connector_opacity),
+                            None,
+                        );
                     }
 
                     if fp.show_values {
@@ -20375,7 +21194,9 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         let (lx, ly, anchor, color_text) = if text_fits {
                             (
                                 bar_x + bar_w / 2.0,
-                                center_y + m_half_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular),
+                                center_y
+                                    + m_half_h / 2.0
+                                    + center_offset(font_size as f64, FontStyle::Regular),
                                 TextAnchor::Middle,
                                 Color::from("#ffffff"),
                             )
@@ -20651,8 +21472,22 @@ fn add_rose(rp: &RosePlot, scene: &mut Scene, computed: &ComputedLayout) {
                             .clone()
                             .unwrap_or_else(|| cat10[j % 10].to_string());
                         let d = rose_wedge(cx, cy, r_inn, r_out, a1, a2, rp.clockwise);
-                        let stroke_col = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from("#ffffff") };
-                        path_bw(scene, computed, j, color.as_str(), d, stroke_col, 0.5, Some(0.75), None);
+                        let stroke_col = if computed.bw_mode {
+                            Color::from("#1a1a1a")
+                        } else {
+                            Color::from("#ffffff")
+                        };
+                        path_bw(
+                            scene,
+                            computed,
+                            j,
+                            color.as_str(),
+                            d,
+                            stroke_col,
+                            0.5,
+                            Some(0.75),
+                            None,
+                        );
                     }
                     if rp.show_values && cum > f64::EPSILON {
                         let r_out_tip = rose_r(cum, max_total, max_r, base_r, &rp.encoding);
@@ -20695,8 +21530,22 @@ fn add_rose(rp: &RosePlot, scene: &mut Scene, computed: &ComputedLayout) {
                             .clone()
                             .unwrap_or_else(|| cat10[j % 10].to_string());
                         let d = rose_wedge(cx, cy, base_r, r_out, a1, a2, rp.clockwise);
-                        let stroke_col = if computed.bw_mode { Color::from("#1a1a1a") } else { Color::from("#ffffff") };
-                        path_bw(scene, computed, j, color.as_str(), d, stroke_col, 0.5, Some(0.75), None);
+                        let stroke_col = if computed.bw_mode {
+                            Color::from("#1a1a1a")
+                        } else {
+                            Color::from("#ffffff")
+                        };
+                        path_bw(
+                            scene,
+                            computed,
+                            j,
+                            color.as_str(),
+                            d,
+                            stroke_col,
+                            0.5,
+                            Some(0.75),
+                            None,
+                        );
                     }
                     if rp.show_values {
                         let max_val = rp
@@ -20870,7 +21719,11 @@ const CALENDAR_TIP_JS: &str = r#"(function(){
 })();"#;
 
 fn add_calendar(cp: &CalendarPlot, scene: &mut Scene, computed: &ComputedLayout) {
-    let cmap = if computed.bw_mode { crate::plot::ColorMap::Grayscale } else { cp.color_map.clone() };
+    let cmap = if computed.bw_mode {
+        crate::plot::ColorMap::Grayscale
+    } else {
+        cp.color_map.clone()
+    };
     let agg_data = cp.aggregate();
     let periods = cp.detect_periods();
     if periods.is_empty() {
@@ -20879,8 +21732,11 @@ fn add_calendar(cp: &CalendarPlot, scene: &mut Scene, computed: &ComputedLayout)
 
     let sunday_start = matches!(cp.week_start, WeekStart::Sunday);
     // Reserve left margin wide enough for the longest period label (or day-of-week labels).
-    let max_label_w =
-        widest_text_width(periods.iter().map(|(l, _, _)| l.as_str()), 12.0, FontStyle::Regular);
+    let max_label_w = widest_text_width(
+        periods.iter().map(|(l, _, _)| l.as_str()),
+        12.0,
+        FontStyle::Regular,
+    );
     let day_label_w: f64 = if cp.show_day_labels {
         max_label_w.ceil().max(28.0)
     } else {
@@ -21341,7 +22197,19 @@ fn add_pyramid(pp: &PopulationPyramid, scene: &mut Scene, computed: &ComputedLay
                 let bar_x = px_x_left.min(center_x);
                 let bar_w = (center_x - px_x_left).abs();
                 let bw_idx = if n_series == 1 { 0 } else { j };
-                rect_bw(scene, computed, bw_idx, &left_color, bar_x, px_rect_y, bar_w, px_rect_h, None, None, opacity);
+                rect_bw(
+                    scene,
+                    computed,
+                    bw_idx,
+                    &left_color,
+                    bar_x,
+                    px_rect_y,
+                    bar_w,
+                    px_rect_h,
+                    None,
+                    None,
+                    opacity,
+                );
 
                 if pp.show_values && px_rect_h >= 10.0 && bar_w >= 16.0 {
                     let mid_y = px_rect_y + px_rect_h / 2.0 + 4.0;
@@ -21378,7 +22246,19 @@ fn add_pyramid(pp: &PopulationPyramid, scene: &mut Scene, computed: &ComputedLay
                 let bar_x = center_x.min(px_x_right);
                 let bar_w = (px_x_right - center_x).abs();
                 let bw_idx = if n_series == 1 { 1 } else { j };
-                rect_bw(scene, computed, bw_idx, &right_color, bar_x, px_rect_y, bar_w, px_rect_h, None, None, opacity);
+                rect_bw(
+                    scene,
+                    computed,
+                    bw_idx,
+                    &right_color,
+                    bar_x,
+                    px_rect_y,
+                    bar_w,
+                    px_rect_h,
+                    None,
+                    None,
+                    opacity,
+                );
 
                 if pp.show_values && px_rect_h >= 10.0 && bar_w >= 16.0 {
                     let mid_y = px_rect_y + px_rect_h / 2.0 + 4.0;
@@ -22280,7 +23160,17 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         round2(cx - s),
                         round2(y_center),
                     );
-                    path_bw(scene, computed, bw_idx, &color_str, d, bar_color.clone(), 1.0, None, None);
+                    path_bw(
+                        scene,
+                        computed,
+                        bw_idx,
+                        &color_str,
+                        d,
+                        bar_color.clone(),
+                        1.0,
+                        None,
+                        None,
+                    );
                     // Milestone label drawn post-clip via add_gantt_labels
                 } else {
                     // Horizontal task bar
@@ -22289,13 +23179,37 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     let bar_width = (x_end - x_start).max(2.0);
                     let bar_y = y_center - bar_h * 0.5;
 
-                    rect_bw(scene, computed, bw_idx, &color_str, x_start, bar_y, bar_width, bar_h, None, None, Some(0.85));
+                    rect_bw(
+                        scene,
+                        computed,
+                        bw_idx,
+                        &color_str,
+                        x_start,
+                        bar_y,
+                        bar_width,
+                        bar_h,
+                        None,
+                        None,
+                        Some(0.85),
+                    );
 
                     // Progress fill (darker inner rect)
                     if let Some(frac) = task.progress {
                         let prog_w = bar_width * frac;
                         if prog_w > 0.0 {
-                            rect_bw(scene, computed, bw_idx, &color_str, x_start, bar_y, prog_w, bar_h, None, None, Some(1.0));
+                            rect_bw(
+                                scene,
+                                computed,
+                                bw_idx,
+                                &color_str,
+                                x_start,
+                                bar_y,
+                                prog_w,
+                                bar_h,
+                                None,
+                                None,
+                                Some(1.0),
+                            );
                             // Progress stripe boundary
                             scene.add(Primitive::Line {
                                 x1: x_start + prog_w,

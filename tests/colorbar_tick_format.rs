@@ -133,8 +133,11 @@ fn test_hexbin_log_colorbar_mean_shows_fractional_top_tick() {
     let plots = make_hexbin_fractional_mean();
     let layout = Layout::auto_from_plots(&plots).with_title("Hexbin Mean fractional tick");
     let svg = render_svg(plots, layout);
-    common::write_test_output("test_outputs/colorbar_tick_format_hexbin_mean_fractional.svg", &svg)
-        .unwrap();
+    common::write_test_output(
+        "test_outputs/colorbar_tick_format_hexbin_mean_fractional.svg",
+        &svg,
+    )
+    .unwrap();
 
     assert!(
         svg.contains(">7.3</text>"),

@@ -154,8 +154,7 @@ fn test_treemap_colorbar_reservation_grows_with_value_width() {
     let wide_plots = treemap_with_max(1_234_567.0);
     let wide_layout = Layout::auto_from_plots(&wide_plots);
     let wide = render_svg(wide_plots, wide_layout);
-    common::write_test_output("test_outputs/colorbar_label_width_treemap_wide.svg", &wide)
-        .unwrap();
+    common::write_test_output("test_outputs/colorbar_label_width_treemap_wide.svg", &wide).unwrap();
     assert!(
         canvas_width(&wide) > canvas_width(&narrow),
         "7-digit treemap colorbar values should widen the canvas vs 2-digit ({} !> {})",

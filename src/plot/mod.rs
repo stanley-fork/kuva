@@ -1,6 +1,5 @@
 pub mod band;
 pub mod bar;
-pub mod fill_pattern;
 pub mod boxplot;
 pub mod brick;
 pub mod bump;
@@ -14,6 +13,7 @@ pub mod density;
 pub mod diceplot;
 pub mod dotplot;
 pub mod ecdf;
+pub mod fill_pattern;
 pub mod forest;
 pub mod funnel;
 pub mod gantt;

@@ -20,7 +20,10 @@ use std::fmt::Write as _;
 use ttf_parser::Face;
 
 const ASSETS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts");
-const OUT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/render/text_metrics/data.rs");
+const OUT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/render/text_metrics/data.rs"
+);
 
 /// Dense BMP advance table in font units; 0 marks a codepoint with no glyph.
 fn dense(face: &Face) -> Vec<u16> {
@@ -53,11 +56,16 @@ fn vmetrics(face: &Face) -> [i16; 5] {
     // return None. Fall back to OS/2, then a derived value, only if the glyph is
     // missing entirely.
     let glyph_top = |ch: char| {
-        face.glyph_index(ch).and_then(|g| face.glyph_bounding_box(g)).map(|bb| bb.y_max)
+        face.glyph_index(ch)
+            .and_then(|g| face.glyph_bounding_box(g))
+            .map(|bb| bb.y_max)
     };
-    let cap_height = glyph_top('H').or_else(|| face.capital_height()).unwrap_or(ascent);
-    let x_height =
-        glyph_top('x').or_else(|| face.x_height()).unwrap_or((f32::from(cap_height) * 0.72) as i16);
+    let cap_height = glyph_top('H')
+        .or_else(|| face.capital_height())
+        .unwrap_or(ascent);
+    let x_height = glyph_top('x')
+        .or_else(|| face.x_height())
+        .unwrap_or((f32::from(cap_height) * 0.72) as i16);
     [ascent, descent, line_gap, cap_height, x_height]
 }
 
@@ -131,7 +139,11 @@ fn main() {
         ("ADVANCE_RLE_REGULAR", "DejaVuSans.ttf", None),
         ("ADVANCE_RLE_ITALIC", "DejaVuSans-Oblique.ttf", None),
         ("ADVANCE_RLE_BOLD", "DejaVuSans-Bold.ttf", None),
-        ("ADVANCE_RLE_BOLD_ITALIC", "DejaVuSans-BoldOblique.ttf", Some("DejaVuSans-Bold.ttf")),
+        (
+            "ADVANCE_RLE_BOLD_ITALIC",
+            "DejaVuSans-BoldOblique.ttf",
+            Some("DejaVuSans-Bold.ttf"),
+        ),
     ];
 
     let tables: Vec<(&str, Vec<(u16, u16)>, u16, [i16; 5])> = faces
@@ -142,7 +154,10 @@ fn main() {
         })
         .collect();
     let upem = tables[0].2;
-    assert!(tables.iter().all(|t| t.2 == upem), "faces must share units_per_em");
+    assert!(
+        tables.iter().all(|t| t.2 == upem),
+        "faces must share units_per_em"
+    );
 
     // Mean advance over printable ASCII (Regular face), the representative value
     // for inverse width-to-character-count estimates.
@@ -171,12 +186,32 @@ fn main() {
          //! off; an advance of 0 marks a codepoint with no glyph in the face. Lengths sum\n\
          //! to 65536.\n\n",
     );
-    writeln!(buf, "/// Font design units per em (the divisor that turns advances into em fractions).").unwrap();
+    writeln!(
+        buf,
+        "/// Font design units per em (the divisor that turns advances into em fractions)."
+    )
+    .unwrap();
     writeln!(buf, "pub(super) const UNITS_PER_EM: u16 = {upem};\n").unwrap();
-    writeln!(buf, "/// Mean advance over printable ASCII, in em — used for inverse").unwrap();
-    writeln!(buf, "/// width-to-character-count estimates where no concrete string is available.").unwrap();
-    writeln!(buf, "pub(super) const MEAN_ADVANCE_EM: f64 = {mean_em:.6};\n").unwrap();
-    writeln!(buf, "/// Per-style vertical metrics in font units (scaled by `size / UNITS_PER_EM`").unwrap();
+    writeln!(
+        buf,
+        "/// Mean advance over printable ASCII, in em — used for inverse"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "/// width-to-character-count estimates where no concrete string is available."
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "pub(super) const MEAN_ADVANCE_EM: f64 = {mean_em:.6};\n"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "/// Per-style vertical metrics in font units (scaled by `size / UNITS_PER_EM`"
+    )
+    .unwrap();
     writeln!(buf, "/// at runtime); see `super::VMetrics`.").unwrap();
     for (name, _, _, vm) in &tables {
         emit_vmetrics(&mut buf, &name.replace("ADVANCE_RLE", "VMETRICS"), vm);
@@ -189,7 +224,9 @@ fn main() {
     }
 
     std::fs::write(OUT, &buf).expect("write data.rs");
-    let summary: Vec<String> =
-        tables.iter().map(|(n, r, _, _)| format!("{n}={}", r.len())).collect();
+    let summary: Vec<String> = tables
+        .iter()
+        .map(|(n, r, _, _)| format!("{n}={}", r.len()))
+        .collect();
     println!("wrote {OUT} ({})", summary.join(", "));
 }

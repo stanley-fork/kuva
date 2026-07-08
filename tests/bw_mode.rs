@@ -51,7 +51,9 @@ fn distinct_patterns_in_plot_body(svg: &str) -> usize {
     let body = match svg.find("<g clip-path=") {
         Some(start) => {
             let open_end = svg[start..].find('>').map_or(svg.len(), |e| start + e + 1);
-            let close = svg[open_end..].rfind("</g>").map_or(svg.len(), |e| open_end + e);
+            let close = svg[open_end..]
+                .rfind("</g>")
+                .map_or(svg.len(), |e| open_end + e);
             &svg[open_end..close]
         }
         None => svg,
@@ -60,7 +62,9 @@ fn distinct_patterns_in_plot_body(svg: &str) -> usize {
     let mut search_from = 0;
     while let Some(rel) = body[search_from..].find("url(#kuva-fp-") {
         let start = search_from + rel;
-        let end = body[start..].find(')').map_or(body.len(), |e| start + e + 1);
+        let end = body[start..]
+            .find(')')
+            .map_or(body.len(), |e| start + e + 1);
         ids.insert(&body[start..end]);
         search_from = end;
     }
@@ -134,8 +138,14 @@ fn bw_bar_single_series() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_bar.svg", svg.clone()).unwrap();
     assert!(svg.contains("<svg"));
-    assert!(svg.contains("<pattern"), "BW bar chart should emit SVG pattern defs");
-    assert!(svg.contains("kuva-fp-"), "Pattern defs should use kuva-fp- prefix");
+    assert!(
+        svg.contains("<pattern"),
+        "BW bar chart should emit SVG pattern defs"
+    );
+    assert!(
+        svg.contains("kuva-fp-"),
+        "Pattern defs should use kuva-fp- prefix"
+    );
 }
 
 #[test]
@@ -217,7 +227,13 @@ fn bw_upset() {
     let upset = UpSetPlot::new().with_data(
         vec!["Set A", "Set B", "Set C"],
         vec![52usize, 47, 36],
-        vec![(0b001u64, 10usize), (0b010, 8), (0b100, 12), (0b011, 5), (0b111, 20)],
+        vec![
+            (0b001u64, 10usize),
+            (0b010, 8),
+            (0b100, 12),
+            (0b011, 5),
+            (0b111, 20),
+        ],
     );
     let plots = vec![Plot::UpSet(upset)];
     let layout = Layout::auto_from_plots(&plots);
@@ -289,9 +305,18 @@ fn bw_density() {
 fn bw_ridgeline() {
     use kuva::plot::ridgeline::RidgelinePlot;
     let rp = RidgelinePlot::new()
-        .with_group("Spring", vec![12.0, 15.0, 18.0, 14.0, 16.0, 13.0, 17.0, 15.5])
-        .with_group("Summer", vec![22.0, 25.0, 28.0, 24.0, 26.0, 23.0, 27.0, 25.5])
-        .with_group("Autumn", vec![10.0, 13.0, 16.0, 12.0, 14.0, 11.0, 15.0, 13.5])
+        .with_group(
+            "Spring",
+            vec![12.0, 15.0, 18.0, 14.0, 16.0, 13.0, 17.0, 15.5],
+        )
+        .with_group(
+            "Summer",
+            vec![22.0, 25.0, 28.0, 24.0, 26.0, 23.0, 27.0, 25.5],
+        )
+        .with_group(
+            "Autumn",
+            vec![10.0, 13.0, 16.0, 12.0, 14.0, 11.0, 15.0, 13.5],
+        )
         .with_filled(true)
         .with_opacity(0.7);
     let plots = vec![Plot::Ridgeline(rp)];
@@ -357,16 +382,26 @@ fn bw_survival_ci_band() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_survival.svg", svg.clone()).unwrap();
     assert!(svg.contains("<svg"));
-    assert!(svg.contains("#1a1a1a"), "BW survival curves should use dark stroke");
+    assert!(
+        svg.contains("#1a1a1a"),
+        "BW survival curves should use dark stroke"
+    );
 }
 
 #[test]
 fn bw_roc() {
     use kuva::plot::roc::{RocGroup, RocPlot};
     let data: Vec<(f64, bool)> = vec![
-        (0.95, true), (0.88, true), (0.80, false), (0.72, true),
-        (0.65, false), (0.55, true), (0.40, false), (0.30, false),
-        (0.22, true), (0.10, false),
+        (0.95, true),
+        (0.88, true),
+        (0.80, false),
+        (0.72, true),
+        (0.65, false),
+        (0.55, true),
+        (0.40, false),
+        (0.30, false),
+        (0.22, true),
+        (0.10, false),
     ];
     let group = RocGroup::new("Classifier").with_raw(data).with_ci(true);
     let roc = RocPlot::new().with_group(group);
@@ -374,7 +409,10 @@ fn bw_roc() {
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_roc.svg", svg.clone()).unwrap();
-    assert!(svg.contains("#1a1a1a"), "BW ROC curve should use dark stroke");
+    assert!(
+        svg.contains("#1a1a1a"),
+        "BW ROC curve should use dark stroke"
+    );
 }
 
 // ── Lines ────────────────────────────────────────────────────────────────────
@@ -382,18 +420,29 @@ fn bw_roc() {
 #[test]
 fn bw_line() {
     let line = LinePlot::new()
-        .with_data(vec![(0.0, 1.0), (1.0, 3.0), (2.0, 2.0), (3.0, 4.0), (4.0, 3.5)])
+        .with_data(vec![
+            (0.0, 1.0),
+            (1.0, 3.0),
+            (2.0, 2.0),
+            (3.0, 4.0),
+            (4.0, 3.5),
+        ])
         .with_color("steelblue");
     let plots = vec![Plot::Line(line)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_line.svg", svg.clone()).unwrap();
-    assert!(svg.contains("#1a1a1a"), "BW line chart should use dark stroke color");
+    assert!(
+        svg.contains("#1a1a1a"),
+        "BW line chart should use dark stroke color"
+    );
 }
 
 #[test]
 fn bw_series() {
-    let data: Vec<f64> = (0..40).map(|x| (x as f64 * 0.3).sin() * 3.0 + 5.0).collect();
+    let data: Vec<f64> = (0..40)
+        .map(|x| (x as f64 * 0.3).sin() * 3.0 + 5.0)
+        .collect();
     let series = SeriesPlot::new()
         .with_data(data)
         .with_color("tomato")
@@ -409,9 +458,16 @@ fn bw_series() {
 fn bw_pr() {
     use kuva::plot::pr::{PrGroup, PrPlot};
     let data: Vec<(f64, bool)> = vec![
-        (0.92, true), (0.85, true), (0.78, false), (0.70, true),
-        (0.60, false), (0.50, true), (0.38, false), (0.25, false),
-        (0.18, true), (0.08, false),
+        (0.92, true),
+        (0.85, true),
+        (0.78, false),
+        (0.70, true),
+        (0.60, false),
+        (0.50, true),
+        (0.38, false),
+        (0.25, false),
+        (0.18, true),
+        (0.08, false),
     ];
     let group = PrGroup::new("Model A").with_raw(data);
     let pr = PrPlot::new().with_group(group);
@@ -425,8 +481,14 @@ fn bw_pr() {
 #[test]
 fn bw_ecdf() {
     let ecdf = EcdfPlot::new()
-        .with_data("Sample A", vec![1.2, 3.4, 2.1, 5.6, 4.0, 0.8, 3.3, 2.7, 4.5, 1.9])
-        .with_data("Sample B", vec![2.2, 3.8, 2.9, 4.6, 3.0, 1.8, 4.3, 3.7, 5.0, 2.4])
+        .with_data(
+            "Sample A",
+            vec![1.2, 3.4, 2.1, 5.6, 4.0, 0.8, 3.3, 2.7, 4.5, 1.9],
+        )
+        .with_data(
+            "Sample B",
+            vec![2.2, 3.8, 2.9, 4.6, 3.0, 1.8, 4.3, 3.7, 5.0, 2.4],
+        )
         .with_confidence_band();
     let plots = vec![Plot::Ecdf(ecdf)];
     let layout = Layout::auto_from_plots(&plots);
@@ -472,13 +534,22 @@ fn bw_bump() {
 #[test]
 fn bw_scatter() {
     let scatter = ScatterPlot::new()
-        .with_data(vec![(1.0, 2.0), (2.0, 3.0), (3.0, 1.5), (4.0, 4.0), (5.0, 2.5)])
+        .with_data(vec![
+            (1.0, 2.0),
+            (2.0, 3.0),
+            (3.0, 1.5),
+            (4.0, 4.0),
+            (5.0, 2.5),
+        ])
         .with_color("steelblue");
     let plots = vec![Plot::Scatter(scatter)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_scatter.svg", svg.clone()).unwrap();
-    assert!(svg.contains("#1a1a1a"), "BW scatter chart should use dark fill color");
+    assert!(
+        svg.contains("#1a1a1a"),
+        "BW scatter chart should use dark fill color"
+    );
 }
 
 #[test]
@@ -520,9 +591,18 @@ fn bw_line_multi_series_uses_distinct_dash_styles() {
     let data0 = vec![(0.0, 1.0), (1.0, 2.0), (2.0, 1.5), (3.0, 3.0)];
     let data1 = vec![(0.0, 5.0), (1.0, 6.0), (2.0, 5.5), (3.0, 7.0)];
     let data2 = vec![(0.0, 9.0), (1.0, 10.0), (2.0, 9.5), (3.0, 11.0)];
-    let line0 = LinePlot::new().with_data(data0).with_color("steelblue").with_legend("A");
-    let line1 = LinePlot::new().with_data(data1).with_color("tomato").with_legend("B");
-    let line2 = LinePlot::new().with_data(data2).with_color("seagreen").with_legend("C");
+    let line0 = LinePlot::new()
+        .with_data(data0)
+        .with_color("steelblue")
+        .with_legend("A");
+    let line1 = LinePlot::new()
+        .with_data(data1)
+        .with_color("tomato")
+        .with_legend("B");
+    let line2 = LinePlot::new()
+        .with_data(data2)
+        .with_color("seagreen")
+        .with_legend("C");
     let plots = vec![Plot::Line(line0), Plot::Line(line1), Plot::Line(line2)];
     let mut layout = Layout::auto_from_plots(&plots);
     layout.show_legend = true;
@@ -537,28 +617,44 @@ fn bw_line_multi_series_uses_distinct_dash_styles() {
 fn bw_scatter_multi_series_uses_distinct_shapes() {
     let pts_a = vec![(1.0, 2.0), (2.0, 3.0), (3.0, 2.5)];
     let pts_b = vec![(1.0, 3.5), (2.0, 1.5), (3.0, 4.0)];
-    let scatter0 = ScatterPlot::new().with_data(pts_a).with_color("steelblue").with_legend("A");
-    let scatter1 = ScatterPlot::new().with_data(pts_b).with_color("tomato").with_legend("B");
+    let scatter0 = ScatterPlot::new()
+        .with_data(pts_a)
+        .with_color("steelblue")
+        .with_legend("A");
+    let scatter1 = ScatterPlot::new()
+        .with_data(pts_b)
+        .with_color("tomato")
+        .with_legend("B");
     let plots = vec![Plot::Scatter(scatter0), Plot::Scatter(scatter1)];
     let mut layout = Layout::auto_from_plots(&plots);
     layout.show_legend = true;
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_scatter_multi.svg", svg.clone()).unwrap();
     // Series 0 → Circle (fast path CircleBatch), Series 1 → Square (rect element via slow path)
-    assert!(svg.contains("#1a1a1a"), "All BW scatter points should be dark");
+    assert!(
+        svg.contains("#1a1a1a"),
+        "All BW scatter points should be dark"
+    );
     // The second scatter uses bw_shape(1) = Square → should contain a rect or polygon path,
     // not just circles.  A simple proxy: the SVG is longer / more complex than a single series.
-    assert!(svg.len() > 500, "Multi-series BW scatter should produce non-trivial SVG");
+    assert!(
+        svg.len() > 500,
+        "Multi-series BW scatter should produce non-trivial SVG"
+    );
 }
 
 #[test]
 fn bw_density_multi_series_distinct_patterns() {
     let density0 = DensityPlot::new()
         .with_data(vec![1.0, 1.5, 2.0, 2.5, 3.0, 2.0, 1.8])
-        .with_color("steelblue").with_filled(true).with_opacity(0.5);
+        .with_color("steelblue")
+        .with_filled(true)
+        .with_opacity(0.5);
     let density1 = DensityPlot::new()
         .with_data(vec![3.0, 3.5, 4.0, 4.5, 5.0, 4.0, 3.8])
-        .with_color("tomato").with_filled(true).with_opacity(0.5);
+        .with_color("tomato")
+        .with_filled(true)
+        .with_opacity(0.5);
     let plots = vec![Plot::Density(density0), Plot::Density(density1)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -576,15 +672,28 @@ fn bw_density_multi_series_distinct_patterns() {
 #[test]
 fn bw_series_multi_distinct_dashes() {
     // Different y-ranges so the two series are visually separated
-    let v0: Vec<f64> = (0..20).map(|i| (i as f64 * 0.4).sin() * 2.0 + 3.0).collect();
-    let v1: Vec<f64> = (0..20).map(|i| (i as f64 * 0.4).cos() * 2.0 + 9.0).collect();
-    let s0 = SeriesPlot::new().with_data(v0).with_color("steelblue").with_line_style();
-    let s1 = SeriesPlot::new().with_data(v1).with_color("tomato").with_line_style();
+    let v0: Vec<f64> = (0..20)
+        .map(|i| (i as f64 * 0.4).sin() * 2.0 + 3.0)
+        .collect();
+    let v1: Vec<f64> = (0..20)
+        .map(|i| (i as f64 * 0.4).cos() * 2.0 + 9.0)
+        .collect();
+    let s0 = SeriesPlot::new()
+        .with_data(v0)
+        .with_color("steelblue")
+        .with_line_style();
+    let s1 = SeriesPlot::new()
+        .with_data(v1)
+        .with_color("tomato")
+        .with_line_style();
     let plots = vec![Plot::Series(s0), Plot::Series(s1)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_series_multi.svg", svg.clone()).unwrap();
-    assert!(svg.contains("8 4"), "Second SeriesPlot should be dashed (8 4)");
+    assert!(
+        svg.contains("8 4"),
+        "Second SeriesPlot should be dashed (8 4)"
+    );
 }
 
 // Plot::Band overlays
@@ -597,8 +706,12 @@ fn bw_band_multi_distinct_patterns() {
     let lo1: Vec<f64> = x.iter().map(|&v| v.cos() - 0.5).collect();
     let hi1: Vec<f64> = x.iter().map(|&v| v.cos() + 0.5).collect();
     use kuva::plot::BandPlot;
-    let b0 = BandPlot::new(x.clone(), lo0, hi0).with_color("steelblue").with_opacity(0.4);
-    let b1 = BandPlot::new(x, lo1, hi1).with_color("tomato").with_opacity(0.4);
+    let b0 = BandPlot::new(x.clone(), lo0, hi0)
+        .with_color("steelblue")
+        .with_opacity(0.4);
+    let b1 = BandPlot::new(x, lo1, hi1)
+        .with_color("tomato")
+        .with_opacity(0.4);
     let plots = vec![Plot::Band(b0), Plot::Band(b1)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -679,15 +792,33 @@ fn bw_ridgeline_multi_group_distinct_patterns() {
 fn bw_survival_multi_group_distinct_dashes() {
     use kuva::plot::SurvivalPlot;
     let sp = SurvivalPlot::new()
-        .with_group("Ctrl",  vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0], vec![true, true, false, true, false, true])
-        .with_group("Trt A", vec![3.0, 6.0, 9.0, 12.0, 15.0, 18.0], vec![true, false, true, false, true, false])
-        .with_group("Trt B", vec![5.0, 8.0, 11.0, 14.0, 17.0, 20.0], vec![true, true, false, false, true, true]);
+        .with_group(
+            "Ctrl",
+            vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0],
+            vec![true, true, false, true, false, true],
+        )
+        .with_group(
+            "Trt A",
+            vec![3.0, 6.0, 9.0, 12.0, 15.0, 18.0],
+            vec![true, false, true, false, true, false],
+        )
+        .with_group(
+            "Trt B",
+            vec![5.0, 8.0, 11.0, 14.0, 17.0, 20.0],
+            vec![true, true, false, false, true, true],
+        );
     let plots = vec![Plot::Survival(sp)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_survival_multi.svg", svg.clone()).unwrap();
-    assert!(svg.contains("8 4"), "Second survival group should use dashed line (8 4)");
-    assert!(svg.contains("2 4"), "Third survival group should use dotted line (2 4)");
+    assert!(
+        svg.contains("8 4"),
+        "Second survival group should use dashed line (8 4)"
+    );
+    assert!(
+        svg.contains("2 4"),
+        "Third survival group should use dotted line (2 4)"
+    );
 }
 
 // EcdfPlot multi-group
@@ -702,7 +833,10 @@ fn bw_ecdf_multi_group_distinct_dashes() {
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_ecdf_multi.svg", svg.clone()).unwrap();
-    assert!(svg.contains("8 4"), "Second ECDF group should use dashed line (8 4)");
+    assert!(
+        svg.contains("8 4"),
+        "Second ECDF group should use dashed line (8 4)"
+    );
 }
 
 // RocPlot multi-group
@@ -712,13 +846,25 @@ fn bw_roc_multi_group_distinct_dashes() {
     use kuva::plot::roc::{RocGroup, RocPlot};
     // Model A: strong classifier (positives cluster at high scores)
     let data_a: Vec<(f64, bool)> = vec![
-        (0.95, true), (0.90, true), (0.85, true), (0.80, true),
-        (0.40, false), (0.30, false), (0.20, false), (0.10, false),
+        (0.95, true),
+        (0.90, true),
+        (0.85, true),
+        (0.80, true),
+        (0.40, false),
+        (0.30, false),
+        (0.20, false),
+        (0.10, false),
     ];
     // Model B: weak classifier (scores mixed between classes)
     let data_b: Vec<(f64, bool)> = vec![
-        (0.75, true), (0.55, false), (0.65, true), (0.45, false),
-        (0.60, false), (0.50, true), (0.40, false), (0.35, true),
+        (0.75, true),
+        (0.55, false),
+        (0.65, true),
+        (0.45, false),
+        (0.60, false),
+        (0.50, true),
+        (0.40, false),
+        (0.35, true),
     ];
     let g0 = RocGroup::new("Model A").with_raw(data_a);
     let g1 = RocGroup::new("Model B").with_raw(data_b);
@@ -727,7 +873,10 @@ fn bw_roc_multi_group_distinct_dashes() {
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_roc_multi.svg", svg.clone()).unwrap();
-    assert!(svg.contains("8 4"), "Second ROC group should use dashed line (8 4)");
+    assert!(
+        svg.contains("8 4"),
+        "Second ROC group should use dashed line (8 4)"
+    );
 }
 
 // PrPlot multi-group
@@ -737,13 +886,25 @@ fn bw_pr_multi_group_distinct_dashes() {
     use kuva::plot::pr::{PrGroup, PrPlot};
     // Model A: strong classifier
     let data_a: Vec<(f64, bool)> = vec![
-        (0.95, true), (0.90, true), (0.85, true), (0.80, true),
-        (0.40, false), (0.30, false), (0.20, false), (0.10, false),
+        (0.95, true),
+        (0.90, true),
+        (0.85, true),
+        (0.80, true),
+        (0.40, false),
+        (0.30, false),
+        (0.20, false),
+        (0.10, false),
     ];
     // Model B: weaker classifier
     let data_b: Vec<(f64, bool)> = vec![
-        (0.75, true), (0.55, false), (0.65, true), (0.45, false),
-        (0.60, false), (0.50, true), (0.40, false), (0.35, true),
+        (0.75, true),
+        (0.55, false),
+        (0.65, true),
+        (0.45, false),
+        (0.60, false),
+        (0.50, true),
+        (0.40, false),
+        (0.35, true),
     ];
     let g0 = PrGroup::new("Model A").with_raw(data_a);
     let g1 = PrGroup::new("Model B").with_raw(data_b);
@@ -752,7 +913,10 @@ fn bw_pr_multi_group_distinct_dashes() {
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_pr_multi.svg", svg.clone()).unwrap();
-    assert!(svg.contains("8 4"), "Second PR group should use dashed line (8 4)");
+    assert!(
+        svg.contains("8 4"),
+        "Second PR group should use dashed line (8 4)"
+    );
 }
 
 // BumpPlot multi-series
@@ -762,15 +926,21 @@ fn bw_bump_multi_series_distinct_dashes() {
     use kuva::plot::bump::BumpPlot;
     let bp = BumpPlot::new()
         .with_series("Alpha", vec![1, 3, 2, 1])
-        .with_series("Beta",  vec![2, 1, 3, 2])
+        .with_series("Beta", vec![2, 1, 3, 2])
         .with_series("Gamma", vec![3, 2, 1, 3])
         .with_x_labels(["2021", "2022", "2023", "2024"]);
     let plots = vec![Plot::Bump(bp)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_bump_multi.svg", svg.clone()).unwrap();
-    assert!(svg.contains("8 4"), "Second bump series should use dashed line (8 4)");
-    assert!(svg.contains("2 4"), "Third bump series should use dotted line (2 4)");
+    assert!(
+        svg.contains("8 4"),
+        "Second bump series should use dashed line (8 4)"
+    );
+    assert!(
+        svg.contains("2 4"),
+        "Third bump series should use dotted line (2 4)"
+    );
 }
 
 // StackedAreaPlot multi-series patterns
@@ -781,11 +951,16 @@ fn bw_stacked_area_multi_series_distinct_patterns() {
     // Five series to clearly differentiate from the single bw_stacked_area test (3 series)
     let sa = StackedAreaPlot::new()
         .with_x(vec![0.0, 1.0, 2.0, 3.0, 4.0])
-        .with_series(vec![10.0, 12.0, 11.0, 14.0, 13.0]).with_color("steelblue")
-        .with_series(vec![5.0, 7.0, 6.0, 8.0, 7.0]).with_color("tomato")
-        .with_series(vec![3.0, 4.0, 3.0, 5.0, 4.0]).with_color("goldenrod")
-        .with_series(vec![2.0, 3.0, 4.0, 3.0, 2.0]).with_color("orchid")
-        .with_series(vec![1.0, 2.0, 1.0, 2.0, 3.0]).with_color("teal");
+        .with_series(vec![10.0, 12.0, 11.0, 14.0, 13.0])
+        .with_color("steelblue")
+        .with_series(vec![5.0, 7.0, 6.0, 8.0, 7.0])
+        .with_color("tomato")
+        .with_series(vec![3.0, 4.0, 3.0, 5.0, 4.0])
+        .with_color("goldenrod")
+        .with_series(vec![2.0, 3.0, 4.0, 3.0, 2.0])
+        .with_color("orchid")
+        .with_series(vec![1.0, 2.0, 1.0, 2.0, 3.0])
+        .with_color("teal");
     let plots = vec![Plot::StackedArea(sa)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -833,7 +1008,13 @@ fn bw_upset_dot_matrix_uses_guaranteed_contrast_not_user_colors() {
         .with_data(
             vec!["Set A", "Set B", "Set C"],
             vec![52usize, 47, 36],
-            vec![(0b001u64, 10usize), (0b010, 8), (0b100, 12), (0b011, 5), (0b111, 20)],
+            vec![
+                (0b001u64, 10usize),
+                (0b010, 8),
+                (0b100, 12),
+                (0b011, 5),
+                (0b111, 20),
+            ],
         )
         .with_dot_color("#4499cc");
     upset.dot_empty_color = "#eeeeee".to_string();
@@ -863,7 +1044,7 @@ fn bw_volcano_categories_use_distinct_shapes() {
     use kuva::plot::VolcanoPlot;
     // fc_cutoff=1.0, p_cutoff=0.05 (defaults): one point per category (NS, Down, Up).
     let volcano = VolcanoPlot::new().with_points(vec![
-        ("GeneNS", 0.1, 0.5),   // NS: |log2fc| < cutoff
+        ("GeneNS", 0.1, 0.5),     // NS: |log2fc| < cutoff
         ("GeneDown", -2.0, 0.01), // Down: log2fc <= -cutoff, significant
         ("GeneUp", 2.0, 0.01),    // Up: log2fc >= cutoff, significant
     ]);
@@ -881,11 +1062,7 @@ fn bw_volcano_categories_use_distinct_shapes() {
 #[test]
 fn bw_manhattan_chromosomes_use_distinct_shapes() {
     use kuva::plot::ManhattanPlot;
-    let mp = ManhattanPlot::new().with_data(vec![
-        ("1", 0.01),
-        ("2", 0.02),
-        ("3", 0.03),
-    ]);
+    let mp = ManhattanPlot::new().with_data(vec![("1", 0.01), ("2", 0.02), ("3", 0.03)]);
     let plots = vec![Plot::Manhattan(mp)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -900,11 +1077,7 @@ fn bw_manhattan_chromosomes_use_distinct_shapes() {
 #[test]
 fn bw_manhattan_significance_lines_are_not_colored() {
     use kuva::plot::ManhattanPlot;
-    let mp = ManhattanPlot::new().with_data(vec![
-        ("1", 0.01),
-        ("2", 0.02),
-        ("3", 0.03),
-    ]);
+    let mp = ManhattanPlot::new().with_data(vec![("1", 0.01), ("2", 0.02), ("3", 0.03)]);
     let plots = vec![Plot::Manhattan(mp)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -1014,8 +1187,12 @@ fn bw_venn_sets_use_distinct_patterns() {
 #[test]
 fn bw_scatter3d_instances_use_distinct_shapes() {
     use kuva::plot::scatter3d::Scatter3DPlot;
-    let s0 = Scatter3DPlot::new().with_data(vec![(1.0, 2.0, 3.0), (2.0, 3.0, 4.0)]).with_color("steelblue");
-    let s1 = Scatter3DPlot::new().with_data(vec![(4.0, 5.0, 1.0), (5.0, 6.0, 2.0)]).with_color("tomato");
+    let s0 = Scatter3DPlot::new()
+        .with_data(vec![(1.0, 2.0, 3.0), (2.0, 3.0, 4.0)])
+        .with_color("steelblue");
+    let s1 = Scatter3DPlot::new()
+        .with_data(vec![(4.0, 5.0, 1.0), (5.0, 6.0, 2.0)])
+        .with_color("tomato");
     let plots = vec![Plot::Scatter3D(s0), Plot::Scatter3D(s1)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -1041,7 +1218,10 @@ fn bw_mosaic_rows_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_mosaic.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "two mosaic rows should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "two mosaic rows should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1050,18 +1230,27 @@ fn bw_treemap_roots_use_distinct_patterns() {
     let treemap = TreemapPlot::new()
         .with_node(TreemapNode::new(
             "Foods",
-            vec![TreemapNode::leaf("Apples", 30.0), TreemapNode::leaf("Oranges", 20.0)],
+            vec![
+                TreemapNode::leaf("Apples", 30.0),
+                TreemapNode::leaf("Oranges", 20.0),
+            ],
         ))
         .with_node(TreemapNode::new(
             "Drinks",
-            vec![TreemapNode::leaf("Coffee", 15.0), TreemapNode::leaf("Tea", 10.0)],
+            vec![
+                TreemapNode::leaf("Coffee", 15.0),
+                TreemapNode::leaf("Tea", 10.0),
+            ],
         ));
     let plots = vec![Plot::Treemap(treemap)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_treemap.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "two treemap roots should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "two treemap roots should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1071,18 +1260,27 @@ fn bw_sunburst_roots_use_distinct_patterns() {
     let sunburst = SunburstPlot::new()
         .with_node(TreemapNode::new(
             "Org1",
-            vec![TreemapNode::leaf("Alice", 40.0), TreemapNode::leaf("Bob", 30.0)],
+            vec![
+                TreemapNode::leaf("Alice", 40.0),
+                TreemapNode::leaf("Bob", 30.0),
+            ],
         ))
         .with_node(TreemapNode::new(
             "Org2",
-            vec![TreemapNode::leaf("Carol", 25.0), TreemapNode::leaf("Dave", 20.0)],
+            vec![
+                TreemapNode::leaf("Carol", 25.0),
+                TreemapNode::leaf("Dave", 20.0),
+            ],
         ));
     let plots = vec![Plot::Sunburst(sunburst)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_sunburst.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "two sunburst roots should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "two sunburst roots should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1097,7 +1295,10 @@ fn bw_funnel_stages_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_funnel.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "funnel stages should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "funnel stages should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1113,7 +1314,10 @@ fn bw_pyramid_sides_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_pyramid.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "pyramid left/right halves should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "pyramid left/right halves should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1129,7 +1333,10 @@ fn bw_waffle_categories_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_waffle.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "waffle categories should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "waffle categories should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1143,7 +1350,10 @@ fn bw_gantt_groups_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_gantt.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "gantt task groups should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "gantt task groups should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1161,7 +1371,10 @@ fn bw_brick_template_chars_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_brick.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "brick template characters should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "brick template characters should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 // ── Group 4: line/stroke family ─────────────────────────────────────────────
@@ -1177,7 +1390,10 @@ fn bw_candlestick_up_down_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_candlestick.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "up vs down candle bodies should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "up vs down candle bodies should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1191,7 +1407,10 @@ fn bw_forest_rows_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_forest.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "forest row markers should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "forest row markers should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1205,7 +1424,10 @@ fn bw_lollipop_points_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_lollipop.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "lollipop dots should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "lollipop dots should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1227,9 +1449,15 @@ fn bw_phylo_clades_use_distinct_dashes() {
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_phylo.svg", svg.clone()).unwrap();
-    assert!(!svg.contains("#e41a1c") && !svg.contains("#377eb8"), "clade colors should not leak into BW mode");
+    assert!(
+        !svg.contains("#e41a1c") && !svg.contains("#377eb8"),
+        "clade colors should not leak into BW mode"
+    );
     let dash_groups = distinct_dash_groups_for_stroke(&svg, "#1a1a1a");
-    assert!(dash_groups >= 2, "the two clades should use at least 2 distinct dash styles, got {dash_groups}");
+    assert!(
+        dash_groups >= 2,
+        "the two clades should use at least 2 distinct dash styles, got {dash_groups}"
+    );
 }
 
 #[test]
@@ -1244,7 +1472,10 @@ fn bw_parallel_groups_use_distinct_dashes() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_parallel.svg", svg.clone()).unwrap();
     let dash_groups = distinct_dash_groups_for_stroke(&svg, "#1a1a1a");
-    assert!(dash_groups >= 2, "the two row groups should use at least 2 distinct dash styles, got {dash_groups}");
+    assert!(
+        dash_groups >= 2,
+        "the two row groups should use at least 2 distinct dash styles, got {dash_groups}"
+    );
 }
 
 #[test]
@@ -1259,7 +1490,10 @@ fn bw_radar_series_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_radar.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "the two radar series should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "the two radar series should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1273,9 +1507,18 @@ fn bw_horizon_pos_neg_are_not_colored() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_horizon.svg", svg.clone()).unwrap();
     // Default pos_color/neg_color hex (see horizon_basic.rs) should not leak through.
-    assert!(!svg.contains("#1f77b4") && !svg.contains("#d62728"), "pos/neg colors should not leak into BW mode");
-    assert!(svg.contains("#1a1a1a"), "positive bands should use the fixed BW dark grey");
-    assert!(svg.contains("#888888"), "negative bands should use a distinct fixed BW grey");
+    assert!(
+        !svg.contains("#1f77b4") && !svg.contains("#d62728"),
+        "pos/neg colors should not leak into BW mode"
+    );
+    assert!(
+        svg.contains("#1a1a1a"),
+        "positive bands should use the fixed BW dark grey"
+    );
+    assert!(
+        svg.contains("#888888"),
+        "negative bands should use a distinct fixed BW grey"
+    );
 }
 
 // ── Group 5: composite/pixel-space, most bespoke ────────────────────────────
@@ -1284,14 +1527,21 @@ fn bw_horizon_pos_neg_are_not_colored() {
 fn bw_chord_nodes_use_distinct_patterns() {
     use kuva::plot::chord::ChordPlot;
     let chord = ChordPlot::new()
-        .with_matrix(vec![vec![0.0, 10.0, 5.0], vec![10.0, 0.0, 3.0], vec![5.0, 3.0, 0.0]])
+        .with_matrix(vec![
+            vec![0.0, 10.0, 5.0],
+            vec![10.0, 0.0, 3.0],
+            vec![5.0, 3.0, 0.0],
+        ])
         .with_labels(vec!["A", "B", "C"]);
     let plots = vec![Plot::Chord(chord)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_chord.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "chord nodes should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "chord nodes should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1305,7 +1555,10 @@ fn bw_sankey_nodes_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_sankey.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "sankey nodes/links should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "sankey nodes/links should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1335,7 +1588,10 @@ fn bw_synteny_sequences_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_synteny.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "synteny sequence bars should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "synteny sequence bars should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1369,15 +1625,28 @@ fn bw_network_groups_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_network.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "network node groups should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "network node groups should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
 fn bw_joint_groups_use_distinct_patterns() {
     use kuva::plot::jointplot::JointPlot;
     let joint = JointPlot::new()
-        .with_group("Group1", vec![1.0, 2.0, 3.0, 2.0], vec![1.0, 2.0, 1.5, 2.5], "steelblue")
-        .with_group("Group2", vec![4.0, 5.0, 6.0, 5.0], vec![4.0, 5.0, 4.5, 5.5], "tomato");
+        .with_group(
+            "Group1",
+            vec![1.0, 2.0, 3.0, 2.0],
+            vec![1.0, 2.0, 1.5, 2.5],
+            "steelblue",
+        )
+        .with_group(
+            "Group2",
+            vec![4.0, 5.0, 6.0, 5.0],
+            vec![4.0, 5.0, 4.5, 5.5],
+            "tomato",
+        );
     let plots = vec![Plot::Joint(joint)];
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
@@ -1390,7 +1659,10 @@ fn bw_joint_groups_use_distinct_patterns() {
     // (see the DicePlot/Group2 legend fix), so a plain pattern-def count is
     // safe here — nothing else in this SVG registers a pattern.
     let pattern_count = svg.matches("<pattern").count();
-    assert!(pattern_count >= 2, "joint marginal histograms should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "joint marginal histograms should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1401,14 +1673,30 @@ fn bw_joint_standalone_render_jointplot_respects_bw_mode() {
     use kuva::plot::jointplot::JointPlot;
     use kuva::render::render::render_jointplot;
     let joint = JointPlot::new()
-        .with_group("Group1", vec![1.0, 2.0, 3.0, 2.0], vec![1.0, 2.0, 1.5, 2.5], "steelblue")
-        .with_group("Group2", vec![4.0, 5.0, 6.0, 5.0], vec![4.0, 5.0, 4.5, 5.5], "tomato");
+        .with_group(
+            "Group1",
+            vec![1.0, 2.0, 3.0, 2.0],
+            vec![1.0, 2.0, 1.5, 2.5],
+            "steelblue",
+        )
+        .with_group(
+            "Group2",
+            vec![4.0, 5.0, 6.0, 5.0],
+            vec![4.0, 5.0, 4.5, 5.5],
+            "tomato",
+        );
     let layout = Layout::new((0.0, 7.0), (0.0, 7.0)).with_bw_mode();
     let scene = render_jointplot(joint, layout);
     let svg = SvgBackend.render_scene(&scene);
     common::write_test_output("test_outputs/bw_joint_standalone.svg", svg.clone()).unwrap();
-    assert!(!svg.contains("steelblue") && !svg.contains("tomato"), "group colors should not leak through the standalone render_jointplot path in BW mode");
-    assert!(svg.contains("<pattern"), "standalone render_jointplot should still emit BW patterns");
+    assert!(
+        !svg.contains("steelblue") && !svg.contains("tomato"),
+        "group colors should not leak through the standalone render_jointplot path in BW mode"
+    );
+    assert!(
+        svg.contains("<pattern"),
+        "standalone render_jointplot should still emit BW patterns"
+    );
 }
 
 #[test]
@@ -1422,7 +1710,10 @@ fn bw_raincloud_groups_use_distinct_patterns() {
     let svg = bw_svg(plots, layout);
     common::write_test_output("test_outputs/bw_raincloud.svg", svg.clone()).unwrap();
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 2, "raincloud groups should use at least 2 distinct patterns, got {pattern_count}");
+    assert!(
+        pattern_count >= 2,
+        "raincloud groups should use at least 2 distinct patterns, got {pattern_count}"
+    );
 }
 
 // ── Group 6: continuous-value / colormap family ─────────────────────────────
@@ -1440,24 +1731,51 @@ fn bw_histogram2d_forces_grayscale() {
     use kuva::plot::Histogram2D;
     let data = vec![(1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (5.0, 5.0)];
     let build = || Histogram2D::new().with_data(data.clone(), (0.0, 6.0), (0.0, 6.0), 3, 3);
-    let plain = plain_svg(vec![Plot::Histogram2d(build())], Layout::auto_from_plots(&[Plot::Histogram2d(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Histogram2d(build())], Layout::auto_from_plots(&[Plot::Histogram2d(build())]));
+    let plain = plain_svg(
+        vec![Plot::Histogram2d(build())],
+        Layout::auto_from_plots(&[Plot::Histogram2d(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Histogram2d(build())],
+        Layout::auto_from_plots(&[Plot::Histogram2d(build())]),
+    );
     common::write_test_output("test_outputs/bw_histogram2d.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "histogram2d bins should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "histogram2d bins should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
 fn bw_heatmap_forces_grayscale() {
     use kuva::plot::Heatmap;
-    let build = || Heatmap::new().with_data(vec![vec![1.0, 5.0, 9.0], vec![2.0, 6.0, 3.0], vec![8.0, 4.0, 7.0]]);
+    let build = || {
+        Heatmap::new().with_data(vec![
+            vec![1.0, 5.0, 9.0],
+            vec![2.0, 6.0, 3.0],
+            vec![8.0, 4.0, 7.0],
+        ])
+    };
     let plots_plain = vec![Plot::Heatmap(build())];
     let plots_bw = vec![Plot::Heatmap(build())];
-    let plain = plain_svg(plots_plain, Layout::auto_from_plots(&[Plot::Heatmap(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
+    let plain = plain_svg(
+        plots_plain,
+        Layout::auto_from_plots(&[Plot::Heatmap(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
     let svg = bw_svg(plots_bw, Layout::auto_from_plots(&[Plot::Heatmap(build())]));
     common::write_test_output("test_outputs/bw_heatmap.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "heatmap cells should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "heatmap cells should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
@@ -1473,11 +1791,23 @@ fn bw_hexbin_forces_grayscale() {
         ys.push(0.0);
     }
     let build = || HexbinPlot::new().with_data(xs.clone(), ys.clone());
-    let plain = plain_svg(vec![Plot::Hexbin(build())], Layout::auto_from_plots(&[Plot::Hexbin(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Hexbin(build())], Layout::auto_from_plots(&[Plot::Hexbin(build())]));
+    let plain = plain_svg(
+        vec![Plot::Hexbin(build())],
+        Layout::auto_from_plots(&[Plot::Hexbin(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Hexbin(build())],
+        Layout::auto_from_plots(&[Plot::Hexbin(build())]),
+    );
     common::write_test_output("test_outputs/bw_hexbin.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "hexbin cells should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "hexbin cells should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
@@ -1497,11 +1827,23 @@ fn bw_calendar_forces_grayscale() {
             ])
             .with_aggregation(CalendarAgg::Sum)
     };
-    let plain = plain_svg(vec![Plot::Calendar(build())], Layout::auto_from_plots(&[Plot::Calendar(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Calendar(build())], Layout::auto_from_plots(&[Plot::Calendar(build())]));
+    let plain = plain_svg(
+        vec![Plot::Calendar(build())],
+        Layout::auto_from_plots(&[Plot::Calendar(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Calendar(build())],
+        Layout::auto_from_plots(&[Plot::Calendar(build())]),
+    );
     common::write_test_output("test_outputs/bw_calendar.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "calendar day cells should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "calendar day cells should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
@@ -1515,7 +1857,10 @@ fn bw_calendar_missing_days_use_a_pattern_not_flat_grey() {
     let layout = Layout::auto_from_plots(&plots);
     let svg = bw_svg(plots, layout);
     let pattern_count = distinct_patterns_in_plot_body(&svg);
-    assert!(pattern_count >= 1, "missing calendar days should use a hatch pattern, not a flat fill, got {pattern_count}");
+    assert!(
+        pattern_count >= 1,
+        "missing calendar days should use a hatch pattern, not a flat fill, got {pattern_count}"
+    );
 }
 
 #[test]
@@ -1523,15 +1868,31 @@ fn bw_clustermap_forces_grayscale() {
     use kuva::plot::clustermap::Clustermap;
     let build = || {
         Clustermap::new()
-            .with_data(vec![vec![1.0, 5.0, 9.0], vec![2.0, 6.0, 3.0], vec![8.0, 4.0, 7.0]])
+            .with_data(vec![
+                vec![1.0, 5.0, 9.0],
+                vec![2.0, 6.0, 3.0],
+                vec![8.0, 4.0, 7.0],
+            ])
             .with_cluster_rows(false)
             .with_cluster_cols(false)
     };
-    let plain = plain_svg(vec![Plot::Clustermap(build())], Layout::auto_from_plots(&[Plot::Clustermap(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Clustermap(build())], Layout::auto_from_plots(&[Plot::Clustermap(build())]));
+    let plain = plain_svg(
+        vec![Plot::Clustermap(build())],
+        Layout::auto_from_plots(&[Plot::Clustermap(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Clustermap(build())],
+        Layout::auto_from_plots(&[Plot::Clustermap(build())]),
+    );
     common::write_test_output("test_outputs/bw_clustermap.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "clustermap cells should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "clustermap cells should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
@@ -1539,14 +1900,30 @@ fn bw_surface3d_forces_grayscale() {
     use kuva::plot::surface3d::Surface3DPlot;
     use kuva::plot::ColorMap;
     let build = || {
-        Surface3DPlot::new(vec![vec![1.0, 5.0, 9.0], vec![2.0, 6.0, 3.0], vec![8.0, 4.0, 7.0]])
-            .with_z_colormap(ColorMap::Viridis)
+        Surface3DPlot::new(vec![
+            vec![1.0, 5.0, 9.0],
+            vec![2.0, 6.0, 3.0],
+            vec![8.0, 4.0, 7.0],
+        ])
+        .with_z_colormap(ColorMap::Viridis)
     };
-    let plain = plain_svg(vec![Plot::Surface3D(build())], Layout::auto_from_plots(&[Plot::Surface3D(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Surface3D(build())], Layout::auto_from_plots(&[Plot::Surface3D(build())]));
+    let plain = plain_svg(
+        vec![Plot::Surface3D(build())],
+        Layout::auto_from_plots(&[Plot::Surface3D(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Surface3D(build())],
+        Layout::auto_from_plots(&[Plot::Surface3D(build())]),
+    );
     common::write_test_output("test_outputs/bw_surface3d.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "surface3d faces should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "surface3d faces should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
@@ -1560,14 +1937,30 @@ fn bw_contour_forces_grayscale() {
     ];
     let build = || {
         ContourPlot::new()
-            .with_grid(z.clone(), vec![0.0, 1.0, 2.0, 3.0], vec![0.0, 1.0, 2.0, 3.0])
+            .with_grid(
+                z.clone(),
+                vec![0.0, 1.0, 2.0, 3.0],
+                vec![0.0, 1.0, 2.0, 3.0],
+            )
             .with_filled()
     };
-    let plain = plain_svg(vec![Plot::Contour(build())], Layout::auto_from_plots(&[Plot::Contour(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Contour(build())], Layout::auto_from_plots(&[Plot::Contour(build())]));
+    let plain = plain_svg(
+        vec![Plot::Contour(build())],
+        Layout::auto_from_plots(&[Plot::Contour(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Contour(build())],
+        Layout::auto_from_plots(&[Plot::Contour(build())]),
+    );
     common::write_test_output("test_outputs/bw_contour.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "filled contour bands should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "filled contour bands should use only grayscale fills in BW mode"
+    );
 }
 
 #[test]
@@ -1580,11 +1973,23 @@ fn bw_dotplot_forces_grayscale() {
             ("A", "Y", 5.0, 9.0),
         ])
     };
-    let plain = plain_svg(vec![Plot::DotPlot(build())], Layout::auto_from_plots(&[Plot::DotPlot(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::DotPlot(build())], Layout::auto_from_plots(&[Plot::DotPlot(build())]));
+    let plain = plain_svg(
+        vec![Plot::DotPlot(build())],
+        Layout::auto_from_plots(&[Plot::DotPlot(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::DotPlot(build())],
+        Layout::auto_from_plots(&[Plot::DotPlot(build())]),
+    );
     common::write_test_output("test_outputs/bw_dotplot.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "dot fills should use only grayscale colors in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "dot fills should use only grayscale colors in BW mode"
+    );
 }
 
 #[test]
@@ -1598,11 +2003,23 @@ fn bw_quiver_forces_grayscale() {
             .with_arrow(2.0, 2.0, 5.0, 0.0)
             .with_color_map(ColorMap::Viridis)
     };
-    let plain = plain_svg(vec![Plot::Quiver(build())], Layout::auto_from_plots(&[Plot::Quiver(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::Quiver(build())], Layout::auto_from_plots(&[Plot::Quiver(build())]));
+    let plain = plain_svg(
+        vec![Plot::Quiver(build())],
+        Layout::auto_from_plots(&[Plot::Quiver(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::Quiver(build())],
+        Layout::auto_from_plots(&[Plot::Quiver(build())]),
+    );
     common::write_test_output("test_outputs/bw_quiver.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "quiver arrows should use only grayscale colors in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "quiver arrows should use only grayscale colors in BW mode"
+    );
 }
 
 #[test]
@@ -1617,20 +2034,30 @@ fn bw_diceplot_continuous_tile_forces_grayscale() {
             ("Row2", "Col1", vec![0, 1, 2, 3], Some(0.9), Some(3.0)),
         ])
     };
-    let plain = plain_svg(vec![Plot::DicePlot(build())], Layout::auto_from_plots(&[Plot::DicePlot(build())]));
-    assert!(svg_has_non_grey_fill(&plain), "sanity: default colormap should produce colorful fills");
-    let svg = bw_svg(vec![Plot::DicePlot(build())], Layout::auto_from_plots(&[Plot::DicePlot(build())]));
+    let plain = plain_svg(
+        vec![Plot::DicePlot(build())],
+        Layout::auto_from_plots(&[Plot::DicePlot(build())]),
+    );
+    assert!(
+        svg_has_non_grey_fill(&plain),
+        "sanity: default colormap should produce colorful fills"
+    );
+    let svg = bw_svg(
+        vec![Plot::DicePlot(build())],
+        Layout::auto_from_plots(&[Plot::DicePlot(build())]),
+    );
     common::write_test_output("test_outputs/bw_diceplot_continuous.svg", svg.clone()).unwrap();
-    assert!(!svg_has_non_grey_fill(&svg), "continuous dice tiles should use only grayscale fills in BW mode");
+    assert!(
+        !svg_has_non_grey_fill(&svg),
+        "continuous dice tiles should use only grayscale fills in BW mode"
+    );
 }
 
 // ── Sanity checks ─────────────────────────────────────────────────────────────
 
 #[test]
 fn bw_color_mode_no_patterns() {
-    let bar = BarPlot::new()
-        .with_bar("A", 3.2)
-        .with_bar("B", 4.7);
+    let bar = BarPlot::new().with_bar("A", 3.2).with_bar("B", 4.7);
     let plots = vec![Plot::Bar(bar)];
     let layout = Layout::auto_from_plots(&plots);
     let scene = render_multiple(plots, layout);
@@ -1646,5 +2073,8 @@ fn bw_layout_flag_propagates_to_computed() {
     use kuva::render::layout::ComputedLayout;
     let layout = Layout::new((0.0, 1.0), (0.0, 1.0)).with_bw_mode();
     let computed = ComputedLayout::from_layout(&layout);
-    assert!(computed.bw_mode, "bw_mode should propagate from Layout to ComputedLayout");
+    assert!(
+        computed.bw_mode,
+        "bw_mode should propagate from Layout to ComputedLayout"
+    );
 }

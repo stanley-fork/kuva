@@ -683,8 +683,7 @@ fn network_edge_curved_directed_arrowhead() {
 #[test]
 fn network_edge_curved_label_fields() {
     // with_edge_curved_label sets both curve and label on the edge.
-    let net = NetworkPlot::new()
-        .with_edge_curved_label("A", "B", 1.0, 0.3, "strong");
+    let net = NetworkPlot::new().with_edge_curved_label("A", "B", 1.0, 0.3, "strong");
     assert_eq!(net.edges.len(), 1);
     assert_eq!(net.edges[0].curve, Some(0.3));
     assert_eq!(net.edges[0].label.as_deref(), Some("strong"));
@@ -701,7 +700,10 @@ fn network_edge_curved_label_svg() {
     let plots = vec![Plot::Network(net)];
     let layout = Layout::auto_from_plots(&plots).with_title("Curved Edge Label");
     let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
-    assert!(svg.contains(" Q "), "curved labeled edge should emit a bezier path");
+    assert!(
+        svg.contains(" Q "),
+        "curved labeled edge should emit a bezier path"
+    );
     assert!(svg.contains("myedge"), "edge label should appear in SVG");
     common::write_test_output("test_outputs/network_edge_curved_label.svg", svg).unwrap();
 }
@@ -709,8 +711,8 @@ fn network_edge_curved_label_svg() {
 #[test]
 fn network_edge_curved_styled_fields() {
     // with_edge_curved_styled sets curve, color, and label on the edge.
-    let net = NetworkPlot::new()
-        .with_edge_curved_styled("A", "B", 1.0, -0.25, "#ff0000", "red arc");
+    let net =
+        NetworkPlot::new().with_edge_curved_styled("A", "B", 1.0, -0.25, "#ff0000", "red arc");
     assert_eq!(net.edges.len(), 1);
     assert_eq!(net.edges[0].curve, Some(-0.25));
     assert_eq!(net.edges[0].color.as_deref(), Some("#ff0000"));
@@ -731,8 +733,14 @@ fn network_edge_curved_styled_svg() {
     assert!(svg.contains(" Q "), "should emit bezier paths");
     assert!(svg.contains("fwd"), "forward label should appear in SVG");
     assert!(svg.contains("rev"), "reverse label should appear in SVG");
-    assert!(svg.contains("#ff0000"), "forward edge color should appear in SVG");
-    assert!(svg.contains("#0000ff"), "reverse edge color should appear in SVG");
+    assert!(
+        svg.contains("#ff0000"),
+        "forward edge color should appear in SVG"
+    );
+    assert!(
+        svg.contains("#0000ff"),
+        "reverse edge color should appear in SVG"
+    );
     common::write_test_output("test_outputs/network_edge_curved_styled.svg", svg).unwrap();
 }
 

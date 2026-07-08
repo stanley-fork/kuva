@@ -31,7 +31,10 @@ fn title_and_entries_order_independent() {
         .with_legend_entries(vec![entry("A"), entry("B")])
         .with_legend_title(LONG_TITLE)
         .legend_width;
-    assert_eq!(title_first, entries_first, "legend width must not depend on call order");
+    assert_eq!(
+        title_first, entries_first,
+        "legend width must not depend on call order"
+    );
 }
 
 #[test]
@@ -39,7 +42,9 @@ fn long_title_widens_box_in_either_order() {
     // The long title is wider than the short entries, so it must drive the width
     // regardless of order — the original clipping bug occurred when entries were
     // set after the title and overwrote the reserved width.
-    let entries_only = layout().with_legend_entries(vec![entry("A"), entry("B")]).legend_width;
+    let entries_only = layout()
+        .with_legend_entries(vec![entry("A"), entry("B")])
+        .legend_width;
     let title_first = layout()
         .with_legend_title(LONG_TITLE)
         .with_legend_entries(vec![entry("A"), entry("B")])
@@ -49,7 +54,10 @@ fn long_title_widens_box_in_either_order() {
         .with_legend_title(LONG_TITLE)
         .legend_width;
     assert!(title_first > entries_only, "title should widen the box");
-    assert!(entries_first > entries_only, "title should widen the box in either order");
+    assert!(
+        entries_first > entries_only,
+        "title should widen the box in either order"
+    );
 }
 
 #[test]
@@ -77,8 +85,14 @@ fn explicit_width_wins_regardless_of_order() {
         .with_legend_title(LONG_TITLE)
         .with_legend_width(250.0)
         .legend_width;
-    assert_eq!(override_first, 250.0, "explicit width must win when set first");
-    assert_eq!(override_last, 250.0, "explicit width must win when set last");
+    assert_eq!(
+        override_first, 250.0,
+        "explicit width must win when set first"
+    );
+    assert_eq!(
+        override_last, 250.0,
+        "explicit width must win when set last"
+    );
 }
 
 #[test]

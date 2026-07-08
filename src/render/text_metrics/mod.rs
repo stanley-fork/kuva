@@ -101,7 +101,10 @@ fn scale_units(units: impl Into<i32>, font_size: f64) -> f64 {
 /// `font_size * {1.0..1.55}` and hardcoded-pixel line-height guesses.
 pub(crate) fn line_height(font_size: f64, style: FontStyle) -> f64 {
     let m = vmetrics(style);
-    scale_units(i32::from(m.ascent) + i32::from(m.descent) + i32::from(m.line_gap), font_size)
+    scale_units(
+        i32::from(m.ascent) + i32::from(m.descent) + i32::from(m.line_gap),
+        font_size,
+    )
 }
 
 /// Distance from the baseline up to the top of the font's ascenders, in pixels.
@@ -155,7 +158,11 @@ pub(crate) fn measure_text_width(text: &str, font_size: f64, style: FontStyle) -
         .map(|c| {
             let cp = c as u32;
             let units = if cp <= 0xFFFF { table[cp as usize] } else { 0 };
-            u64::from(if units == 0 { FALLBACK_ADVANCE_UNITS } else { units })
+            u64::from(if units == 0 {
+                FALLBACK_ADVANCE_UNITS
+            } else {
+                units
+            })
         })
         .sum();
     total_units as f64 / f64::from(data::UNITS_PER_EM) * font_size
@@ -225,12 +232,14 @@ mod tests {
         assert_eq!(measure_text_width("", SIZE, FontStyle::Regular), 0.0);
     }
 
-
     #[test]
     fn wide_glyphs_measure_wider_than_narrow_ones() {
         let wide = measure_text_width("MMMM", SIZE, FontStyle::Regular);
         let narrow = measure_text_width("iiii", SIZE, FontStyle::Regular);
-        assert!(wide > narrow, "M should be wider than i ({wide} vs {narrow})");
+        assert!(
+            wide > narrow,
+            "M should be wider than i ({wide} vs {narrow})"
+        );
     }
 
     #[test]
@@ -279,7 +288,10 @@ mod tests {
         // a normal digit.
         let sup = measure_text_width("\u{00B2}", SIZE, FontStyle::Regular);
         let two = measure_text_width("2", SIZE, FontStyle::Regular);
-        assert!(sup > 0.0 && sup < two, "superscript should be narrow ({sup} vs {two})");
+        assert!(
+            sup > 0.0 && sup < two,
+            "superscript should be narrow ({sup} vs {two})"
+        );
     }
 
     #[test]
@@ -299,7 +311,11 @@ mod tests {
             (FontStyle::Regular, "DejaVuSans.ttf", None),
             (FontStyle::Italic, "DejaVuSans-Oblique.ttf", None),
             (FontStyle::Bold, "DejaVuSans-Bold.ttf", None),
-            (FontStyle::BoldItalic, "DejaVuSans-BoldOblique.ttf", Some("DejaVuSans-Bold.ttf")),
+            (
+                FontStyle::BoldItalic,
+                "DejaVuSans-BoldOblique.ttf",
+                Some("DejaVuSans-Bold.ttf"),
+            ),
         ];
         for (style, primary, fallback) in cases {
             let dir = format!("{}/assets/fonts", env!("CARGO_MANIFEST_DIR"));
@@ -319,7 +335,10 @@ mod tests {
                     .and_then(|c| face.glyph_index(c))
                     .and_then(|g| face.glyph_hor_advance(g))
                     .unwrap_or(0);
-                assert_eq!(table[cp as usize], expected, "{style:?} mismatch at U+{cp:04X}");
+                assert_eq!(
+                    table[cp as usize], expected,
+                    "{style:?} mismatch at U+{cp:04X}"
+                );
             }
         }
     }
@@ -333,7 +352,11 @@ mod tests {
             (FontStyle::Regular, "DejaVuSans.ttf", None),
             (FontStyle::Italic, "DejaVuSans-Oblique.ttf", None),
             (FontStyle::Bold, "DejaVuSans-Bold.ttf", None),
-            (FontStyle::BoldItalic, "DejaVuSans-BoldOblique.ttf", Some("DejaVuSans-Bold.ttf")),
+            (
+                FontStyle::BoldItalic,
+                "DejaVuSans-BoldOblique.ttf",
+                Some("DejaVuSans-Bold.ttf"),
+            ),
         ];
         for (style, primary, fallback) in cases {
             let dir = format!("{}/assets/fonts", env!("CARGO_MANIFEST_DIR"));
@@ -346,9 +369,13 @@ mod tests {
             let bytes = std::fs::read(&path).expect("read bundled font");
             let face = ttf_parser::Face::parse(&bytes, 0).expect("parse font");
             let glyph_top = |ch: char| {
-                face.glyph_index(ch).and_then(|g| face.glyph_bounding_box(g)).map(|bb| bb.y_max)
+                face.glyph_index(ch)
+                    .and_then(|g| face.glyph_bounding_box(g))
+                    .map(|bb| bb.y_max)
             };
-            let cap = glyph_top('H').or_else(|| face.capital_height()).unwrap_or(face.ascender());
+            let cap = glyph_top('H')
+                .or_else(|| face.capital_height())
+                .unwrap_or(face.ascender());
             let x = glyph_top('x')
                 .or_else(|| face.x_height())
                 .unwrap_or((f32::from(cap) * 0.72) as i16);
@@ -368,7 +395,10 @@ mod tests {
         // (equals it exactly for DejaVu, whose line_gap is 0).
         let lh = line_height(SIZE, FontStyle::Regular);
         let box_h = ascent(SIZE, FontStyle::Regular) + descent(SIZE, FontStyle::Regular);
-        assert!(lh >= box_h - 1e-9, "line_height {lh} < ascent+descent {box_h}");
+        assert!(
+            lh >= box_h - 1e-9,
+            "line_height {lh} < ascent+descent {box_h}"
+        );
     }
 
     #[test]
@@ -404,7 +434,10 @@ mod probe_scratch2 {
     #[test]
     fn probe_digit_widths() {
         for d in "0123456789".chars() {
-            println!("{d}: {:.3}", measure_text_width(&d.to_string(), 12.0, FontStyle::Regular));
+            println!(
+                "{d}: {:.3}",
+                measure_text_width(&d.to_string(), 12.0, FontStyle::Regular)
+            );
         }
     }
 }

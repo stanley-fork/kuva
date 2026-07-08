@@ -18,10 +18,34 @@ pub(super) const MEAN_ADVANCE_EM: f64 = 0.597132;
 
 /// Per-style vertical metrics in font units (scaled by `size / UNITS_PER_EM`
 /// at runtime); see `super::VMetrics`.
-pub(super) const VMETRICS_REGULAR: super::VMetrics = super::VMetrics { ascent: 1901, descent: 483, line_gap: 0, cap_height: 1493, x_height: 1120 };
-pub(super) const VMETRICS_ITALIC: super::VMetrics = super::VMetrics { ascent: 1901, descent: 483, line_gap: 0, cap_height: 1493, x_height: 1120 };
-pub(super) const VMETRICS_BOLD: super::VMetrics = super::VMetrics { ascent: 1901, descent: 483, line_gap: 0, cap_height: 1493, x_height: 1120 };
-pub(super) const VMETRICS_BOLD_ITALIC: super::VMetrics = super::VMetrics { ascent: 1901, descent: 483, line_gap: 0, cap_height: 1493, x_height: 1120 };
+pub(super) const VMETRICS_REGULAR: super::VMetrics = super::VMetrics {
+    ascent: 1901,
+    descent: 483,
+    line_gap: 0,
+    cap_height: 1493,
+    x_height: 1120,
+};
+pub(super) const VMETRICS_ITALIC: super::VMetrics = super::VMetrics {
+    ascent: 1901,
+    descent: 483,
+    line_gap: 0,
+    cap_height: 1493,
+    x_height: 1120,
+};
+pub(super) const VMETRICS_BOLD: super::VMetrics = super::VMetrics {
+    ascent: 1901,
+    descent: 483,
+    line_gap: 0,
+    cap_height: 1493,
+    x_height: 1120,
+};
+pub(super) const VMETRICS_BOLD_ITALIC: super::VMetrics = super::VMetrics {
+    ascent: 1901,
+    descent: 483,
+    line_gap: 0,
+    cap_height: 1493,
+    x_height: 1120,
+};
 
 /// 3437 runs.
 #[rustfmt::skip]
@@ -1703,4 +1727,3 @@ pub(super) const ADVANCE_RLE_BOLD_ITALIC: &[(u16, u16)] = &[
     (1555,1),(1525,1),(1555,1),(1525,1),(1555,1),(1525,1),(1555,1),(0,256),
     (2280,1),(0,1),(1229,1),
 ];
-
