@@ -208,19 +208,28 @@ pub fn auto_nice_range_log(data_min: f64, data_max: f64) -> (f64, f64) {
     }
 }
 
+/// Selects the log-tick multiplier set for a given axis span: `[1, 2, 5]` per
+/// decade for narrow ranges, or pure powers of ten for wide ones. Shared by
+/// [`generate_ticks_log`] and [`log_tick_after`]/[`log_tick_before`] so both
+/// agree on which pattern a given axis range actually uses.
+pub(crate) fn log_multipliers(min: f64, max: f64) -> &'static [f64] {
+    let log_min = min.max(1e-10).log10().floor() as i32;
+    let log_max = max.log10().ceil() as i32;
+    let decades = (log_max - log_min).max(0) as usize;
+    if decades <= 3 {
+        &[1.0, 2.0, 5.0]
+    } else {
+        &[1.0]
+    }
+}
+
 /// Generate tick marks for a log-scale axis.
 /// For narrow ranges (≤ 3 decades), include 2x and 5x sub-ticks.
 /// For wider ranges, only powers of 10.
 pub fn generate_ticks_log(min: f64, max: f64) -> Vec<f64> {
     let log_min = min.max(1e-10).log10().floor() as i32;
     let log_max = max.log10().ceil() as i32;
-    let decades = (log_max - log_min) as usize;
-
-    let multipliers: &[f64] = if decades <= 3 {
-        &[1.0, 2.0, 5.0]
-    } else {
-        &[1.0]
-    };
+    let multipliers = log_multipliers(min, max);
 
     let mut ticks = Vec::new();
     for exp in log_min..=log_max {
@@ -233,6 +242,41 @@ pub fn generate_ticks_log(min: f64, max: f64) -> Vec<f64> {
         }
     }
     ticks
+}
+
+/// The next tick strictly greater than `v` in the `[1, 2, 5] × 10^n` (or pure
+/// `10^n`) pattern described by `multipliers` (see [`log_multipliers`]).
+/// Used to find the real tick that would exist just past the last major on a
+/// log axis, instead of guessing it from the ratio of the outermost pair —
+/// which is wrong whenever that pair straddles a `2x`/`5x` sub-tick rather
+/// than a power-of-ten boundary.
+pub(crate) fn log_tick_after(v: f64, multipliers: &[f64]) -> f64 {
+    let exp = v.log10().floor() as i32;
+    for e in exp..=exp + 2 {
+        let base = 10f64.powi(e);
+        for &mult in multipliers {
+            let candidate = base * mult;
+            if candidate > v * (1.0 + 1e-9) {
+                return candidate;
+            }
+        }
+    }
+    v * 10.0 // unreachable given a finite multiplier set; keeps the axis usable
+}
+
+/// The previous tick strictly less than `v` — see [`log_tick_after`].
+pub(crate) fn log_tick_before(v: f64, multipliers: &[f64]) -> f64 {
+    let exp = v.log10().ceil() as i32;
+    for e in (exp - 2..=exp).rev() {
+        let base = 10f64.powi(e);
+        for &mult in multipliers.iter().rev() {
+            let candidate = base * mult;
+            if candidate < v * (1.0 - 1e-9) {
+                return candidate;
+            }
+        }
+    }
+    v / 10.0 // unreachable given a finite multiplier set; keeps the axis usable
 }
 
 /// Format a tick value for display on a log-scale axis
@@ -865,6 +909,50 @@ mod tests {
     #[test]
     fn wrap_consecutive_newlines() {
         assert_eq!(wrap_text("a\n\nb", 10), vec!["a", "", "b"]);
+    }
+
+    // ── log_tick_after / log_tick_before ────────────────────────────────
+
+    // Regression (PR #101 follow-up): the phantom-tick extrapolation used to
+    // guess the next/previous major from the ratio of the outermost real
+    // tick pair, which is wrong for the `[1,2,5]` per-decade pattern (ratios
+    // alternate 2x/2.5x, not constant). `log_tick_after`/`log_tick_before`
+    // must instead walk the actual pattern.
+
+    #[test]
+    fn log_tick_after_crosses_a_5x_to_next_decade_1x() {
+        let m = log_multipliers(1.0, 35.0); // decades<=3 → [1,2,5]
+        assert_eq!(log_tick_after(20.0, m), 50.0, "next after 20 is 50, not 40");
+    }
+
+    #[test]
+    fn log_tick_after_within_same_decade() {
+        let m = log_multipliers(1.0, 35.0);
+        assert_eq!(log_tick_after(2.0, m), 5.0);
+        assert_eq!(log_tick_after(5.0, m), 10.0);
+    }
+
+    #[test]
+    fn log_tick_before_crosses_a_1x_to_previous_decade_5x() {
+        let m = log_multipliers(1.0, 35.0);
+        assert_eq!(
+            log_tick_before(20.0, m),
+            10.0,
+            "previous before 20 is 10, matching the pattern"
+        );
+        assert_eq!(
+            log_tick_before(10.0, m),
+            5.0,
+            "previous before 10 is 5, not some fraction of a constant ratio"
+        );
+    }
+
+    #[test]
+    fn log_tick_pure_power_of_ten_pattern_unaffected() {
+        // >3 decades → multiplier set collapses to [1.0]; ratio is always 10.
+        let m = log_multipliers(1.0, 30_000.0);
+        assert_eq!(log_tick_after(1000.0, m), 10_000.0);
+        assert_eq!(log_tick_before(1000.0, m), 100.0);
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::render::color::Color;
+use crate::render::datetime::DateTimeAxis;
 use crate::render::layout::{
     AxisLabelOverlap, AxisLine, ComputedLayout, Layout, TickAlign, TickFormat, TickPos,
 };
@@ -168,31 +169,123 @@ impl XLabelPlacer {
     }
 }
 
-/// Extend a major-tick list with one "phantom" major just beyond each end so that
-/// [`render_utils::generate_minor_ticks`] also fills the leading/trailing partial
-/// intervals when the axis range doesn't stop on a major tick. Minors that fall
-/// outside the axis range are dropped at draw time. Phantom spacing follows the
-/// tick pattern — geometric for log axes (the decade ratio), arithmetic otherwise
-/// — so log decades keep their 2..9 spacing past the last power of ten.
-fn majors_with_phantom_ends(ticks: &[f64], log: bool) -> Vec<f64> {
-    if ticks.len() < 2 {
+/// How a major-tick list was generated — determines how to find the tick
+/// that would exist one step beyond each end, for [`extend_with_phantom_ticks`].
+enum TickSpacing<'a> {
+    /// Constant additive step: plain linear ticks, an explicit tick-step, or
+    /// bin-aligned histogram ticks are all evenly spaced by construction.
+    Arithmetic(f64),
+    /// Log-scale ticks following the `[1, 2, 5] × 10^n` (or pure `10^n`)
+    /// pattern selected by [`render_utils::log_multipliers`] for this span.
+    Log { min: f64, max: f64 },
+    /// Calendar-based ticks (one per day/week/month/... via [`DateTimeAxis`]).
+    Calendar(&'a DateTimeAxis),
+}
+
+/// Extend a major-tick list with the tick that would exist one step beyond
+/// each end, so [`render_utils::generate_minor_ticks`] also fills the
+/// leading/trailing partial interval when the axis range doesn't stop on a
+/// major tick. Ticks beyond the axis range are dropped by the caller after
+/// minor generation.
+///
+/// Rather than extrapolating from the ratio/step of the outermost tick pair
+/// (which breaks for log's non-constant `1,2,5` decade pattern and for
+/// calendar units with irregular month/year lengths), this asks the same
+/// rule that generated `ticks` for its actual next/previous value.
+fn extend_with_phantom_ticks(ticks: &[f64], spacing: &TickSpacing) -> Vec<f64> {
+    let (Some(&first), Some(&last)) = (ticks.first(), ticks.last()) else {
         return ticks.to_vec();
-    }
-    let n = ticks.len();
-    let (lo, hi) = if log {
-        let ratio_lo = ticks[1] / ticks[0];
-        let ratio_hi = ticks[n - 1] / ticks[n - 2];
-        (ticks[0] / ratio_lo, ticks[n - 1] * ratio_hi)
-    } else {
-        let step_lo = ticks[1] - ticks[0];
-        let step_hi = ticks[n - 1] - ticks[n - 2];
-        (ticks[0] - step_lo, ticks[n - 1] + step_hi)
     };
-    let mut out = Vec::with_capacity(n + 2);
+    let (lo, hi) = match spacing {
+        TickSpacing::Arithmetic(step) => (first - step, last + step),
+        TickSpacing::Log { min, max } => {
+            let multipliers = render_utils::log_multipliers(*min, *max);
+            (
+                render_utils::log_tick_before(first, multipliers),
+                render_utils::log_tick_after(last, multipliers),
+            )
+        }
+        TickSpacing::Calendar(dt) => (dt.tick_before(first), dt.tick_after(last)),
+    };
+    let mut out = Vec::with_capacity(ticks.len() + 2);
     out.push(lo);
     out.extend_from_slice(ticks);
     out.push(hi);
     out
+}
+
+/// Generate the minor-tick positions for one axis: extend `ticks` with the
+/// phantom ends described by `spacing`, subdivide, then drop anything outside
+/// the real axis `range`. Shared by both the x-axis and y-axis call sites so
+/// they can't drift apart the way `resolve_axis_range` had to fix separately
+/// for the x/y/y2 range-selection chains.
+fn compute_minor_ticks(
+    ticks: &[f64],
+    spacing: &TickSpacing,
+    range: (f64, f64),
+    subdivisions: u32,
+) -> Vec<f64> {
+    render_utils::generate_minor_ticks(&extend_with_phantom_ticks(ticks, spacing), subdivisions)
+        .into_iter()
+        .filter(|t| *t >= range.0 && *t <= range.1)
+        .collect()
+}
+
+/// The constant step of an evenly-spaced tick list (`generate_ticks`,
+/// `generate_ticks_with_step`, and `generate_ticks_bin_aligned` are all
+/// constant-step by construction), falling back to `fallback` when there
+/// aren't enough ticks to measure a step directly.
+fn arithmetic_step(ticks: &[f64], fallback: f64) -> f64 {
+    if ticks.len() >= 2 {
+        ticks[1] - ticks[0]
+    } else {
+        fallback
+    }
+}
+
+/// Resolve one axis's major-tick list, tagged with how it was generated
+/// (`TickSpacing`) so minor-tick extrapolation can later ask the same rule
+/// for the tick that would exist just past each end. Shared by the x-axis
+/// and y-axis call sites in `add_axes_and_grid` so they can't independently
+/// drift out of sync — `bin_width` is `None` for y, which has no histogram
+/// binning concept.
+#[allow(clippy::too_many_arguments)]
+fn resolve_axis_ticks(
+    range: (f64, f64),
+    tick_step: Option<f64>,
+    bin_width: Option<f64>,
+    datetime: Option<&DateTimeAxis>,
+    log: bool,
+    target_ticks: usize,
+) -> (Vec<f64>, TickSpacing<'_>) {
+    if let Some(step) = tick_step {
+        (
+            render_utils::generate_ticks_with_step(range.0, range.1, step),
+            TickSpacing::Arithmetic(step),
+        )
+    } else if let Some(bw) = bin_width {
+        let ticks = render_utils::generate_ticks_bin_aligned(range.0, range.1, bw, target_ticks);
+        let step = arithmetic_step(&ticks, bw);
+        (ticks, TickSpacing::Arithmetic(step))
+    } else if let Some(dt) = datetime {
+        (
+            dt.generate_ticks(range.0, range.1),
+            TickSpacing::Calendar(dt),
+        )
+    } else if log {
+        (
+            render_utils::generate_ticks_log(range.0, range.1),
+            TickSpacing::Log {
+                min: range.0,
+                max: range.1,
+            },
+        )
+    } else {
+        let ticks = render_utils::generate_ticks(range.0, range.1, target_ticks);
+        let fallback = render_utils::compute_tick_step(range.0, range.1, target_ticks);
+        let step = arithmetic_step(&ticks, fallback);
+        (ticks, TickSpacing::Arithmetic(step))
+    }
 }
 
 pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout) {
@@ -201,48 +294,35 @@ pub fn add_axes_and_grid(scene: &mut Scene, computed: &ComputedLayout, layout: &
 
     let theme = &computed.theme;
 
-    // Always compute tick positions for grid lines
-    let x_ticks: Vec<f64> = if let Some(step) = computed.x_tick_step {
-        render_utils::generate_ticks_with_step(computed.x_range.0, computed.x_range.1, step)
-    } else if let Some(bw) = computed.x_bin_width {
-        render_utils::generate_ticks_bin_aligned(
-            computed.x_range.0,
-            computed.x_range.1,
-            bw,
-            computed.x_ticks,
-        )
-    } else if let Some(ref dt) = layout.x_datetime {
-        dt.generate_ticks(computed.x_range.0, computed.x_range.1)
-    } else if layout.log_x {
-        render_utils::generate_ticks_log(computed.x_range.0, computed.x_range.1)
-    } else {
-        render_utils::generate_ticks(computed.x_range.0, computed.x_range.1, computed.x_ticks)
-    };
-    let y_ticks: Vec<f64> = if let Some(step) = computed.y_tick_step {
-        render_utils::generate_ticks_with_step(computed.y_range.0, computed.y_range.1, step)
-    } else if let Some(ref dt) = layout.y_datetime {
-        dt.generate_ticks(computed.y_range.0, computed.y_range.1)
-    } else if layout.log_y {
-        render_utils::generate_ticks_log(computed.y_range.0, computed.y_range.1)
-    } else {
-        render_utils::generate_ticks(computed.y_range.0, computed.y_range.1, computed.y_ticks)
-    };
+    // Always compute tick positions for grid lines, tagged with how they were
+    // generated so minor-tick extrapolation below can ask the same rule for
+    // the tick that would exist just past each end (see `TickSpacing`).
+    let (x_ticks, x_spacing) = resolve_axis_ticks(
+        computed.x_range,
+        computed.x_tick_step,
+        computed.x_bin_width,
+        layout.x_datetime.as_ref(),
+        layout.log_x,
+        computed.x_ticks,
+    );
+    let (y_ticks, y_spacing) = resolve_axis_ticks(
+        computed.y_range,
+        computed.y_tick_step,
+        None,
+        layout.y_datetime.as_ref(),
+        layout.log_y,
+        computed.y_ticks,
+    );
 
     // Generate minors as if one more major existed just beyond each end so the
     // bands past the outer majors get filled, then drop any that fall outside the
     // axis range. The filtered lists feed both the gridlines and the tick marks.
-    let x_minor = computed.minor_ticks.map(|n| {
-        render_utils::generate_minor_ticks(&majors_with_phantom_ends(&x_ticks, layout.log_x), n)
-            .into_iter()
-            .filter(|t| *t >= computed.x_range.0 && *t <= computed.x_range.1)
-            .collect::<Vec<f64>>()
-    });
-    let y_minor = computed.minor_ticks.map(|n| {
-        render_utils::generate_minor_ticks(&majors_with_phantom_ends(&y_ticks, layout.log_y), n)
-            .into_iter()
-            .filter(|t| *t >= computed.y_range.0 && *t <= computed.y_range.1)
-            .collect::<Vec<f64>>()
-    });
+    let x_minor = computed
+        .minor_ticks
+        .map(|n| compute_minor_ticks(&x_ticks, &x_spacing, computed.x_range, n));
+    let y_minor = computed
+        .minor_ticks
+        .map(|n| compute_minor_ticks(&y_ticks, &y_spacing, computed.y_range, n));
 
     // Draw minor gridlines (before major so major renders on top)
     if computed.show_minor_grid && layout.x_categories.is_none() {
@@ -805,5 +885,95 @@ pub fn add_labels_and_title(scene: &mut Scene, computed: &ComputedLayout, layout
                 color: None,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Regression (PR #101 follow-up): `extend_with_phantom_ticks` used to be
+    // handed a bare `bool` (`layout.log_x`) that could disagree with which
+    // generator actually produced the tick list — e.g. an explicit
+    // `x_tick_step` on a log-scale layout produces a *linear* tick list, but
+    // the old code still applied geometric (ratio-based) extrapolation to it
+    // because `layout.log_x` was `true`. `TickSpacing` is now set from the
+    // branch that actually generated the ticks, so this can't happen: an
+    // explicit step always carries `TickSpacing::Arithmetic`, regardless of
+    // whether logging is also enabled elsewhere on the layout.
+    #[test]
+    fn arithmetic_ticks_extrapolate_by_the_real_step_not_a_guessed_ratio() {
+        let ticks = vec![5.0, 10.0, 15.0, 20.0]; // from an explicit --x-tick-step 5
+        let extended = extend_with_phantom_ticks(&ticks, &TickSpacing::Arithmetic(5.0));
+        assert_eq!(extended, vec![0.0, 5.0, 10.0, 15.0, 20.0, 25.0]);
+    }
+
+    // Regression: `resolve_axis_ticks` must resolve `TickSpacing::Arithmetic`
+    // — not `TickSpacing::Log` — when `--log-x`/`--log-y` is combined with an
+    // explicit `--x-tick-step`/`--y-tick-step`, since the explicit step takes
+    // precedence over log-scale tick generation and produces a linear list.
+    #[test]
+    fn log_axis_with_explicit_tick_step_resolves_to_arithmetic_spacing() {
+        let (ticks, spacing) = resolve_axis_ticks(
+            (1.0, 20.0),
+            Some(5.0), // explicit tick step
+            None,
+            None,
+            true, // log_x also enabled
+            5,
+        );
+        assert_eq!(ticks, vec![5.0, 10.0, 15.0, 20.0]);
+        assert!(
+            matches!(spacing, TickSpacing::Arithmetic(step) if step == 5.0),
+            "explicit tick step must win over log-scale extrapolation"
+        );
+    }
+
+    #[test]
+    fn log_ticks_extrapolate_past_a_5x_multiplier_to_the_next_decade() {
+        let ticks = vec![1.0, 2.0, 5.0, 10.0, 20.0]; // decades<=3 → [1,2,5] pattern
+        let extended = extend_with_phantom_ticks(
+            &ticks,
+            &TickSpacing::Log {
+                min: 1.0,
+                max: 35.0,
+            },
+        );
+        // Naive ratio extrapolation (20/10=2x) would wrongly give 40.0 here;
+        // the real next tick in the 1-2-5 pattern is 50.0.
+        assert_eq!(extended, vec![0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0]);
+    }
+
+    #[test]
+    fn calendar_ticks_extrapolate_by_calendar_month_not_a_fixed_delta() {
+        use crate::render::datetime::ymd;
+        let dt = DateTimeAxis::months("%Y-%m-%d");
+        let ticks = vec![ymd(2024, 12, 1), ymd(2025, 1, 1), ymd(2025, 2, 1)];
+        let extended = extend_with_phantom_ticks(&ticks, &TickSpacing::Calendar(&dt));
+        // A fixed 31-day step from Feb 1 would overshoot Mar 1; the calendar
+        // step lands exactly on it.
+        assert_eq!(extended[0], ymd(2024, 11, 1));
+        assert_eq!(*extended.last().unwrap(), ymd(2025, 3, 1));
+    }
+
+    #[test]
+    fn phantom_ticks_generate_minors_covering_the_leading_and_trailing_bands() {
+        // End-to-end sanity: a scatter-style linear axis range that doesn't
+        // land on a major tick (e.g. an explicit x_axis_min/max) must get
+        // minors both before the first major and after the last one.
+        let ticks = vec![10.0, 20.0, 30.0];
+        let minors = compute_minor_ticks(&ticks, &TickSpacing::Arithmetic(10.0), (3.0, 34.0), 5);
+        assert!(
+            minors.iter().any(|&m| m < 10.0),
+            "expected a minor tick in the leading band below 10.0, got {minors:?}"
+        );
+        assert!(
+            minors.iter().any(|&m| m > 30.0),
+            "expected a minor tick in the trailing band above 30.0, got {minors:?}"
+        );
+        assert!(
+            minors.iter().all(|&m| m >= 3.0 && m <= 34.0),
+            "no minor tick should fall outside the axis range, got {minors:?}"
+        );
     }
 }
