@@ -12,6 +12,7 @@ EXAMPLES=(
     boxplot
     brick
     bump
+    bw_mode
     calendar
     candlestick
     chord

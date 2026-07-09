@@ -1470,6 +1470,44 @@ fn test_scatter3d_color_by() {
     );
 }
 
+/// `--color-by` used to size the legend box with a char-count proxy plus a hard
+/// 80px floor, leaving dead space beside short group labels ("A"/"B"/"C").
+/// Regression: the box must now hug the real measured label width.
+#[test]
+fn test_scatter3d_color_by_legend_box_hugs_short_labels() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "scatter3d",
+        &data("scatter3d.tsv"),
+        "--x",
+        "x",
+        "--y",
+        "y",
+        "--z",
+        "z",
+        "--color-by",
+        "group",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+
+    // The legend background rect is filled with the theme's legend_bg color
+    // (resolved to "#ffffff"), distinct from the canvas background's literal
+    // "white" fill, so it's the only rect matching this needle.
+    let needle = "fill=\"#ffffff\"";
+    let start = stdout.find(needle).expect("legend background rect present");
+    let tag_start = stdout[..start].rfind("<rect").expect("opening <rect");
+    let tag = &stdout[tag_start..start];
+    let key = "width=\"";
+    let s = tag.find(key).expect("width attr") + key.len();
+    let e = tag[s..].find('"').unwrap() + s;
+    let width: f64 = tag[s..e].parse().unwrap();
+
+    assert!(
+        width < 70.0,
+        "legend box width {width} should hug short group labels (A/B/C), \
+         not the old fixed 80px floor"
+    );
+}
+
 // ── surface3d ────────────────────────────────────────────────────────────────
 
 #[test]

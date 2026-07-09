@@ -6,6 +6,16 @@ Thank you for considering a contribution. This document describes how the codeba
 
 **Open all pull requests against the `dev` branch**, not `main`. The `main` branch tracks released versions only; `dev` is where work-in-progress is integrated before a release.
 
+## Toolchain & formatting
+
+The repo pins its dev/CI toolchain via `rust-toolchain.toml` — `rustup` picks this up automatically (installing it on first use if needed), so `cargo build`/`test`/`clippy`/`fmt` all use the same compiler, rustfmt, and clippy version as CI without any manual setup. `rust-version` in `Cargo.toml` is a separate, lower floor (the oldest compiler the *library* must compile on); CI has a dedicated `msrv` job that builds against it.
+
+Run `cargo ci-fmt` before opening a PR — CI fails on any formatting diff. If you need to `git blame` a file, run this once per clone so reformatting-only commits (tagged in `.git-blame-ignore-revs`) don't obscure real authorship:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Quick orientation
 
 ```
@@ -136,6 +146,7 @@ cargo build --bin kuva --features cli,full         # CLI + SVG + PNG + PDF outpu
 cargo test --features cli,full                     # all tests
 cargo test --features cli,full <test_name>         # single test
 cargo test --test cli_basic --features cli,full    # CLI integration tests
+cargo ci-fmt                                       # format check (must be clean before opening a PR)
 bash scripts/smoke_tests.sh                        # CLI smoke tests (all 22+ subcommands)
 bash scripts/gen_docs.sh                           # regenerate docs SVG assets
 bash scripts/gen_terminal_docs.sh                  # regenerate terminal output GIFs for docs

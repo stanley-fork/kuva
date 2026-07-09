@@ -177,6 +177,57 @@ pub fn auto_nice_range(data_min: f64, data_max: f64, target_ticks: usize) -> (f6
     (nice_min, nice_max)
 }
 
+/// Like [`auto_nice_range`], but avoids rounding a whole extra major tick
+/// onto the axis just because a small breathing-room pad (added by the
+/// caller so a data point at the exact boundary doesn't render flush
+/// against the plot edge) tipped `ceil`/`floor` over a step boundary the
+/// *raw* data didn't actually need.
+///
+/// `padded_min`/`padded_max` are the caller's already-padded range (used,
+/// same as `auto_nice_range`, to pick the tick step and as the normal
+/// rounding input); `raw_min`/`raw_max` are the unpadded data extent. When
+/// rounding the padded value lands on a *different* (larger) multiple than
+/// rounding the raw value would have, that extra step exists purely because
+/// of the padding — for an axis with few, large-value ticks this can
+/// otherwise inflate the range by 15-25%+ for data that already fits
+/// snugly. In that case the margin is capped at `min(step / 2, 5% of the
+/// raw span)` instead, and the resulting boundary may not itself land on a
+/// tick — ticks are generated separately and simply stop at the boundary.
+pub fn auto_nice_range_capped(
+    padded_min: f64,
+    padded_max: f64,
+    raw_min: f64,
+    raw_max: f64,
+    target_ticks: usize,
+) -> (f64, f64) {
+    if padded_min == padded_max {
+        let delta = if padded_min.abs() > 1.0 { 1.0 } else { 0.1 };
+        return (padded_min - delta, padded_max + delta);
+    }
+
+    let step = compute_tick_step(padded_min, padded_max, target_ticks);
+    let raw_span = (raw_max - raw_min).max(f64::EPSILON);
+    let tol = step * 1e-9;
+
+    let nice_max_padded = (padded_max / step).ceil() * step;
+    let nice_max_raw = (raw_max / step).ceil() * step;
+    let nice_max = if nice_max_padded > nice_max_raw + tol {
+        (raw_max + (step * 0.5).min(raw_span * 0.05)).max(nice_max_raw)
+    } else {
+        nice_max_padded
+    };
+
+    let nice_min_padded = (padded_min / step).floor() * step;
+    let nice_min_raw = (raw_min / step).floor() * step;
+    let nice_min = if nice_min_padded < nice_min_raw - tol {
+        (raw_min - (step * 0.5).min(raw_span * 0.05)).min(nice_min_raw)
+    } else {
+        nice_min_padded
+    };
+
+    (nice_min, nice_max)
+}
+
 /// Compute a nice log-scale range that fully includes the data.
 /// Rounds to powers of 10 so boundaries always align with generated ticks.
 pub fn auto_nice_range_log(data_min: f64, data_max: f64) -> (f64, f64) {
@@ -208,19 +259,28 @@ pub fn auto_nice_range_log(data_min: f64, data_max: f64) -> (f64, f64) {
     }
 }
 
+/// Selects the log-tick multiplier set for a given axis span: `[1, 2, 5]` per
+/// decade for narrow ranges, or pure powers of ten for wide ones. Shared by
+/// [`generate_ticks_log`] and [`log_tick_after`]/[`log_tick_before`] so both
+/// agree on which pattern a given axis range actually uses.
+pub(crate) fn log_multipliers(min: f64, max: f64) -> &'static [f64] {
+    let log_min = min.max(1e-10).log10().floor() as i32;
+    let log_max = max.log10().ceil() as i32;
+    let decades = (log_max - log_min).max(0) as usize;
+    if decades <= 3 {
+        &[1.0, 2.0, 5.0]
+    } else {
+        &[1.0]
+    }
+}
+
 /// Generate tick marks for a log-scale axis.
 /// For narrow ranges (≤ 3 decades), include 2x and 5x sub-ticks.
 /// For wider ranges, only powers of 10.
 pub fn generate_ticks_log(min: f64, max: f64) -> Vec<f64> {
     let log_min = min.max(1e-10).log10().floor() as i32;
     let log_max = max.log10().ceil() as i32;
-    let decades = (log_max - log_min) as usize;
-
-    let multipliers: &[f64] = if decades <= 3 {
-        &[1.0, 2.0, 5.0]
-    } else {
-        &[1.0]
-    };
+    let multipliers = log_multipliers(min, max);
 
     let mut ticks = Vec::new();
     for exp in log_min..=log_max {
@@ -233,6 +293,41 @@ pub fn generate_ticks_log(min: f64, max: f64) -> Vec<f64> {
         }
     }
     ticks
+}
+
+/// The next tick strictly greater than `v` in the `[1, 2, 5] × 10^n` (or pure
+/// `10^n`) pattern described by `multipliers` (see [`log_multipliers`]).
+/// Used to find the real tick that would exist just past the last major on a
+/// log axis, instead of guessing it from the ratio of the outermost pair —
+/// which is wrong whenever that pair straddles a `2x`/`5x` sub-tick rather
+/// than a power-of-ten boundary.
+pub(crate) fn log_tick_after(v: f64, multipliers: &[f64]) -> f64 {
+    let exp = v.log10().floor() as i32;
+    for e in exp..=exp + 2 {
+        let base = 10f64.powi(e);
+        for &mult in multipliers {
+            let candidate = base * mult;
+            if candidate > v * (1.0 + 1e-9) {
+                return candidate;
+            }
+        }
+    }
+    v * 10.0 // unreachable given a finite multiplier set; keeps the axis usable
+}
+
+/// The previous tick strictly less than `v` — see [`log_tick_after`].
+pub(crate) fn log_tick_before(v: f64, multipliers: &[f64]) -> f64 {
+    let exp = v.log10().ceil() as i32;
+    for e in (exp - 2..=exp).rev() {
+        let base = 10f64.powi(e);
+        for &mult in multipliers.iter().rev() {
+            let candidate = base * mult;
+            if candidate < v * (1.0 - 1e-9) {
+                return candidate;
+            }
+        }
+    }
+    v / 10.0 // unreachable given a finite multiplier set; keeps the axis usable
 }
 
 /// Format a tick value for display on a log-scale axis
@@ -702,15 +797,6 @@ pub fn linkage_to_nodes(
 
 // ── Text utilities ───────────────────────────────────────────────────────────
 
-/// Estimate the rendered pixel width of `text` at the given `font_size`.
-///
-/// Uses a fixed character-width-to-font-size ratio of 0.6, which is the
-/// standard heuristic used throughout the layout and rendering code.
-#[allow(dead_code)]
-pub(crate) fn estimate_text_width(text: &str, font_size: f64) -> f64 {
-    text.chars().count() as f64 * font_size * 0.6
-}
-
 /// Wrap `text` if `max_chars` is `Some`, otherwise return the text as a single-element vec.
 ///
 /// Convenience wrapper around [`wrap_text`] for call sites that hold an
@@ -796,26 +882,6 @@ pub fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
 mod tests {
     use super::*;
 
-    // ── estimate_text_width ──────────────────────────────────────────────
-
-    #[test]
-    fn text_width_ascii() {
-        let w = estimate_text_width("Hello", 10.0);
-        assert!((w - 30.0).abs() < 1e-9); // 5 chars * 10 * 0.6
-    }
-
-    #[test]
-    fn text_width_empty() {
-        assert!((estimate_text_width("", 14.0)).abs() < 1e-9);
-    }
-
-    #[test]
-    fn text_width_unicode() {
-        // 4 characters (c, a, f, é), each counted once regardless of byte length
-        let w = estimate_text_width("café", 10.0);
-        assert!((w - 24.0).abs() < 1e-9);
-    }
-
     // ── wrap_text ────────────────────────────────────────────────────────
 
     #[test]
@@ -894,6 +960,95 @@ mod tests {
     #[test]
     fn wrap_consecutive_newlines() {
         assert_eq!(wrap_text("a\n\nb", 10), vec!["a", "", "b"]);
+    }
+
+    // ── log_tick_after / log_tick_before ────────────────────────────────
+
+    // Regression (PR #101 follow-up): the phantom-tick extrapolation used to
+    // guess the next/previous major from the ratio of the outermost real
+    // tick pair, which is wrong for the `[1,2,5]` per-decade pattern (ratios
+    // alternate 2x/2.5x, not constant). `log_tick_after`/`log_tick_before`
+    // must instead walk the actual pattern.
+
+    #[test]
+    fn log_tick_after_crosses_a_5x_to_next_decade_1x() {
+        let m = log_multipliers(1.0, 35.0); // decades<=3 → [1,2,5]
+        assert_eq!(log_tick_after(20.0, m), 50.0, "next after 20 is 50, not 40");
+    }
+
+    #[test]
+    fn log_tick_after_within_same_decade() {
+        let m = log_multipliers(1.0, 35.0);
+        assert_eq!(log_tick_after(2.0, m), 5.0);
+        assert_eq!(log_tick_after(5.0, m), 10.0);
+    }
+
+    #[test]
+    fn log_tick_before_crosses_a_1x_to_previous_decade_5x() {
+        let m = log_multipliers(1.0, 35.0);
+        assert_eq!(
+            log_tick_before(20.0, m),
+            10.0,
+            "previous before 20 is 10, matching the pattern"
+        );
+        assert_eq!(
+            log_tick_before(10.0, m),
+            5.0,
+            "previous before 10 is 5, not some fraction of a constant ratio"
+        );
+    }
+
+    #[test]
+    fn log_tick_pure_power_of_ten_pattern_unaffected() {
+        // >3 decades → multiplier set collapses to [1.0]; ratio is always 10.
+        let m = log_multipliers(1.0, 30_000.0);
+        assert_eq!(log_tick_after(1000.0, m), 10_000.0);
+        assert_eq!(log_tick_before(1000.0, m), 100.0);
+    }
+
+    // ── auto_nice_range_capped (issue #98) ──────────────────────────────
+
+    #[test]
+    fn capped_range_caps_expansion_when_raw_max_lands_exactly_on_a_tick() {
+        // Raw data 0..20 lands exactly on a tick once rounded; the caller's
+        // 1% breathing-room pad (0..20.2) alone would push `ceil` up a full
+        // extra step to 25 — a 25% expansion for data that already fits
+        // snugly. Capped: extend by at most 5% of the raw span instead.
+        let (lo, hi) = auto_nice_range_capped(0.0, 20.2, 0.0, 20.0, 5);
+        assert_eq!(lo, 0.0);
+        assert_eq!(
+            hi, 21.0,
+            "expected data_max + 5% of span (20 + 1.0), not a full tick step to 25"
+        );
+    }
+
+    #[test]
+    fn capped_range_leaves_natural_overshoot_untouched() {
+        // Raw max 17 does NOT land on the step-2.5 grid, so ordinary
+        // nice-rounding already gives natural headroom (17.5) — the pad
+        // doesn't cross an extra boundary the raw data didn't already need,
+        // so the result must be identical to plain auto_nice_range.
+        let padded = auto_nice_range(0.0, 17.17, 5);
+        let capped = auto_nice_range_capped(0.0, 17.17, 0.0, 17.0, 5);
+        assert_eq!(capped, padded);
+    }
+
+    #[test]
+    fn capped_range_handles_symmetric_negative_case() {
+        // Raw range exactly (-20, 20), both ends on the tick grid; old
+        // behavior would round out to (-30, 30) (a 50% larger span).
+        let (lo, hi) = auto_nice_range_capped(-20.2, 20.2, -20.0, 20.0, 5);
+        assert_eq!(lo, -22.0);
+        assert_eq!(hi, 22.0);
+    }
+
+    #[test]
+    fn capped_range_never_drops_below_the_raw_nice_rounding() {
+        // Degenerate case: raw span is tiny relative to the step, so 5% of
+        // it is smaller than f64::EPSILON's effect — the result must still
+        // be at least as large as rounding the raw value alone would give.
+        let (_, hi) = auto_nice_range_capped(1.0, 1.0001, 1.0, 1.0, 5);
+        assert!(hi >= 1.0);
     }
 }
 

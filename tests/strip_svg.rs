@@ -2,7 +2,7 @@ mod common;
 use kuva::backend::svg::SvgBackend;
 use kuva::plot::StripPlot;
 use kuva::plot::{BoxPlot, LegendEntry, LegendPosition, LegendShape, ViolinPlot};
-use kuva::render::layout::Layout;
+use kuva::render::layout::{ComputedLayout, Layout};
 use kuva::render::plots::Plot;
 use kuva::render::render::render_multiple;
 use kuva::Palette;
@@ -577,35 +577,131 @@ fn test_strip_group_colors_legend_width() {
         }
         found.expect("legend background rect (fill=#ffffff) not found in SVG")
     };
-    let (box_x, box_w) = legend_rect_x;
-    let box_right = box_x + box_w;
+    let (_box_x, box_w) = legend_rect_x;
 
-    // --- Parse legend text entries (text-anchor="start") and check they fit ---
-    // Format: <text x="NNN" ... text-anchor="start">LABEL</text>
-    let px_per_char = 8.0_f64; // same heuristic used by layout width formula
-    for chunk in svg.split("<text") {
-        if !chunk.contains("text-anchor=\"start\"") {
-            continue;
-        }
-        let text_x: f64 = match chunk
-            .split("x=\"")
+    // The box is sized from the real measured widths of the GROUP labels; the precise
+    // "widest label fits" invariant is unit-tested in `render::layout` against actual
+    // DejaVu advances (an integration test can't measure glyphs without re-deriving
+    // them). Here we only guard the original regression: the width must come from the
+    // group labels, not the short legend label "groups" — otherwise the box collapses
+    // to the ~80px minimum and the long label overflows.
+    assert!(
+        svg.contains(">A Much Longer Category Label<"),
+        "the long group label should be rendered in the legend"
+    );
+    assert!(
+        box_w > 120.0,
+        "legend box ({box_w:.1}px) collapsed near the minimum width — it was likely \
+         sized from the wrong string instead of the group labels"
+    );
+}
+
+// Collects every `<circle cx="..." cy="...">` center from an SVG string.
+fn circle_centers(svg: &str) -> Vec<(f64, f64)> {
+    let mut centers = Vec::new();
+    for chunk in svg.split("<circle") {
+        let cx = chunk
+            .split("cx=\"")
             .nth(1)
             .and_then(|s| s.split('"').next())
-            .and_then(|s| s.parse().ok())
-        {
-            Some(v) => v,
-            None => continue,
-        };
-        let label = match chunk.split('>').nth(1).and_then(|s| s.split('<').next()) {
-            Some(l) => l,
-            None => continue,
-        };
-        let estimated_right = text_x + label.len() as f64 * px_per_char;
+            .and_then(|s| s.parse::<f64>().ok());
+        let cy = chunk
+            .split("cy=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.parse::<f64>().ok());
+        if let (Some(cx), Some(cy)) = (cx, cy) {
+            centers.push((cx, cy));
+        }
+    }
+    centers
+}
+
+// A large `with_jitter` value used to push points from the outermost category
+// past the plot's left/right edge, since the axis has no nice-rounded margin
+// to absorb the overflow (categorical axes use their exact [0.5, n+0.5]
+// extent — see PR #99). The offset must be clamped to the category's own
+// half-slot so points stay within the plot area regardless of jitter size.
+#[test]
+fn test_strip_large_jitter_stays_within_plot_bounds() {
+    let strip = StripPlot::new()
+        .with_group("A", vec![1.0, 2.0, 3.0, 4.0, 5.0])
+        .with_group("B", vec![1.5, 2.5, 3.5, 4.5, 5.5])
+        .with_group("C", vec![1.2, 2.2, 3.2, 4.2, 5.2])
+        .with_jitter(5.0) // far beyond the documented [0, 1] range
+        .with_point_size(3.0);
+
+    let plots = vec![Plot::Strip(strip)];
+    let layout = Layout::auto_from_plots(&plots);
+    let computed = ComputedLayout::from_layout(&layout);
+    let (left, right) = (computed.margin_left, computed.width - computed.margin_right);
+
+    let scene = render_multiple(plots, layout);
+    let svg = SvgBackend.render_scene(&scene);
+    common::write_test_output("test_outputs/strip_large_jitter.svg", svg.clone()).unwrap();
+
+    let centers = circle_centers(&svg);
+    assert!(!centers.is_empty(), "expected strip points to be rendered");
+    // A small tolerance absorbs the SVG backend's 2-decimal-place float
+    // formatting, not a real bounds violation.
+    const TOL: f64 = 0.05;
+    for (cx, _cy) in centers {
         assert!(
-            estimated_right <= box_right + 1.0, // +1 for floating-point rounding
-            "legend label {:?} estimated right edge ({estimated_right:.1}px) \
-             exceeds legend box right edge ({box_right:.1}px)",
-            label,
+            cx >= left - TOL && cx <= right + TOL,
+            "jittered point at cx={cx:.2} fell outside plot bounds [{left:.2}, {right:.2}]"
         );
+    }
+}
+
+// A dense Swarm column packed with many tightly-clustered points used to
+// spread wide enough (in pixel space) to bleed into a neighboring category's
+// slot, since `beeswarm_positions` has no cap tied to slot width. Offsets
+// must be capped at half the category's own pixel slot, so each category's
+// points stay within [center - slot/2, center + slot/2].
+#[test]
+fn test_strip_swarm_stays_within_own_category_slot() {
+    // Identical values maximize collisions, forcing beeswarm_positions to
+    // walk as far outward as it can — the scenario that needs the cap.
+    let n = 60;
+    let dense: Vec<f64> = vec![3.0; n];
+    let strip = StripPlot::new()
+        .with_group("A", dense.clone())
+        .with_group("B", dense.clone())
+        .with_group("C", dense)
+        .with_swarm()
+        .with_point_size(5.0);
+
+    let plots = vec![Plot::Strip(strip)];
+    let layout = Layout::auto_from_plots(&plots);
+    let computed = ComputedLayout::from_layout(&layout);
+    let slot_px = (computed.width - computed.margin_left - computed.margin_right) / 3.0;
+    let max_offset = slot_px / 2.0;
+    let centers_of = |i: f64| computed.margin_left + slot_px * (i - 0.5);
+
+    let scene = render_multiple(plots, layout);
+    let svg = SvgBackend.render_scene(&scene);
+    common::write_test_output("test_outputs/strip_swarm_dense.svg", svg.clone()).unwrap();
+
+    let centers = circle_centers(&svg);
+    assert_eq!(
+        centers.len(),
+        3 * n,
+        "expected all swarm points to be rendered"
+    );
+    // Points are emitted group-by-group (A's n points, then B's, then C's),
+    // so each contiguous chunk of `n` circles belongs to one category and
+    // must stay within that category's own half-slot around its center.
+    const TOL: f64 = 0.05;
+    for (group_idx, chunk) in centers.chunks(n).enumerate() {
+        let center = centers_of(group_idx as f64 + 1.0);
+        for &(cx, _cy) in chunk {
+            assert!(
+                cx >= center - max_offset - TOL && cx <= center + max_offset + TOL,
+                "group {group_idx} swarm point at cx={cx:.2} fell outside its own \
+                 category slot [{:.2}, {:.2}]",
+                center - max_offset,
+                center + max_offset
+            );
+        }
     }
 }

@@ -50,12 +50,12 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-kuva = "0.3"
+kuva = "0.4"
 
 # Optional backends
-kuva = { version = "0.3", features = ["png"] }   # PNG output
-kuva = { version = "0.3", features = ["pdf"] }   # PDF output
-kuva = { version = "0.3", features = ["full"] }  # PNG + PDF
+kuva = { version = "0.4", features = ["png"] }   # PNG output
+kuva = { version = "0.4", features = ["pdf"] }   # PDF output
+kuva = { version = "0.4", features = ["full"] }  # PNG + PDF
 ```
 
 Then in Rust:
@@ -94,7 +94,7 @@ kuva ridgeline samples.tsv --group-by group --value expression --overlap 0.6
 kuva box samples.tsv --group-col group --value-col expression --terminal
 ```
 
-Input is auto-detected TSV or CSV. Columns are selectable by name or 0-based index. Pipe from stdin by omitting the file argument. Output defaults to SVG on stdout; use `-o file.svg/png/pdf` to write a file.
+Input is auto-detected TSV or CSV. `.parquet` files are also supported. Columns are selectable by name or 0-based index. Pipe from stdin by omitting the file argument. Output defaults to SVG on stdout; use `-o file.svg/png/pdf` to write a file.
 
 ---
 

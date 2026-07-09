@@ -138,6 +138,7 @@
 - [Legends](./reference/legends.md)
 - [Themes](./reference/themes.md)
 - [Color Palettes](./reference/palettes.md)
+- [Black & White / Accessibility Mode](./reference/bw_mode.md)
 - [SVG Interactivity](./reference/interactive.md)
 - [Date & Time Axes](./reference/datetime.md)
 - [Stats Box](./reference/stats_box.md)

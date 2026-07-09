@@ -35,6 +35,7 @@ pub use crate::plot::{
     DotPoint,
     EcdfGroup,
     EcdfPlot,
+    FillPattern,
     ForestPlot,
     ForestRow,
     FunnelColorMode,

@@ -309,6 +309,13 @@ check "manhattan pvalue-col-is-log" \
     "$BIN" manhattan "$DATA/gene_stats_logp.tsv" --chr-col chr --pvalue-col neg_log10_pvalue --pvalue-col-is-log \
         --title "GWAS Results (log p input)" --x-label "Chromosome" "--y-label=-log10(p-value)"
 
+# Staggered chromosome labels: the crowded right-end chromosomes drop to a second
+# row. Exercises the stagger vertical reservation (must clear the x-axis title).
+check "manhattan staggered labels" \
+    "$BIN" manhattan "$DATA/gene_stats.tsv" --chr-col chr --pos-col pos --pvalue-col pvalue \
+        --genome-build hg38 --x-label-overlap stagger \
+        --title "GWAS (staggered labels)" --x-label "Chromosome" "--y-label=-log10(p-value)"
+
 # ── candlestick ───────────────────────────────────────────────────────────────
 check "candlestick basic" \
     "$BIN" candlestick "$DATA/candlestick.tsv" \
@@ -1016,6 +1023,125 @@ check "math on line plot" \
 check "math on bar plot" \
     "$BIN" bar "$DATA/bar.tsv" --label-col category --value-col count \
         --y-label 'Count $\times 10^3$'
+
+# ── bw mode ───────────────────────────────────────────────────────────────────
+check "bw scatter" \
+    "$BIN" scatter "$DATA/scatter.tsv" --x x --y y --color-by group --legend --bw \
+        --title "BW Scatter"
+
+check "bw line" \
+    "$BIN" line "$DATA/measurements.tsv" --x time --y value --color-by group --legend --bw \
+        --title "BW Line"
+
+check "bw bar" \
+    "$BIN" bar "$DATA/bar.tsv" --label-col category --value-col count --bw \
+        --title "BW Bar"
+
+check "bw histogram" \
+    "$BIN" histogram "$DATA/histogram.tsv" --value-col value --bw \
+        --title "BW Histogram"
+
+check "bw box" \
+    "$BIN" box "$DATA/samples.tsv" --group-col group --value-col expression --bw \
+        --title "BW Boxplot"
+
+check "bw violin" \
+    "$BIN" violin "$DATA/samples.tsv" --group-col group --value-col expression --bw \
+        --title "BW Violin"
+
+check "bw pie" \
+    "$BIN" pie "$DATA/pie.tsv" --label-col feature --value-col percentage --bw \
+        --title "BW Pie"
+
+check "bw strip" \
+    "$BIN" strip "$DATA/samples.tsv" --group-col group --value-col expression --bw \
+        --title "BW Strip"
+
+check "bw waterfall" \
+    "$BIN" waterfall "$DATA/waterfall.tsv" --label-col process --value-col log2fc --bw \
+        --title "BW Waterfall"
+
+check "bw stacked-area" \
+    "$BIN" stacked-area "$DATA/stacked_area.tsv" --x-col week --group-col species --y-col abundance --bw \
+        --title "BW Stacked Area"
+
+check "bw density" \
+    "$BIN" density "$DATA/samples.tsv" --value expression --color-by group --filled --bw \
+        --title "BW Density"
+
+check "bw ridgeline" \
+    "$BIN" ridgeline "$DATA/samples.tsv" --group-by group --value expression --bw \
+        --title "BW Ridgeline"
+
+check "bw ecdf" \
+    "$BIN" ecdf "$DATA/samples.tsv" --value expression --color-by group --confidence-band --bw \
+        --title "BW ECDF"
+
+check "bw streamgraph" \
+    "$BIN" streamgraph "$DATA/streamgraph.tsv" --bw \
+        --title "BW Streamgraph"
+
+check "bw survival" \
+    "$BIN" survival "$DATA/survival.tsv" --time-col time --event-col event --group-col group --bw \
+        --title "BW Survival"
+
+check "bw roc" \
+    "$BIN" roc "$DATA/roc.tsv" --score-col score --label-col label --ci --legend "Model" --bw \
+        --title "BW ROC"
+
+check "bw pr" \
+    "$BIN" pr "$DATA/pr.tsv" --score-col score --label-col label --legend "Classifier" --bw \
+        --title "BW PR"
+
+check "bw qq" \
+    "$BIN" qq "$DATA/samples.tsv" --value expression --color-by group --bw \
+        --title "BW QQ"
+
+check "bw bump" \
+    "$BIN" bump "$DATA/bump.tsv" --series series --time time --rank rank --bw \
+        --title "BW Bump"
+
+check "bw slope" \
+    "$BIN" slope "$DATA/slope.tsv" --label-col label --before-col before --after-col after --bw \
+        --title "BW Slope"
+
+check "bw rose" \
+    "$BIN" rose "$DATA/rose.tsv" --label direction --value high_speed --bw \
+        --title "BW Rose"
+
+check "bw upset" \
+    "$BIN" upset "$DATA/upset.tsv" --bw \
+        --title "BW UpSet"
+
+# ── minor gridlines ───────────────────────────────────────────────────────────
+# Minor gridlines must cover the WHOLE plot area, including the band beyond the
+# last major tick when the axis range doesn't end on one. Data is generated inline
+# (points along a curve) rather than committed. Two cases, because linear and log
+# axes take different minor-tick code paths:
+#   * linear: range -3..24 (X) / 0..48 (Y); majors every 5 / 10; minors every 1 / 2.
+#             X starts below its first major (0) and neither axis ends on a major,
+#             so both the leading (-3..0 on X) and trailing (20..24 X, 40..48 Y)
+#             bands must fill.
+#   * log Y:  range 1-3000 with --minor-ticks 9, so each decade gets the standard
+#             2..9 log minors (linear subdivision by 9 lands on them); the partial
+#             top decade (1000-3000) must be covered too.
+MINOR_LIN_DATA="${TMPDIR:-/tmp}/kuva_minorgrid_lin_$$.tsv"
+{ printf 'x\ty\n'; for x in $(seq 1 24); do printf '%s\t%s\n' "$x" "$((x * 2))"; done; } > "$MINOR_LIN_DATA"
+check "minor gridlines linear coverage" \
+    "$BIN" scatter "$MINOR_LIN_DATA" --x x --y y \
+        --x-min -3 --x-max 24 --y-min 0 --y-max 48 \
+        --x-tick-step 5 --y-tick-step 10 --minor-ticks 5 --minor-grid \
+        --title "Minor Gridlines (linear)" --x-label "X" --y-label "Y"
+rm -f "$MINOR_LIN_DATA"
+
+MINOR_LOG_DATA="${TMPDIR:-/tmp}/kuva_minorgrid_log_$$.tsv"
+{ printf 'x\ty\n'; for x in $(seq 1 24); do printf '%s\t%s\n' "$x" "$((x * x * 3))"; done; } > "$MINOR_LOG_DATA"
+check "minor gridlines log coverage" \
+    "$BIN" scatter "$MINOR_LOG_DATA" --x x --y y \
+        --log-y --y-min 1 --y-max 3000 --x-min 0 --x-max 25 --x-tick-step 5 \
+        --minor-ticks 9 --minor-grid \
+        --title "Minor Gridlines (log Y)" --x-label "X" --y-label "Y (log)"
+rm -f "$MINOR_LOG_DATA"
 
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""
