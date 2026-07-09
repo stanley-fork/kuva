@@ -537,6 +537,8 @@ let layout = Layout::auto_from_plots(&plots)
 
 These can also be set via a `Theme` — see the [Themes](./themes.md) reference.
 
+For greyscale/print-safe or color-vision-deficient-accessible rendering, see [Black & White / Accessibility Mode](./bw_mode.md) — `Layout::with_bw_mode()` replaces palette colors with grey shades, hatch patterns, dash styles, and marker shapes.
+
 ---
 
 ## Text wrapping

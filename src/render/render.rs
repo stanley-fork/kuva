@@ -7356,6 +7356,17 @@ fn add_waterfall(waterfall: &WaterfallPlot, scene: &mut Scene, computed: &Comput
     }
 }
 
+/// Sum of a `stroke-dasharray` string's segment lengths — the pixel length
+/// of one full repeat of the pattern. Accepts space- and/or comma-separated
+/// values, matching SVG's own `stroke-dasharray` syntax.
+fn dasharray_cycle_length(dasharray: &str) -> f64 {
+    dasharray
+        .split([' ', ','])
+        .filter(|tok| !tok.is_empty())
+        .filter_map(|tok| tok.parse::<f64>().ok())
+        .sum()
+}
+
 fn render_legend_entry(
     entry: &LegendEntry,
     scene: &mut Scene,
@@ -7431,10 +7442,25 @@ fn render_legend_entry(
             } else {
                 (Color::from(&entry.color), entry.dasharray.clone())
             };
+            // A multi-segment dash pattern (e.g. `DashDot`'s "8 4 2 4") needs
+            // its full cycle length to show every segment at least once —
+            // the fixed base swatch length truncates it after the first
+            // dash and gap, hiding the dot entirely. Extend just enough to
+            // fit one full cycle, capped so the swatch can't run into the
+            // label text.
+            let max_swatch = computed.legend_text_x
+                - computed.legend_swatch_x
+                - 2.0 * computed.axis_stroke_width;
+            let swatch_len = match &dasharray {
+                Some(da) => dasharray_cycle_length(da)
+                    .max(computed.legend_swatch_size)
+                    .min(max_swatch.max(computed.legend_swatch_size)),
+                None => computed.legend_swatch_size,
+            };
             scene.add(Primitive::Line {
                 x1: legend_x + computed.legend_swatch_x,
                 y1: swatch_cy,
-                x2: legend_x + computed.legend_swatch_x + computed.legend_swatch_size,
+                x2: legend_x + computed.legend_swatch_x + swatch_len,
                 y2: swatch_cy,
                 stroke,
                 stroke_width: computed.axis_stroke_width * 2.0,

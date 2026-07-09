@@ -127,6 +127,7 @@ These flags are available on every subcommand.
 | `--theme <NAME>` | `light` | Theme: `light`, `dark`, `solarized`, `minimal` |
 | `--palette <NAME>` | `category10` | Color palette for multi-series plots |
 | `--cvd-palette <NAME>` | — | Colour-vision-deficiency palette: `deuteranopia`, `protanopia`, `tritanopia`. Overrides `--palette`. |
+| `--bw` | off | [Black & white / accessibility mode](../reference/bw_mode.md) — replaces colors with grey shades, hatch patterns, dash styles, and marker shapes so the plot stays legible in greyscale |
 | `--background <COLOR>` | *(theme default)* | SVG background color (any CSS color string) |
 
 ### Fonts
