@@ -331,12 +331,16 @@ fn figure_both_axes_negative() {
     common::write_test_output("test_outputs/figure_both_negative.svg", &svg).unwrap();
 
     assert!(svg.contains("<svg"));
-    // x: ticks=5 → auto_nice_range(-5.11, 6.11, 5) → step=2 → (-6, 8) range.
-    // generate_ticks(-6, 8, 5) → step=2.5 → ticks: -5, -2.5, 0, 2.5, 5, 7.5
+    // x: raw range (-5, 6) both land exactly on step=2's grid, so
+    // auto_nice_range_capped (issue #98) caps the padding-only extension at
+    // 5% of the raw span instead of rounding a full extra step onto the
+    // axis: (-6, 6.55) rather than the old (-6, 8).
+    // generate_ticks(-6, 6.55, 5) → step=2.5 → ticks: -5, -2.5, 0, 2.5, 5
     // y: ticks=5 → auto_nice_range(-8.06, -1.94, 5) → step=1 → (-9, -1) range.
     // generate_ticks(-9, -1, 5) → step=2 → ticks: -8, -6, -4, -2
     assert!(svg.contains(">-6<")); // y tick: confirms negative y range
-    assert!(svg.contains(">7.5<")); // max x tick (was ">7<")
+    assert!(svg.contains(">5<")); // max x tick (was ">7.5<" before issue #98's fix)
+    assert!(!svg.contains(">7.5<")); // dead-space tick from the old over-provisioned range must be gone
     assert!(svg.contains(">-8<")); // most-negative y tick
     assert!(svg.contains(">-5<")); // first negative x tick (was ">-1<")
 }

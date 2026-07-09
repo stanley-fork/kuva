@@ -2537,6 +2537,8 @@ fn resolve_axis_range(
         // Histogram: use the exact data range so ticks start and end on bin
         // boundaries rather than being rounded outward by auto_nice_range.
         data_range.unwrap_or(range)
+    } else if let Some((raw_lo, raw_hi)) = data_range {
+        render_utils::auto_nice_range_capped(range.0, range.1, raw_lo, raw_hi, ticks)
     } else {
         render_utils::auto_nice_range(range.0, range.1, ticks)
     }

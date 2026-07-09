@@ -177,6 +177,57 @@ pub fn auto_nice_range(data_min: f64, data_max: f64, target_ticks: usize) -> (f6
     (nice_min, nice_max)
 }
 
+/// Like [`auto_nice_range`], but avoids rounding a whole extra major tick
+/// onto the axis just because a small breathing-room pad (added by the
+/// caller so a data point at the exact boundary doesn't render flush
+/// against the plot edge) tipped `ceil`/`floor` over a step boundary the
+/// *raw* data didn't actually need.
+///
+/// `padded_min`/`padded_max` are the caller's already-padded range (used,
+/// same as `auto_nice_range`, to pick the tick step and as the normal
+/// rounding input); `raw_min`/`raw_max` are the unpadded data extent. When
+/// rounding the padded value lands on a *different* (larger) multiple than
+/// rounding the raw value would have, that extra step exists purely because
+/// of the padding — for an axis with few, large-value ticks this can
+/// otherwise inflate the range by 15-25%+ for data that already fits
+/// snugly. In that case the margin is capped at `min(step / 2, 5% of the
+/// raw span)` instead, and the resulting boundary may not itself land on a
+/// tick — ticks are generated separately and simply stop at the boundary.
+pub fn auto_nice_range_capped(
+    padded_min: f64,
+    padded_max: f64,
+    raw_min: f64,
+    raw_max: f64,
+    target_ticks: usize,
+) -> (f64, f64) {
+    if padded_min == padded_max {
+        let delta = if padded_min.abs() > 1.0 { 1.0 } else { 0.1 };
+        return (padded_min - delta, padded_max + delta);
+    }
+
+    let step = compute_tick_step(padded_min, padded_max, target_ticks);
+    let raw_span = (raw_max - raw_min).max(f64::EPSILON);
+    let tol = step * 1e-9;
+
+    let nice_max_padded = (padded_max / step).ceil() * step;
+    let nice_max_raw = (raw_max / step).ceil() * step;
+    let nice_max = if nice_max_padded > nice_max_raw + tol {
+        (raw_max + (step * 0.5).min(raw_span * 0.05)).max(nice_max_raw)
+    } else {
+        nice_max_padded
+    };
+
+    let nice_min_padded = (padded_min / step).floor() * step;
+    let nice_min_raw = (raw_min / step).floor() * step;
+    let nice_min = if nice_min_padded < nice_min_raw - tol {
+        (raw_min - (step * 0.5).min(raw_span * 0.05)).min(nice_min_raw)
+    } else {
+        nice_min_padded
+    };
+
+    (nice_min, nice_max)
+}
+
 /// Compute a nice log-scale range that fully includes the data.
 /// Rounds to powers of 10 so boundaries always align with generated ticks.
 pub fn auto_nice_range_log(data_min: f64, data_max: f64) -> (f64, f64) {
@@ -953,6 +1004,51 @@ mod tests {
         let m = log_multipliers(1.0, 30_000.0);
         assert_eq!(log_tick_after(1000.0, m), 10_000.0);
         assert_eq!(log_tick_before(1000.0, m), 100.0);
+    }
+
+    // ── auto_nice_range_capped (issue #98) ──────────────────────────────
+
+    #[test]
+    fn capped_range_caps_expansion_when_raw_max_lands_exactly_on_a_tick() {
+        // Raw data 0..20 lands exactly on a tick once rounded; the caller's
+        // 1% breathing-room pad (0..20.2) alone would push `ceil` up a full
+        // extra step to 25 — a 25% expansion for data that already fits
+        // snugly. Capped: extend by at most 5% of the raw span instead.
+        let (lo, hi) = auto_nice_range_capped(0.0, 20.2, 0.0, 20.0, 5);
+        assert_eq!(lo, 0.0);
+        assert_eq!(
+            hi, 21.0,
+            "expected data_max + 5% of span (20 + 1.0), not a full tick step to 25"
+        );
+    }
+
+    #[test]
+    fn capped_range_leaves_natural_overshoot_untouched() {
+        // Raw max 17 does NOT land on the step-2.5 grid, so ordinary
+        // nice-rounding already gives natural headroom (17.5) — the pad
+        // doesn't cross an extra boundary the raw data didn't already need,
+        // so the result must be identical to plain auto_nice_range.
+        let padded = auto_nice_range(0.0, 17.17, 5);
+        let capped = auto_nice_range_capped(0.0, 17.17, 0.0, 17.0, 5);
+        assert_eq!(capped, padded);
+    }
+
+    #[test]
+    fn capped_range_handles_symmetric_negative_case() {
+        // Raw range exactly (-20, 20), both ends on the tick grid; old
+        // behavior would round out to (-30, 30) (a 50% larger span).
+        let (lo, hi) = auto_nice_range_capped(-20.2, 20.2, -20.0, 20.0, 5);
+        assert_eq!(lo, -22.0);
+        assert_eq!(hi, 22.0);
+    }
+
+    #[test]
+    fn capped_range_never_drops_below_the_raw_nice_rounding() {
+        // Degenerate case: raw span is tiny relative to the step, so 5% of
+        // it is smaller than f64::EPSILON's effect — the result must still
+        // be at least as large as rounding the raw value alone would give.
+        let (_, hi) = auto_nice_range_capped(1.0, 1.0001, 1.0, 1.0, 5);
+        assert!(hi >= 1.0);
     }
 }
 
