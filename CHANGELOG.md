@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`Scatter3D`/`Surface3D` instances combined in one panel now share one 3D coordinate box** — each instance previously called `data_ranges()`/drew its own wireframe box independently, so two `Scatter3D` (or a mix with `Surface3D`) in the same `render_multiple` call each normalized to their own min/max and could project completely different data onto identical screen coordinates, with the box itself drawn twice. `render_multiple` now computes one merged `DataRanges3D` and draws the box once, shared by every 3D instance in the call.
+- **Twin-Y x-axis no longer clips a secondary series that extends further than the primary series** — `Layout::auto_from_twin_y_plots`'s `with_y2_auto` unioned the *padded* x-range across primary and secondary, but left `data_x_range` (the *raw* extent used by the axis-range capping added for [#98](https://github.com/Psy-Fer/kuva/issues/98)) pinned to primary's range alone. When the capped branch triggered, the x-axis max was computed from primary's raw max instead of the true combined max, rounding the axis short and clipping secondary's data past that point. `data_x_range` is now unioned across both series.
+
 ## [0.4.0] — 2026-07-09
 
 ### Added

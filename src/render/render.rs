@@ -3483,14 +3483,56 @@ fn draw_3d_box(
     proj
 }
 
-fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout, bw_idx: usize) {
-    let ranges = match s.data_ranges() {
-        Some(r) => r,
-        None => return,
-    };
-    let (z_min, z_max) = ranges.z;
+/// Union of 3D data ranges across every `Scatter3D`/`Surface3D` instance in
+/// `plots`, so multiple 3D plots combined in one `render_multiple` call are
+/// normalized to one shared coordinate box instead of each instance computing
+/// its own independent bounding box (which projects different instances'
+/// points onto the same screen coordinates regardless of their actual values).
+fn merged_3d_ranges(plots: &[Plot]) -> Option<DataRanges3D> {
+    plots
+        .iter()
+        .filter_map(|p| match p {
+            Plot::Scatter3D(s) => s.data_ranges(),
+            Plot::Surface3D(s) => s.data_ranges(),
+            _ => None,
+        })
+        .reduce(|a, r| DataRanges3D {
+            x: (a.x.0.min(r.x.0), a.x.1.max(r.x.1)),
+            y: (a.y.0.min(r.y.0), a.y.1.max(r.y.1)),
+            z: (a.z.0.min(r.z.0), a.z.1.max(r.z.1)),
+        })
+}
 
-    let proj = draw_3d_box(ranges, &s.box3d, scene, computed);
+/// The `Box3DConfig` (view angles, grid, box/labels) of the first 3D plot
+/// instance in `plots`. Multiple 3D instances share one drawn box, so only one
+/// config can apply — the first instance's wins, matching how other combined
+/// chrome (e.g. axis titles) takes the first plot's setting.
+fn first_3d_box_config(plots: &[Plot]) -> Option<Box3DConfig> {
+    plots.iter().find_map(|p| match p {
+        Plot::Scatter3D(s) => Some(s.box3d.clone()),
+        Plot::Surface3D(s) => Some(s.box3d.clone()),
+        _ => None,
+    })
+}
+
+/// Renders one `Scatter3DPlot` instance's points into an already-drawn 3D box.
+///
+/// `ranges` and `proj` are shared across every `Scatter3D`/`Surface3D` instance in
+/// the same `render_multiple` call (computed once by the caller) so multiple 3D
+/// plots combined in one panel are normalized to one coordinate system instead of
+/// each instance projecting against its own independent bounding box.
+fn add_scatter3d(
+    s: &Scatter3DPlot,
+    scene: &mut Scene,
+    computed: &ComputedLayout,
+    bw_idx: usize,
+    ranges: DataRanges3D,
+    proj: &Projection3D,
+) {
+    if s.data.is_empty() {
+        return;
+    }
+    let (z_min, z_max) = ranges.z;
 
     // ── Data points (depth-sorted, back to front) ──────────────────────
     let z_span = (z_max - z_min).max(f64::EPSILON);
@@ -3621,14 +3663,19 @@ fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout
     }
 }
 
-fn add_surface3d(s: &Surface3DPlot, scene: &mut Scene, computed: &ComputedLayout) {
-    let ranges = match s.data_ranges() {
-        Some(r) => r,
-        None => return,
-    };
+/// Renders one `Surface3DPlot` instance's mesh into an already-drawn 3D box.
+/// See [`add_scatter3d`] for why `ranges`/`proj` are shared across instances.
+fn add_surface3d(
+    s: &Surface3DPlot,
+    scene: &mut Scene,
+    computed: &ComputedLayout,
+    ranges: DataRanges3D,
+    proj: &Projection3D,
+) {
+    if s.nrows() < 2 || s.ncols() < 2 {
+        return;
+    }
     let (z_min, z_max) = ranges.z;
-
-    let proj = draw_3d_box(ranges, &s.box3d, scene, computed);
 
     let nrows = s.nrows();
     let ncols = s.ncols();
@@ -14937,6 +14984,12 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
     let mut density_bw_idx = 0usize;
     let mut histogram_bw_idx = 0usize;
     let mut scatter3d_bw_idx = 0usize;
+    // Shared coordinate box for every Scatter3D/Surface3D instance in this call —
+    // see `merged_3d_ranges` for why this can't be computed independently per
+    // instance. The box is drawn lazily on the first 3D plot encountered below.
+    let ranges_3d = merged_3d_ranges(&plots);
+    let box3d_cfg_3d = first_3d_box_config(&plots);
+    let mut proj_3d: Option<Projection3D> = None;
     for plot in plots.iter() {
         match plot {
             Plot::Scatter(s) => {
@@ -15039,11 +15092,19 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
                 add_forest(f, &mut scene, &computed);
             }
             Plot::Scatter3D(s) => {
-                add_scatter3d(s, &mut scene, &computed, scatter3d_bw_idx);
-                scatter3d_bw_idx += 1;
+                if let (Some(ranges), Some(cfg)) = (ranges_3d, box3d_cfg_3d.as_ref()) {
+                    let proj = proj_3d
+                        .get_or_insert_with(|| draw_3d_box(ranges, cfg, &mut scene, &computed));
+                    add_scatter3d(s, &mut scene, &computed, scatter3d_bw_idx, ranges, proj);
+                    scatter3d_bw_idx += 1;
+                }
             }
             Plot::Surface3D(s) => {
-                add_surface3d(s, &mut scene, &computed);
+                if let (Some(ranges), Some(cfg)) = (ranges_3d, box3d_cfg_3d.as_ref()) {
+                    let proj = proj_3d
+                        .get_or_insert_with(|| draw_3d_box(ranges, cfg, &mut scene, &computed));
+                    add_surface3d(s, &mut scene, &computed, ranges, proj);
+                }
             }
             Plot::Clustermap(c) => {
                 add_clustermap(c, &mut scene, &computed);

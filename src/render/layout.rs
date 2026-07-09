@@ -2168,6 +2168,13 @@ impl Layout {
     pub fn with_y2_auto(mut self, secondary: &[Plot]) -> Self {
         let mut x_min = self.x_range.0;
         let mut x_max = self.x_range.1;
+        // Raw (unpadded) x extent, unioned across primary + secondary. `resolve_axis_range`
+        // compares this against the padded `x_range` to decide whether to cap the axis-range
+        // margin (see `auto_nice_range_capped`); `data_x_range` was set from primary alone by
+        // `auto_from_plots`, so without this a secondary series extending further than primary
+        // gets the capping decision made from primary's raw extent — potentially rounding the
+        // x-axis max down below secondary's actual data.
+        let (mut raw_x_min, mut raw_x_max) = self.data_x_range.unwrap_or((x_min, x_max));
         let mut y2_min = f64::INFINITY;
         let mut y2_max = f64::NEG_INFINITY;
         let mut max_secondary_label_w: f64 = 0.0;
@@ -2175,6 +2182,8 @@ impl Layout {
             if let Some(((xlo, xhi), (ylo, yhi))) = plot.bounds() {
                 x_min = x_min.min(xlo);
                 x_max = x_max.max(xhi);
+                raw_x_min = raw_x_min.min(xlo);
+                raw_x_max = raw_x_max.max(xhi);
                 y2_min = y2_min.min(ylo);
                 y2_max = y2_max.max(yhi);
             }
@@ -2325,6 +2334,7 @@ impl Layout {
             self.refresh_legend_width();
         }
         self.x_range = (x_min, x_max);
+        self.data_x_range = Some((raw_x_min, raw_x_max));
         let raw = (y2_min, y2_max);
         self.data_y2_range = Some(raw);
         if y2_max > y2_min {
