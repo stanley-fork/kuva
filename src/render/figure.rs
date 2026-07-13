@@ -927,6 +927,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.x_label = l.x_label.clone();
     new.y_label = l.y_label.clone();
     new.title = l.title.clone();
+    new.subtitle = l.subtitle.clone();
     new.x_categories = l.x_categories.clone();
     new.y_categories = l.y_categories.clone();
     new.show_legend = l.show_legend;
@@ -955,6 +956,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.suppress_y_ticks = l.suppress_y_ticks;
     new.font_family = l.font_family.clone();
     new.title_size = l.title_size;
+    new.subtitle_size = l.subtitle_size;
     new.label_size = l.label_size;
     new.tick_size = l.tick_size;
     new.body_size = l.body_size;
@@ -998,6 +1000,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.equal_aspect = l.equal_aspect;
     new.brick_notation_tiers = l.brick_notation_tiers;
     new.title_wrap = l.title_wrap;
+    new.subtitle_wrap = l.subtitle_wrap;
     new.x_label_wrap = l.x_label_wrap;
     new.y_label_wrap = l.y_label_wrap;
     new.y2_label_wrap = l.y2_label_wrap;

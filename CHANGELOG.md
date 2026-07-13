@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Layout::with_subtitle`** — render a secondary line centred under the title for a one-line data summary (e.g. `n = 1,234 cells`). Sized at `round(0.7 × title_size)` by default or set explicitly with `with_subtitle_size`; coloured by muting the title colour toward the background so it adapts to light and dark themes rather than a fixed grey; word-wrapped independently of the title via `with_subtitle_wrap`. The title block reserves the extra height automatically so the plot is pushed down rather than overlapped. CLI: `--subtitle` and `--subtitle-wrap` on every subcommand. See *Reference → Layout*.
+
 ### Fixed
 
 - **`Scatter3D`/`Surface3D` instances combined in one panel now share one 3D coordinate box** — each instance previously called `data_ranges()`/drew its own wireframe box independently, so two `Scatter3D` (or a mix with `Surface3D`) in the same `render_multiple` call each normalized to their own min/max and could project completely different data onto identical screen coordinates, with the box itself drawn twice. `render_multiple` now computes one merged `DataRanges3D` and draws the box once, shared by every 3D instance in the call.

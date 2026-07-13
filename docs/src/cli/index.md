@@ -122,6 +122,7 @@ These flags are available on every subcommand.
 |---|---|---|
 | `-o`, `--output <FILE>` | stdout (SVG) | Output file path (mutually exclusive with `--terminal`) |
 | `--title <TEXT>` | — | Title displayed above the chart |
+| `--subtitle <TEXT>` | — | Secondary line under the title, smaller and muted ([Reference → Layout](../reference/layout.md)) |
 | `--width <PX>` | `800` | Canvas width in pixels |
 | `--height <PX>` | `500` | Canvas height in pixels |
 | `--theme <NAME>` | `light` | Theme: `light`, `dark`, `solarized`, `minimal` |

@@ -1,13 +1,15 @@
 use crate::render::alluvial_order::optimize_sankey_alluvial_order;
 use crate::render::annotations::{add_reference_lines, add_shaded_regions, add_text_annotations};
-use crate::render::axis::{add_axes_and_grid, add_labels_and_title, add_y2_axis, XLabelPlacer};
-use crate::render::layout::{ComputedLayout, Layout, TickFormat};
+use crate::render::axis::{
+    add_axes_and_grid, add_labels_and_title, add_y2_axis, muted_subtitle_color, XLabelPlacer,
+};
+use crate::render::layout::{ComputedLayout, Layout, TickFormat, SUBTITLE_SIZE_RATIO};
 use crate::render::palette::Palette;
 use crate::render::plots::Plot;
 use crate::render::render_utils::{self, linear_regression, pearson_corr, percentile};
 use crate::render::text_metrics::{
-    ascent, cap_height, center_offset, mean_char_width, measure_text_width, text_height,
-    widest_text_width, FontStyle,
+    ascent, cap_height, center_offset, descent, line_height, mean_char_width, measure_text_width,
+    text_height, widest_text_width, FontStyle,
 };
 use crate::render::theme::Theme;
 use std::collections::HashMap;
@@ -17104,11 +17106,33 @@ fn joint_draw_right_marginal(
 /// size plus symmetric padding, so a larger `title_size` reserves proportionally
 /// more and never clips (the old fixed 35px band ignored `title_size`).
 fn jointplot_title_height(layout: &Layout) -> f64 {
-    if layout.title.is_some() {
-        let ts = layout.title_size as f64;
+    let ts = layout.title_size as f64;
+    let title_h = if layout.title.is_some() {
         text_height(ts, FontStyle::Regular) + 2.0 * (ts * 0.2)
     } else {
         0.0
+    };
+    // Reserve the subtitle band too, so the marginal plots start below it (the
+    // Plot::Joint path draws the subtitle via add_labels_and_title; the
+    // standalone path draws it below, in render_jointplot).
+    let subtitle_h = match &layout.subtitle {
+        Some(s) => {
+            let lines = render_utils::wrap_or_single(s, layout.subtitle_wrap).len();
+            lines as f64 * line_height(jointplot_subtitle_size(layout), FontStyle::Regular)
+        }
+        None => 0.0,
+    };
+    title_h + subtitle_h
+}
+
+/// Subtitle font size for a JointPlot: an explicit `with_subtitle_size`, else
+/// `round(0.7 × title_size)` — mirrors `ComputedLayout::from_layout`.
+fn jointplot_subtitle_size(layout: &Layout) -> f64 {
+    match layout.subtitle_size {
+        Some(px) => px as f64,
+        None => (layout.title_size as f64 * SUBTITLE_SIZE_RATIO)
+            .round()
+            .max(1.0),
     }
 }
 
@@ -17436,6 +17460,40 @@ pub fn render_jointplot(jp: crate::plot::jointplot::JointPlot, layout: Layout) -
             bold: false,
             color: None,
         });
+    }
+
+    // Subtitle: muted line(s) below the title. The standalone jointplot path
+    // renders its own title/subtitle (unlike the Plot::Joint path via
+    // render_multiple, which goes through add_labels_and_title);
+    // `jointplot_title_height` reserves the matching band above.
+    if let Some(ref subtitle) = layout.subtitle {
+        let ts = layout.title_size as f64;
+        let sts = jointplot_subtitle_size(&layout);
+        let slh = line_height(sts, FontStyle::Regular);
+        // Bottom of the title (baseline + descent), or the very top when there is
+        // no title; then drop the first subtitle baseline by its own ascent.
+        let title_bottom = if layout.title.is_some() {
+            jointplot_title_baseline(&layout) + descent(ts, FontStyle::Regular)
+        } else {
+            0.0
+        };
+        let start_y = title_bottom + ascent(sts, FontStyle::Regular);
+        let color = muted_subtitle_color(&scene);
+        for (i, line) in render_utils::wrap_or_single(subtitle, layout.subtitle_wrap)
+            .iter()
+            .enumerate()
+        {
+            scene.add(Primitive::Text {
+                x: scene_width / 2.0,
+                y: start_y + i as f64 * slh,
+                content: line.clone(),
+                size: sts as u32,
+                anchor: TextAnchor::Middle,
+                rotate: None,
+                bold: false,
+                color: Some(color.clone()),
+            });
+        }
     }
 
     // Build a ComputedLayout using width/height so add_jointplot can access theme etc.

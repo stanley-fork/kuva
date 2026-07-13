@@ -64,6 +64,27 @@ fn test_jointplot_title_baseline_scales_with_title_size() {
     );
 }
 
+/// The standalone `render_jointplot` path renders its own title/subtitle (it does
+/// not go through `add_labels_and_title`), so the subtitle must appear there too,
+/// muted and below the title.
+#[test]
+fn test_jointplot_renders_subtitle_below_title() {
+    let (x, y) = sample_data(50, 9);
+    let jp = JointPlot::new().with_xy(x, y);
+    let layout = Layout::new((-6.0, 6.0), (-6.0, 6.0))
+        .with_title("JPTITLE")
+        .with_subtitle("JPSUB");
+    let svg = SvgBackend.render_scene(&render_jointplot(jp, layout));
+    assert!(
+        svg.contains(">JPSUB</text>"),
+        "standalone jointplot should render the subtitle"
+    );
+    assert!(
+        common::text_y(&svg, "JPSUB") > common::text_y(&svg, "JPTITLE"),
+        "subtitle baseline should sit below the title baseline"
+    );
+}
+
 #[test]
 fn test_jointplot_density() {
     let (x, y) = sample_data(200, 1);
