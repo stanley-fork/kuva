@@ -105,6 +105,22 @@ pub fn run(args: QQArgs) -> Result<(), String> {
         }
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::QQPlot"],
+                "QQ",
+                &[crate::emit_code::emit_qq_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::QQ(plot)];
     let mut layout = Layout::auto_from_plots(&plots);
 

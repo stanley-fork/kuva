@@ -121,6 +121,22 @@ pub fn run(args: PyramidArgs) -> Result<(), String> {
         plot = plot.with_group(label.as_str(), *left, *right);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::PopulationPyramid"],
+                "Pyramid",
+                &[crate::emit_code::emit_pyramid_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Pyramid(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

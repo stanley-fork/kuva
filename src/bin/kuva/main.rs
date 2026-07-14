@@ -11,6 +11,8 @@ mod density;
 mod doom;
 mod dot;
 mod ecdf;
+#[cfg(feature = "emit_code")]
+mod emit_code;
 mod forest;
 mod funnel;
 mod gantt;

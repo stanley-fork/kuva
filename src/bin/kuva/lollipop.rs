@@ -131,6 +131,22 @@ pub fn run(args: LollipopArgs) -> Result<(), String> {
         }
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::LollipopPlot"],
+                "Lollipop",
+                &[crate::emit_code::emit_lollipop_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Lollipop(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

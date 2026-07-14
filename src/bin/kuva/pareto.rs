@@ -137,6 +137,22 @@ pub fn run(args: ParetoArgs) -> Result<(), String> {
         plot = plot.with_horizontal(true);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::ParetoPlot"],
+                "Pareto",
+                &[crate::emit_code::emit_pareto_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Pareto(plot)];
     // -45° rotation is now `auto_from_plots`'s own default for Pareto (so library
     // callers get it too, not just the CLI) -- `apply_axis_args` below still lets

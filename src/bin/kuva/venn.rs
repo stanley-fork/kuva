@@ -79,6 +79,22 @@ pub fn run(args: VennArgs) -> Result<(), String> {
         plot = plot.with_set(name, elements);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::VennPlot"],
+                "Venn",
+                &[crate::emit_code::emit_venn_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Venn(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

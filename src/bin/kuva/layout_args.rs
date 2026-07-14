@@ -111,6 +111,16 @@ pub struct BaseArgs {
     /// Has no effect on PNG/PDF output (those backends always have the font).
     #[arg(long, conflicts_with = "terminal")]
     pub embed_font: bool,
+
+    /// Print the equivalent Rust library code for this plot instead of rendering it.
+    /// The emitted snippet bakes in the resolved data as literals (a copy-pasteable
+    /// starting point, not a live re-parse of your input file). Ignores --output
+    /// and all rendering flags; prints to stdout.
+    ///
+    /// Requires the `emit_code` build feature (cargo build --features cli,emit_code).
+    #[cfg(feature = "emit_code")]
+    #[arg(long, conflicts_with = "terminal")]
+    pub emit_code: bool,
 }
 
 #[derive(Args, Debug)]
