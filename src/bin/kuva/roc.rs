@@ -120,6 +120,22 @@ pub fn run(args: RocArgs) -> Result<(), String> {
         plot = plot.with_group(group);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::RocPlot", "kuva::plot::RocGroup"],
+                "Roc",
+                &[crate::emit_code::emit_roc_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Roc(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -151,6 +151,22 @@ pub fn run(args: RadarArgs) -> Result<(), String> {
         }
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::RadarPlot"],
+                "Radar",
+                &[crate::emit_code::emit_radar_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Radar(plot)];
     let mut layout = Layout::auto_from_plots(&plots);
     layout = apply_base_args(layout, &args.base);

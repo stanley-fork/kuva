@@ -101,7 +101,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
     let fill = args.fill;
     let legend = args.legend;
 
-    let plots: Vec<Plot> = if let Some(color_by) = args.color_by {
+    let line_plots: Vec<LinePlot> = if let Some(color_by) = args.color_by {
         if y_cols.len() > 1 {
             return Err(
                 "--color-by and multiple --y columns are mutually exclusive. \
@@ -136,7 +136,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
                     plot = plot.with_legend(name);
                 }
 
-                Ok(Plot::Line(plot))
+                Ok(plot)
             })
             .collect::<Result<Vec<_>, String>>()?
     } else if y_cols.len() > 1 {
@@ -167,7 +167,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
                     plot = plot.with_legend(series_name);
                 }
 
-                Ok(Plot::Line(plot))
+                Ok(plot)
             })
             .collect::<Result<Vec<_>, String>>()?
     } else {
@@ -187,9 +187,30 @@ pub fn run(args: LineArgs) -> Result<(), String> {
             plot = plot.with_fill();
         }
 
-        vec![Plot::Line(plot)]
+        vec![plot]
     };
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        let exprs: Vec<String> = line_plots
+            .iter()
+            .map(crate::emit_code::emit_line_plot)
+            .collect();
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::LinePlot", "kuva::plot::LineStyle"],
+                "Line",
+                &exprs,
+                &args.base,
+                Some(&args.axis),
+                Some(&args.log),
+            )
+        );
+        return Ok(());
+    }
+
+    let plots: Vec<Plot> = line_plots.into_iter().map(Plot::Line).collect();
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);
     let layout = apply_axis_args(layout, &args.axis);

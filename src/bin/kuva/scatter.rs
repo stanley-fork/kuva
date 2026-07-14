@@ -174,6 +174,26 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
         plots = plots.into_iter().map(|p| p.with_correlation()).collect();
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        let exprs: Vec<String> = plots
+            .iter()
+            .map(crate::emit_code::emit_scatter_plot)
+            .collect();
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::ScatterPlot", "kuva::plot::scatter::TrendLine"],
+                "Scatter",
+                &exprs,
+                &args.base,
+                Some(&args.axis),
+                Some(&args.log),
+            )
+        );
+        return Ok(());
+    }
+
     let plots: Vec<Plot> = plots.into_iter().map(Plot::Scatter).collect();
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);
