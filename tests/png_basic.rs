@@ -9,7 +9,7 @@ use kuva::render::annotations::{ReferenceLine, ShadedRegion, TextAnnotation};
 use kuva::render::figure::Figure;
 use kuva::render::layout::Layout;
 use kuva::render::plots::Plot;
-use kuva::render::render::render_scatter;
+use kuva::render::render::{render_multiple, render_scatter};
 use kuva::PngBackend;
 
 fn make_scatter_scene() -> kuva::render::render::Scene {
@@ -228,4 +228,98 @@ fn png_rich_figure() {
         "output is not a valid PNG"
     );
     common::write_test_output("test_outputs/png_rich_figure.png", &bytes).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// Bar-plot error bars — actual raster non-blank check
+// ---------------------------------------------------------------------------
+//
+// A user reported bar-plot PNGs looking empty when spot-checked with an
+// external SVG->PNG converter; that turned out to be a missing rsvg-convert
+// dependency on their machine, not a kuva bug (confirmed by inspecting the
+// raw SVG, which had the expected <rect>/<line> elements). This test uses
+// kuva's own PngBackend (the real, supported raster path) and decodes actual
+// pixels to make sure bars + error whiskers are genuinely drawn, not just
+// present in the SVG source.
+
+#[test]
+fn png_bar_error_bars_not_blank() {
+    let plot = BarPlot::new()
+        .with_bars(vec![
+            ("Control", 42.0),
+            ("Treated", 58.0),
+            ("Placebo", 31.0),
+        ])
+        .with_color("steelblue")
+        .with_error(vec![3.0, 5.0, 2.0]);
+    let plots = vec![Plot::Bar(plot)];
+    let layout = Layout::auto_from_plots(&plots)
+        .with_title("PNG Bar Error Bars")
+        .with_y_label("Value");
+    let scene = render_multiple(plots, layout);
+
+    let bytes = PngBackend::new()
+        .render_scene(&scene)
+        .expect("PNG render failed");
+    assert_eq!(
+        &bytes[..8],
+        b"\x89PNG\r\n\x1a\n",
+        "output is not a valid PNG"
+    );
+    common::write_test_output("test_outputs/png_bar_error_bars.png", &bytes).unwrap();
+
+    let img = image::load_from_memory(&bytes)
+        .expect("failed to decode PNG")
+        .to_rgba8();
+    let non_white = img
+        .pixels()
+        .filter(|p| {
+            let [r, g, b, a] = p.0;
+            a > 0 && !(r > 250 && g > 250 && b > 250)
+        })
+        .count();
+    assert!(
+        non_white > 500,
+        "rendered PNG appears blank — only {non_white} non-white pixels found"
+    );
+}
+
+#[test]
+fn png_bar_error_bars_stacked_not_occluded() {
+    // Regression check for the "next segment paints over the previous
+    // segment's error whisker" bug — decode actual pixels and confirm the
+    // whisker's dark stroke color survives above the topmost segment's
+    // color, i.e. it wasn't drawn before a later segment overwrote it.
+    let plot = BarPlot::new()
+        .with_group(
+            "Alpha",
+            vec![(40.0, "steelblue"), (25.0, "tomato"), (15.0, "seagreen")],
+        )
+        .with_stacked()
+        .with_error(vec![2.0, 3.0, 1.0]);
+    let plots = vec![Plot::Bar(plot)];
+    let layout = Layout::auto_from_plots(&plots).with_title("PNG Stacked Bar Error Bars");
+    let scene = render_multiple(plots, layout);
+
+    let bytes = PngBackend::new()
+        .render_scene(&scene)
+        .expect("PNG render failed");
+    common::write_test_output("test_outputs/png_bar_error_bars_stacked.png", &bytes).unwrap();
+
+    let img = image::load_from_memory(&bytes)
+        .expect("failed to decode PNG")
+        .to_rgba8();
+    // The whisker/cap stroke color is #1a1a1a (near-black) by default —
+    // count pixels close to that color anywhere in the image.
+    let whisker_pixels = img
+        .pixels()
+        .filter(|p| {
+            let [r, g, b, a] = p.0;
+            a > 0 && r < 50 && g < 50 && b < 50
+        })
+        .count();
+    assert!(
+        whisker_pixels > 20,
+        "expected visible dark whisker pixels, found only {whisker_pixels}"
+    );
 }

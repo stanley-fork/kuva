@@ -40,6 +40,15 @@ pub struct Histogram {
     pub precomputed: Option<(Vec<f64>, Vec<f64>)>,
     pub show_tooltips: bool,
     pub tooltip_labels: Option<Vec<String>>,
+    /// Overlay a Gaussian KDE density curve, scaled to the histogram's own
+    /// bar-height units (default `false`). Ignored for precomputed histograms.
+    pub show_kde: bool,
+    /// KDE stroke color. Defaults to a darker shade when unset.
+    pub kde_color: Option<String>,
+    /// KDE bandwidth. `None` uses Silverman's rule-of-thumb.
+    pub kde_bandwidth: Option<f64>,
+    /// Number of KDE evaluation points (default `200`).
+    pub kde_samples: usize,
 }
 
 impl Default for Histogram {
@@ -63,6 +72,10 @@ impl Histogram {
             precomputed: None,
             show_tooltips: false,
             tooltip_labels: None,
+            show_kde: false,
+            kde_color: None,
+            kde_bandwidth: None,
+            kde_samples: 200,
         }
     }
 
@@ -200,6 +213,45 @@ impl Histogram {
         labels: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         self.tooltip_labels = Some(labels.into_iter().map(|s| s.into()).collect());
+        self
+    }
+
+    /// Overlay a Gaussian KDE density curve on top of the bars (default `false`).
+    ///
+    /// The curve is scaled to the histogram's own bar-height units (expected
+    /// count per bin, or peak-normalized to `1` when
+    /// [`.with_normalize()`](Self::with_normalize) is also set) so it reads
+    /// directly against the bars rather than a separate density scale.
+    /// Ignored for precomputed histograms ([`from_bins`](Self::from_bins)),
+    /// which have no raw samples to estimate a density from.
+    ///
+    /// ```rust,no_run
+    /// # use kuva::plot::Histogram;
+    /// let hist = Histogram::new()
+    ///     .with_data(vec![1.1, 2.3, 2.7, 3.2, 3.8, 3.9, 4.0, 1.5, 2.1, 3.5])
+    ///     .with_bins(8)
+    ///     .with_kde(true);
+    /// ```
+    pub fn with_kde(mut self, show: bool) -> Self {
+        self.show_kde = show;
+        self
+    }
+
+    /// Set the KDE curve's stroke color (default: a darker shade of the bar color).
+    pub fn with_kde_color<S: Into<String>>(mut self, color: S) -> Self {
+        self.kde_color = Some(color.into());
+        self
+    }
+
+    /// Set the KDE bandwidth manually. `None` (the default) uses Silverman's rule-of-thumb.
+    pub fn with_kde_bandwidth(mut self, h: f64) -> Self {
+        self.kde_bandwidth = Some(h);
+        self
+    }
+
+    /// Set the number of points at which the KDE curve is evaluated (default `200`).
+    pub fn with_kde_samples(mut self, n: usize) -> Self {
+        self.kde_samples = n;
         self
     }
 }

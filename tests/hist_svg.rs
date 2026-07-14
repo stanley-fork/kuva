@@ -1,9 +1,10 @@
 mod common;
 use kuva::backend::svg::SvgBackend;
-use kuva::plot::Histogram;
+use kuva::plot::{DensityPlot, Histogram};
 use kuva::render::layout::Layout;
 use kuva::render::plots::Plot;
 use kuva::render::render::render_multiple;
+use kuva::render::render_utils::{silverman_bandwidth, simple_kde};
 
 #[test]
 fn test_histogram_svg_output_builder() {
@@ -272,5 +273,174 @@ fn test_histogram_last_tick_no_overflow() {
     assert!(
         approx_right_edge <= canvas_width,
         "tick label '15000' right edge {approx_right_edge:.1} overflows canvas width {canvas_width}"
+    );
+}
+
+// ── KDE overlay ───────────────────────────────────────────────────────────────
+
+#[test]
+fn test_histogram_kde_overlay() {
+    let data = vec![
+        1.1, 2.3, 2.7, 3.2, 3.8, 3.9, 4.0, 1.5, 2.1, 3.5, 2.9, 3.1, 2.4, 3.6, 2.2,
+    ];
+    let hist = Histogram::new()
+        .with_data(data)
+        .with_bins(8)
+        .with_color("steelblue")
+        .with_kde(true);
+
+    let plots = vec![Plot::Histogram(hist)];
+    let layout = Layout::auto_from_plots(&plots)
+        .with_title("Histogram with KDE Overlay")
+        .with_x_label("Value")
+        .with_y_label("Count");
+    let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
+    common::write_test_output("test_outputs/hist_kde_overlay.svg", svg.clone()).unwrap();
+
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("firebrick") || svg.contains("#b22222"));
+    // The KDE curve is a single stroked <path> with no fill.
+    assert!(svg.contains("fill=\"none\""));
+}
+
+#[test]
+fn test_histogram_kde_normalized() {
+    // Normalized mode: the KDE curve must still be visible without pushing
+    // bounds() below the peak (curve height can exceed the tallest bar).
+    let data = vec![
+        5.0, 5.2, 5.1, 5.3, 4.9, 5.0, 5.1, 10.0, 10.2, 10.1, 15.0, 15.1, 15.2,
+    ];
+    let hist = Histogram::new()
+        .with_data(data)
+        .with_bins(6)
+        .with_range((0.0, 20.0))
+        .with_color("seagreen")
+        .with_normalize()
+        .with_kde(true)
+        .with_kde_color("black");
+
+    let plots = vec![Plot::Histogram(hist)];
+    let layout = Layout::auto_from_plots(&plots).with_title("Normalized Histogram with KDE");
+    let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
+    common::write_test_output("test_outputs/hist_kde_normalized.svg", svg.clone()).unwrap();
+
+    assert!(svg.contains("<svg"));
+}
+
+#[test]
+fn test_histogram_kde_custom_bandwidth_and_color() {
+    let data: Vec<f64> = (0..30).map(|i| i as f64 * 0.3).collect();
+    let hist = Histogram::new()
+        .with_data(data)
+        .with_bins(10)
+        .with_color("gray")
+        .with_kde(true)
+        .with_kde_bandwidth(0.8)
+        .with_kde_color("purple")
+        .with_kde_samples(300);
+
+    let plots = vec![Plot::Histogram(hist)];
+    let layout = Layout::auto_from_plots(&plots).with_title("Histogram KDE — Custom Bandwidth");
+    let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
+    common::write_test_output("test_outputs/hist_kde_custom_bandwidth.svg", svg.clone()).unwrap();
+
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("purple") || svg.contains("#800080"));
+}
+
+#[test]
+fn test_histogram_kde_ignored_for_precomputed() {
+    // Precomputed histograms have no raw samples — .with_kde() must not panic.
+    let hist = Histogram::from_bins(vec![0.0, 1.0, 2.0, 3.0], vec![5.0, 12.0, 8.0])
+        .with_color("steelblue")
+        .with_kde(true);
+
+    let plots = vec![Plot::Histogram(hist)];
+    let layout = Layout::auto_from_plots(&plots).with_title("Precomputed Histogram, KDE Ignored");
+    let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
+    common::write_test_output("test_outputs/hist_kde_precomputed_ignored.svg", svg.clone())
+        .unwrap();
+
+    assert!(svg.contains("<svg"));
+}
+
+#[test]
+fn test_histogram_kde_overlay_matches_manual_density_curve() {
+    // Cross-check the histogram's auto-drawn KDE overlay against an
+    // independently-computed density curve using the exact same building
+    // blocks (`silverman_bandwidth` / `simple_kde`) that `add_histogram`
+    // uses internally, scaled by the same documented formula
+    // (`density * n * bin_width`, un-normalized histogram => norm = 1.0).
+    // Fed into a `DensityPlot::from_curve` and rendered on the SAME axes as
+    // the histogram, the two curves should draw to the exact same SVG path
+    // geometry — a strong, visual way to confirm the overlay math is right,
+    // not just "close by eye".
+    let data = vec![
+        1.1, 2.3, 2.7, 3.2, 3.8, 3.9, 4.0, 1.5, 2.1, 3.5, 2.9, 3.1, 2.4, 3.6, 2.2,
+    ];
+    let bins = 8;
+    let range = (0.0, 5.0);
+    let bandwidth = silverman_bandwidth(&data);
+    let kde_samples = 200;
+
+    let bin_width = (range.1 - range.0) / bins as f64;
+    let n = data.len() as f64;
+    let density_norm = 1.0 / (n * bandwidth * (2.0 * std::f64::consts::PI).sqrt());
+    let kde = simple_kde(&data, bandwidth, kde_samples);
+    let xs: Vec<f64> = kde.iter().map(|(x, _)| *x).collect();
+    let ys: Vec<f64> = kde
+        .iter()
+        .map(|(_, d)| d * density_norm * n * bin_width)
+        .collect();
+
+    let hist = Histogram::new()
+        .with_data(data)
+        .with_bins(bins)
+        .with_range(range)
+        .with_color("steelblue")
+        .with_kde(true)
+        .with_kde_bandwidth(bandwidth)
+        .with_kde_samples(kde_samples)
+        .with_kde_color("firebrick");
+
+    let manual_curve = DensityPlot::from_curve(xs, ys)
+        .with_color("purple")
+        .with_stroke_width(2.0);
+
+    let plots = vec![Plot::Histogram(hist), Plot::Density(manual_curve)];
+    let layout = Layout::auto_from_plots(&plots)
+        .with_title("Histogram KDE Overlay vs. Manually-scaled Density Curve")
+        .with_x_label("Value")
+        .with_y_label("Count");
+    let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
+    common::write_test_output("test_outputs/hist_kde_vs_manual_density.svg", svg.clone()).unwrap();
+
+    assert!(svg.contains("<svg"));
+
+    // Extract both curves' `d="..."` path geometry and compare.
+    let paths: Vec<&str> = svg
+        .match_indices("<path")
+        .map(|(i, _)| {
+            let end = svg[i..].find('>').unwrap() + i;
+            &svg[i..=end]
+        })
+        .collect();
+    assert!(
+        paths.len() >= 2,
+        "expected 2 <path> elements (histogram KDE overlay + manual density curve), got {}",
+        paths.len()
+    );
+    let extract_d = |tag: &str| -> String {
+        let start = tag.find("d=\"").unwrap() + 3;
+        let end = tag[start..].find('"').unwrap() + start;
+        tag[start..end].to_string()
+    };
+    let overlay_d = extract_d(paths[0]);
+    let manual_d = extract_d(paths[1]);
+    assert_eq!(
+        overlay_d.trim(),
+        manual_d.trim(),
+        "histogram's auto-drawn KDE overlay path must exactly match a curve computed \
+         from the same public render_utils functions with the documented scaling formula"
     );
 }

@@ -151,6 +151,72 @@ fn path_bw(
     }
 }
 
+/// Draw an error whisker: a line from `(x1, y1)` to `(x2, y2)` with end caps.
+///
+/// When `vertical` is `true` the whisker line itself runs vertically (varying
+/// `y` at roughly fixed `x`) so caps are drawn as short horizontal segments;
+/// when `false` the whisker runs horizontally and caps are vertical.
+#[allow(clippy::too_many_arguments)]
+fn draw_whisker(
+    scene: &mut Scene,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    cap_half: f64,
+    vertical: bool,
+    stroke: Color,
+) {
+    scene.add(Primitive::Line {
+        x1,
+        y1,
+        x2,
+        y2,
+        stroke: stroke.clone(),
+        stroke_width: 1.5,
+        stroke_dasharray: None,
+    });
+    if vertical {
+        scene.add(Primitive::Line {
+            x1: x1 - cap_half,
+            y1,
+            x2: x1 + cap_half,
+            y2: y1,
+            stroke: stroke.clone(),
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+        scene.add(Primitive::Line {
+            x1: x2 - cap_half,
+            y1: y2,
+            x2: x2 + cap_half,
+            y2,
+            stroke,
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+    } else {
+        scene.add(Primitive::Line {
+            x1,
+            y1: y1 - cap_half,
+            x2: x1,
+            y2: y1 + cap_half,
+            stroke: stroke.clone(),
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+        scene.add(Primitive::Line {
+            x1: x2,
+            y1: y2 - cap_half,
+            x2,
+            y2: y2 + cap_half,
+            stroke,
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+    }
+}
+
 use crate::plot::band::BandPlot;
 use crate::plot::bar::BarPlot;
 use crate::plot::bump::{BumpPlot, CurveStyle};
@@ -1151,6 +1217,16 @@ fn add_series(series: &SeriesPlot, scene: &mut Scene, computed: &ComputedLayout,
 }
 
 fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
+    let err_stroke = if computed.bw_mode {
+        Color::from("#1a1a1a")
+    } else {
+        Color::from(bar.error_color.as_deref().unwrap_or("#1a1a1a"))
+    };
+    // Collected instead of drawn inline so every whisker is drawn *after* all
+    // bars — stacked segments are drawn back-to-front, so a whisker drawn
+    // right after its own segment gets its top half painted over by the next
+    // segment stacked on top of it.
+    let mut pending_whiskers: Vec<(f64, f64, f64, f64, f64, bool)> = Vec::new();
     let mut flat_i: usize = 0;
     for (i, group) in bar.groups.iter().enumerate() {
         let group_cat = i as f64 + 1.0;
@@ -1198,6 +1274,14 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let center = x_accum + bar_val.value;
+                        let xl = computed.map_x(center - lo);
+                        let xh = computed.map_x(center + hi);
+                        let y_mid = (y0 + y1) / 2.0;
+                        let cap_half = bar.error_cap_width * (y1 - y0).abs() / 2.0;
+                        pending_whiskers.push((xl, y_mid, xh, y_mid, cap_half, false));
+                    }
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1249,6 +1333,13 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let xl = computed.map_x(bar_val.value - lo);
+                        let xh = computed.map_x(bar_val.value + hi);
+                        let y_mid = (y0 + y1) / 2.0;
+                        let cap_half = bar.error_cap_width * (y1 - y0).abs() / 2.0;
+                        pending_whiskers.push((xl, y_mid, xh, y_mid, cap_half, false));
+                    }
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1306,6 +1397,14 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let center = y_accum + bar_val.value;
+                        let yl = computed.map_y(center - lo);
+                        let yh = computed.map_y(center + hi);
+                        let x_mid = (x0 + x1) / 2.0;
+                        let cap_half = bar.error_cap_width * (x1 - x0).abs() / 2.0;
+                        pending_whiskers.push((x_mid, yl, x_mid, yh, cap_half, true));
+                    }
                     if bar.show_tooltips || computed.interactive {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1368,6 +1467,13 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let yl = computed.map_y(bar_val.value - lo);
+                        let yh = computed.map_y(bar_val.value + hi);
+                        let x_mid = (x0 + x1) / 2.0;
+                        let cap_half = bar.error_cap_width * (x1 - x0).abs() / 2.0;
+                        pending_whiskers.push((x_mid, yl, x_mid, yh, cap_half, true));
+                    }
                     if bar.show_tooltips || computed.interactive {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1375,6 +1481,21 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                 }
             }
         }
+    }
+
+    // Drawn last so a whisker's cap is never painted over by a later bar or
+    // (in stacked mode) by the next segment stacked directly on top of it.
+    for (x1, y1, x2, y2, cap_half, vertical) in pending_whiskers {
+        draw_whisker(
+            scene,
+            x1,
+            y1,
+            x2,
+            y2,
+            cap_half,
+            vertical,
+            err_stroke.clone(),
+        );
     }
 }
 
@@ -1712,6 +1833,44 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout,
             scene.add(Primitive::GroupEnd);
         }
     }
+
+    if hist.show_kde && hist.data.len() >= 2 {
+        let bw = hist
+            .kde_bandwidth
+            .unwrap_or_else(|| render_utils::silverman_bandwidth(&hist.data));
+        let n = hist.data.len() as f64;
+        let density_norm = 1.0 / (n * bw * (2.0 * std::f64::consts::PI).sqrt());
+        let kde = render_utils::simple_kde(&hist.data, bw, hist.kde_samples);
+        if !kde.is_empty() {
+            let kde_color = hist.kde_color.as_deref().unwrap_or("firebrick");
+            let mut path = String::with_capacity(kde.len() * 16);
+            let mut rb = ryu::Buffer::new();
+            for (i, &(x, d)) in kde.iter().enumerate() {
+                let height = d * density_norm * n * bin_width * norm;
+                let px = computed.map_x(x);
+                let py = computed.map_y(height);
+                path.push(if i == 0 { 'M' } else { 'L' });
+                path.push(' ');
+                path.push_str(rb.format(round2(px)));
+                path.push(' ');
+                path.push_str(rb.format(round2(py)));
+                path.push(' ');
+            }
+            let stroke = if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                Color::from(kde_color)
+            };
+            scene.add(Primitive::Path(Box::new(PathData {
+                d: path,
+                fill: None,
+                stroke,
+                stroke_width: 2.0,
+                opacity: None,
+                stroke_dasharray: None,
+            })));
+        }
+    }
 }
 
 fn add_histogram2d(hist2d: &Histogram2D, scene: &mut Scene, computed: &ComputedLayout) {
@@ -1828,6 +1987,17 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
         let cat = i as f64 + 1.0;
         let w = boxplot.width / 2.0;
 
+        // Notch half-width in data units: ~95% CI on the median (McGill et al.
+        // 1978) scaled by `notch_width`, clamped so it never crosses the
+        // opposite hinge.
+        let notch_half = if boxplot.notch {
+            let n = sorted.len() as f64;
+            let half = 1.58 * iqr / n.sqrt() * boxplot.notch_width;
+            half.min(q3 - q2).max(0.0).min((q2 - q1).max(0.0))
+        } else {
+            0.0
+        };
+
         if boxplot.horizontal {
             // Groups on Y-axis, data values on X-axis
             let y0 = computed.map_y(cat - w);
@@ -1839,19 +2009,37 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             let xhigh = computed.map_x(upper_whisker);
             let ymid = computed.map_y(cat);
 
-            rect_bw(
-                scene,
-                computed,
-                i,
-                color,
-                xq1.min(xq3),
-                y0.min(y1),
-                (xq3 - xq1).abs(),
-                (y1 - y0).abs(),
-                None,
-                None,
-                None,
-            );
+            if boxplot.notch {
+                let y_top = y0.min(y1);
+                let y_bot = y0.max(y1);
+                let x_notch_lo = computed.map_x(q2 - notch_half);
+                let x_notch_hi = computed.map_x(q2 + notch_half);
+                // The pinch only cuts partway toward the vertical center
+                // (`ymid`), not all the way — depth `1.0` would reach it.
+                let half_box = (y_bot - y_top) / 2.0;
+                let pinch_top = y_top + boxplot.notch_depth * half_box;
+                let pinch_bot = y_bot - boxplot.notch_depth * half_box;
+                let d = format!(
+                    "M {xq1} {y_top} L {x_notch_lo} {y_top} L {xmed} {pinch_top} L {x_notch_hi} {y_top} \
+                     L {xq3} {y_top} L {xq3} {y_bot} L {x_notch_hi} {y_bot} L {xmed} {pinch_bot} \
+                     L {x_notch_lo} {y_bot} L {xq1} {y_bot} Z"
+                );
+                path_bw(scene, computed, i, color, d, Color::None, 0.0, None, None);
+            } else {
+                rect_bw(
+                    scene,
+                    computed,
+                    i,
+                    color,
+                    xq1.min(xq3),
+                    y0.min(y1),
+                    (xq3 - xq1).abs(),
+                    (y1 - y0).abs(),
+                    None,
+                    None,
+                    None,
+                );
+            }
             // Median: vertical line
             scene.add(Primitive::Line {
                 x1: xmed,
@@ -1904,19 +2092,35 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             let xmid = computed.map_x(cat);
 
             // Box
-            rect_bw(
-                scene,
-                computed,
-                i,
-                color,
-                x0,
-                yq3.min(yq1),
-                (x1 - x0).abs(),
-                (yq1 - yq3).abs(),
-                None,
-                None,
-                None,
-            );
+            if boxplot.notch {
+                let y_notch_top = computed.map_y(q2 + notch_half);
+                let y_notch_bot = computed.map_y(q2 - notch_half);
+                // The pinch only cuts partway toward the horizontal center
+                // (`xmid`), not all the way — depth `1.0` would reach it.
+                let half_box = (x1 - x0) / 2.0;
+                let pinch_left = x0 + boxplot.notch_depth * half_box;
+                let pinch_right = x1 - boxplot.notch_depth * half_box;
+                let d = format!(
+                    "M {x0} {yq3} L {x1} {yq3} L {x1} {y_notch_top} L {pinch_right} {ymed} L {x1} {y_notch_bot} \
+                     L {x1} {yq1} L {x0} {yq1} L {x0} {y_notch_bot} L {pinch_left} {ymed} \
+                     L {x0} {y_notch_top} Z"
+                );
+                path_bw(scene, computed, i, color, d, Color::None, 0.0, None, None);
+            } else {
+                rect_bw(
+                    scene,
+                    computed,
+                    i,
+                    color,
+                    x0,
+                    yq3.min(yq1),
+                    (x1 - x0).abs(),
+                    (yq1 - yq3).abs(),
+                    None,
+                    None,
+                    None,
+                );
+            }
 
             // Median line
             scene.add(Primitive::Line {
@@ -1990,8 +2194,159 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
     }
 }
 
+/// Build one half of a split-violin polygon: the KDE curve on one side of
+/// `pivot_px`, closed by a straight edge back along the pivot line.
+///
+/// `sign` is `-1.0` for the "first" half (left in vertical mode, top in
+/// horizontal mode) and `+1.0` for the "second" half (right / bottom).
+fn build_half_violin_path(
+    kde: &[(f64, f64)],
+    scale: f64,
+    sign: f64,
+    pivot_px: f64,
+    horizontal: bool,
+    computed: &ComputedLayout,
+) -> String {
+    let mut path_data = String::with_capacity(kde.len() * 32 + 64);
+    let mut rb = ryu::Buffer::new();
+    for (j, (val, d)) in kde.iter().enumerate() {
+        let (px, py) = if horizontal {
+            (computed.map_x(*val), pivot_px + sign * d * scale)
+        } else {
+            (pivot_px + sign * d * scale, computed.map_y(*val))
+        };
+        path_data.push(if j == 0 { 'M' } else { 'L' });
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(px)));
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(py)));
+        path_data.push(' ');
+    }
+    if let (Some((first_val, _)), Some((last_val, _))) = (kde.first(), kde.last()) {
+        let (lx, ly) = if horizontal {
+            (computed.map_x(*last_val), pivot_px)
+        } else {
+            (pivot_px, computed.map_y(*last_val))
+        };
+        let (fx, fy) = if horizontal {
+            (computed.map_x(*first_val), pivot_px)
+        } else {
+            (pivot_px, computed.map_y(*first_val))
+        };
+        path_data.push_str("L ");
+        path_data.push_str(rb.format(round2(lx)));
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(ly)));
+        path_data.push(' ');
+        path_data.push_str("L ");
+        path_data.push_str(rb.format(round2(fx)));
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(fy)));
+        path_data.push(' ');
+    }
+    path_data.push('Z');
+    path_data
+}
+
 fn add_violin(violin: &ViolinPlot, scene: &mut Scene, computed: &ComputedLayout) {
     let theme = &computed.theme;
+
+    if violin.split {
+        for (i, group) in violin.groups.iter().enumerate() {
+            if group.values.is_empty() {
+                continue;
+            }
+            let color = violin
+                .group_colors
+                .as_ref()
+                .and_then(|c| c.get(i).map(|s| s.as_str()))
+                .unwrap_or(&violin.color);
+            let h = violin
+                .bandwidth
+                .unwrap_or_else(|| render_utils::silverman_bandwidth(&group.values));
+            let kde = render_utils::simple_kde(&group.values, h, violin.kde_samples);
+            if kde.is_empty() {
+                continue;
+            }
+            let max_density = kde
+                .iter()
+                .map(|(_, y)| *y)
+                .fold(f64::NEG_INFINITY, f64::max);
+
+            let (pivot_px, scale) = if violin.horizontal {
+                let y_center = computed.map_y((i + 1) as f64);
+                let slot_py = (computed.map_y(2.0) - computed.map_y(1.0)).abs();
+                (y_center, violin.width * slot_py / 2.0 / max_density)
+            } else {
+                let x_center = computed.map_x((i + 1) as f64);
+                let slot_px = (computed.map_x(2.0) - computed.map_x(1.0)).abs();
+                (x_center, violin.width * slot_px / 2.0 / max_density)
+            };
+
+            let path_data =
+                build_half_violin_path(&kde, scale, -1.0, pivot_px, violin.horizontal, computed);
+            path_bw(
+                scene,
+                computed,
+                i * 2,
+                color,
+                path_data,
+                Color::from(&theme.violin_border),
+                0.5,
+                None,
+                None,
+            );
+
+            if let Some(split_group) = violin.split_groups.get(i) {
+                if split_group.values.is_empty() {
+                    continue;
+                }
+                let split_color = violin
+                    .split_group_colors
+                    .as_ref()
+                    .and_then(|c| c.get(i).map(|s| s.as_str()))
+                    .unwrap_or(&violin.split_color);
+                let h2 = violin
+                    .bandwidth
+                    .unwrap_or_else(|| render_utils::silverman_bandwidth(&split_group.values));
+                let kde2 = render_utils::simple_kde(&split_group.values, h2, violin.kde_samples);
+                if kde2.is_empty() {
+                    continue;
+                }
+                let max_density2 = kde2
+                    .iter()
+                    .map(|(_, y)| *y)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let scale2 = if violin.horizontal {
+                    let slot_py = (computed.map_y(2.0) - computed.map_y(1.0)).abs();
+                    violin.width * slot_py / 2.0 / max_density2
+                } else {
+                    let slot_px = (computed.map_x(2.0) - computed.map_x(1.0)).abs();
+                    violin.width * slot_px / 2.0 / max_density2
+                };
+                let path_data2 = build_half_violin_path(
+                    &kde2,
+                    scale2,
+                    1.0,
+                    pivot_px,
+                    violin.horizontal,
+                    computed,
+                );
+                path_bw(
+                    scene,
+                    computed,
+                    i * 2 + 1,
+                    split_color,
+                    path_data2,
+                    Color::from(&theme.violin_border),
+                    0.5,
+                    None,
+                    None,
+                );
+            }
+        }
+        return;
+    }
 
     for (i, group) in violin.groups.iter().enumerate() {
         if group.values.is_empty() {
@@ -11243,6 +11598,14 @@ pub fn collect_legend_entries(plots: &[Plot]) -> Vec<LegendEntry> {
                     entries.push(LegendEntry {
                         label: label.clone(),
                         color: violin.color.clone(),
+                        shape: LegendShape::Rect,
+                        dasharray: None,
+                    });
+                }
+                if let Some(label) = &violin.split_legend_label {
+                    entries.push(LegendEntry {
+                        label: label.clone(),
+                        color: violin.split_color.clone(),
                         shape: LegendShape::Rect,
                         dasharray: None,
                     });

@@ -634,18 +634,38 @@ impl Plot {
                 } else {
                     let cat_min = 0.5;
                     let cat_max = bp.groups.len() as f64 + 0.5;
-                    let data_min = 0.0;
+                    let mut data_min: f64 = 0.0;
 
                     let mut data_max = f64::NEG_INFINITY;
+                    let mut flat_i = 0usize;
                     if bp.stacked {
                         for group in &bp.groups {
-                            let sum: f64 = group.bars.iter().map(|b| b.value).sum();
-                            data_max = data_max.max(sum);
+                            let mut accum = 0.0;
+                            for bar in &group.bars {
+                                accum += bar.value;
+                                let (lo, hi) = bp
+                                    .errors
+                                    .as_ref()
+                                    .and_then(|e| e.get(flat_i))
+                                    .copied()
+                                    .unwrap_or((0.0, 0.0));
+                                data_max = data_max.max(accum + hi);
+                                data_min = data_min.min(accum - lo);
+                                flat_i += 1;
+                            }
                         }
                     } else {
                         for group in &bp.groups {
                             for bar in &group.bars {
-                                data_max = data_max.max(bar.value);
+                                let (lo, hi) = bp
+                                    .errors
+                                    .as_ref()
+                                    .and_then(|e| e.get(flat_i))
+                                    .copied()
+                                    .unwrap_or((0.0, 0.0));
+                                data_max = data_max.max(bar.value + hi);
+                                data_min = data_min.min(bar.value - lo);
+                                flat_i += 1;
                             }
                         }
                     }
@@ -710,11 +730,21 @@ impl Plot {
                     counts[bin] += 1;
                 }
 
-                let max_y = if h.normalize {
-                    1.0
-                } else {
-                    *counts.iter().max().unwrap_or(&1) as f64
-                };
+                let max_count = *counts.iter().max().unwrap_or(&1) as f64;
+                let mut max_y = if h.normalize { 1.0 } else { max_count };
+
+                if h.show_kde && h.data.len() >= 2 {
+                    let bw = h
+                        .kde_bandwidth
+                        .unwrap_or_else(|| render_utils::silverman_bandwidth(&h.data));
+                    let n = h.data.len() as f64;
+                    let density_norm = 1.0 / (n * bw * (2.0 * std::f64::consts::PI).sqrt());
+                    let kde = render_utils::simple_kde(&h.data, bw, h.kde_samples);
+                    let peak_density = kde.iter().map(|(_, y)| *y).fold(0.0_f64, f64::max);
+                    let scale_norm = if h.normalize { 1.0 / max_count } else { 1.0 };
+                    let kde_peak_height = peak_density * density_norm * n * bin_width * scale_norm;
+                    max_y = max_y.max(kde_peak_height);
+                }
 
                 Some((range, (0.0, max_y)))
             }
@@ -759,7 +789,8 @@ impl Plot {
                     let mut data_min = f64::INFINITY;
                     let mut data_max = f64::NEG_INFINITY;
 
-                    for group in &vp.groups {
+                    let groups_iter = vp.groups.iter().chain(vp.split_groups.iter());
+                    for group in groups_iter {
                         if group.values.is_empty() {
                             continue;
                         }

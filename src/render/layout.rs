@@ -681,6 +681,14 @@ impl Layout {
                 } else {
                     x_labels = Some(labels);
                 }
+                if let Some(ref label) = vp.legend_label {
+                    has_legend = true;
+                    note_legend_label(&mut max_label_len, &mut max_label_w, label, 0);
+                }
+                if let Some(ref label) = vp.split_legend_label {
+                    has_legend = true;
+                    note_legend_label(&mut max_label_len, &mut max_label_w, label, 0);
+                }
             }
 
             if let Plot::Raincloud(rp) = plot {
