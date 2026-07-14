@@ -130,6 +130,22 @@ pub fn run(args: VolcanoArgs) -> Result<(), String> {
         plot = plot.with_legend("DEG status");
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::VolcanoPlot", "kuva::plot::LabelStyle"],
+                "Volcano",
+                &[crate::emit_code::emit_volcano_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Volcano(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -181,6 +181,26 @@ pub fn run(args: RoseArgs) -> Result<(), String> {
         plot = plot.with_compass_labels();
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::RosePlot",
+                    "kuva::plot::RoseMode",
+                    "kuva::plot::RoseEncoding",
+                ],
+                "Rose",
+                &[crate::emit_code::emit_rose_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Rose(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -107,6 +107,22 @@ pub fn run(args: PolarArgs) -> Result<(), String> {
         };
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::PolarPlot", "kuva::plot::polar::PolarMode"],
+                "Polar",
+                &[crate::emit_code::emit_polar_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Polar(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -37,6 +37,16 @@ use kuva::plot::{
     ViolinPlot,
 };
 
+// Tier 2 additions (strip/polar/rose/manhattan/volcano) — kept as its own
+// `use` block for the same reason as above.
+use kuva::plot::polar::PolarSeries;
+use kuva::plot::strip::StripGroup;
+use kuva::plot::volcano::LabelStyle;
+use kuva::plot::{
+    ManhattanPlot, ManhattanPoint, PolarMode, PolarPlot, RoseEncoding, RoseMode, RosePlot,
+    StripPlot, VolcanoPlot,
+};
+
 // ── Literal helpers ───────────────────────────────────────────────────────────
 
 /// Escape a string into a valid Rust string literal.
@@ -2106,4 +2116,1241 @@ pub fn emit_survival_plot(p: &SurvivalPlot) -> String {
         frags.push(format!(".with_legend({})", str_lit(label)));
     }
     chain("SurvivalPlot::new()", frags)
+}
+
+// ── Per-plot-type emitters (Tier 2 continued: calendar/ternary/hexbin/density/upset) ──
+
+use kuva::plot::{
+    CalendarAgg, CalendarPlot, DensityPlot, HexbinPlot, TernaryPlot, TernaryPoint, UpSetPlot,
+    UpSetSort, WeekStart, ZReduce,
+};
+
+fn calendar_agg_ctor(agg: &CalendarAgg) -> &'static str {
+    match agg {
+        CalendarAgg::Count => "CalendarAgg::Count",
+        CalendarAgg::Sum => "CalendarAgg::Sum",
+        CalendarAgg::Mean => "CalendarAgg::Mean",
+        CalendarAgg::Max => "CalendarAgg::Max",
+    }
+}
+
+fn week_start_ctor(ws: &WeekStart) -> &'static str {
+    match ws {
+        WeekStart::Monday => "WeekStart::Monday",
+        WeekStart::Sunday => "WeekStart::Sunday",
+    }
+}
+
+/// Serialize a `CalendarPlot`'s resolved state. `color_map` is never emitted:
+/// `calendar.rs` has no flag that changes it, and the default itself is a
+/// `ColorMap::Custom` closure (the GitHub-style green gradient) that can't be
+/// represented as a Rust literal regardless.
+pub fn emit_calendar_plot(p: &CalendarPlot) -> String {
+    let data = p
+        .data
+        .iter()
+        .map(|(d, v)| format!("({}, {})", str_lit(d), f64_lit(*v)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut frags = vec![format!(".with_data(vec![{data}])")];
+
+    if !matches!(p.aggregation, CalendarAgg::Count) {
+        frags.push(format!(
+            ".with_aggregation({})",
+            calendar_agg_ctor(&p.aggregation)
+        ));
+    }
+    if p.missing_color != "#ebedf0" {
+        frags.push(format!(
+            ".with_missing_color({})",
+            str_lit(&p.missing_color)
+        ));
+    }
+    if let Some(ref c) = p.zero_color {
+        frags.push(format!(".with_zero_color({})", str_lit(c)));
+    }
+    if !matches!(p.week_start, WeekStart::Monday) {
+        frags.push(format!(
+            ".with_week_start({})",
+            week_start_ctor(&p.week_start)
+        ));
+    }
+    if !p.show_month_labels {
+        frags.push(".with_month_labels(false)".to_string());
+    }
+    if !p.show_day_labels {
+        frags.push(".with_day_labels(false)".to_string());
+    }
+    if (p.cell_size - 13.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_cell_size({})", f64_lit(p.cell_size)));
+    }
+    if (p.cell_gap - 2.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_cell_gap({})", f64_lit(p.cell_gap)));
+    }
+    // `periods` (set by `with_date_range`/`with_period`/`with_periods`) takes
+    // priority over `years` when resolving display rows, so mirror that here:
+    // only fall back to `years` when no explicit periods are set.
+    if let Some(ref periods) = p.periods {
+        let list = periods
+            .iter()
+            .map(|per| {
+                format!(
+                    "({}, {}, {})",
+                    str_lit(&per.label),
+                    str_lit(&per.start),
+                    str_lit(&per.end)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_periods(vec![{list}])"));
+    } else if let Some(ref years) = p.years {
+        if years.len() == 1 {
+            frags.push(format!(".with_year({})", years[0]));
+        } else {
+            let list = years
+                .iter()
+                .map(|y| y.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            frags.push(format!(".with_years(vec![{list}])"));
+        }
+    }
+    if !p.show_legend {
+        frags.push(".with_legend(false)".to_string());
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend_label({})", str_lit(label)));
+    }
+    if let Some((min, max)) = p.value_range {
+        frags.push(format!(
+            ".with_value_range({}, {})",
+            f64_lit(min),
+            f64_lit(max)
+        ));
+    }
+    chain("CalendarPlot::new()", frags)
+}
+
+fn emit_ternary_point(pt: &TernaryPoint) -> String {
+    match &pt.group {
+        Some(g) => format!(
+            ".with_point_group({}, {}, {}, {})",
+            f64_lit(pt.a),
+            f64_lit(pt.b),
+            f64_lit(pt.c),
+            str_lit(g)
+        ),
+        None => format!(
+            ".with_point({}, {}, {})",
+            f64_lit(pt.a),
+            f64_lit(pt.b),
+            f64_lit(pt.c)
+        ),
+    }
+}
+
+/// Serialize a `TernaryPlot`'s resolved state — handles both the plain
+/// (`--color-by` absent) and grouped (`--color-by` present) construction
+/// paths in `ternary.rs` uniformly, since both just push `TernaryPoint`s with
+/// or without a `group` label.
+pub fn emit_ternary_plot(p: &TernaryPlot) -> String {
+    let mut frags: Vec<String> = p.points.iter().map(emit_ternary_point).collect();
+    let default_labels = ["A".to_string(), "B".to_string(), "C".to_string()];
+    if p.corner_labels != default_labels {
+        frags.push(format!(
+            ".with_corner_labels({}, {}, {})",
+            str_lit(&p.corner_labels[0]),
+            str_lit(&p.corner_labels[1]),
+            str_lit(&p.corner_labels[2])
+        ));
+    }
+    if p.normalize {
+        frags.push(".with_normalize(true)".to_string());
+    }
+    if (p.marker_size - 5.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_marker_size({})", f64_lit(p.marker_size)));
+    }
+    if p.grid_lines != 5 {
+        frags.push(format!(".with_grid_lines({})", p.grid_lines));
+    }
+    if !p.show_grid {
+        frags.push(".with_grid(false)".to_string());
+    }
+    if p.show_legend {
+        frags.push(".with_legend(true)".to_string());
+    }
+    if !p.show_percentages {
+        frags.push(".with_percentages(false)".to_string());
+    }
+    if let Some(op) = p.marker_opacity {
+        frags.push(format!(".with_marker_opacity({})", f64_lit(op)));
+    }
+    if let Some(w) = p.marker_stroke_width {
+        frags.push(format!(".with_marker_stroke_width({})", f64_lit(w)));
+    }
+    if p.show_tooltips {
+        frags.push(".with_tooltips()".to_string());
+    }
+    if let Some(ref labels) = p.tooltip_labels {
+        let list = labels
+            .iter()
+            .map(|l| str_lit(l))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_tooltip_labels(vec![{list}])"));
+    }
+    chain("TernaryPlot::new()", frags)
+}
+
+fn z_reduce_ctor(r: &ZReduce) -> &'static str {
+    match r {
+        ZReduce::Count => "ZReduce::Count",
+        ZReduce::Mean => "ZReduce::Mean",
+        ZReduce::Sum => "ZReduce::Sum",
+        ZReduce::Median => "ZReduce::Median",
+        ZReduce::Min => "ZReduce::Min",
+        ZReduce::Max => "ZReduce::Max",
+    }
+}
+
+/// Serialize a `HexbinPlot`'s resolved state. Data is raw (x, y) scatter
+/// points fed straight into `with_data` — `hexbin.rs` never pre-bins, so
+/// there's no matrix-shaped state to worry about here.
+pub fn emit_hexbin_plot(p: &HexbinPlot) -> String {
+    let x =
+        p.x.iter()
+            .map(|v| f64_lit(*v))
+            .collect::<Vec<_>>()
+            .join(", ");
+    let y =
+        p.y.iter()
+            .map(|v| f64_lit(*v))
+            .collect::<Vec<_>>()
+            .join(", ");
+    let mut frags = vec![format!(".with_data(vec![{x}], vec![{y}])")];
+
+    if let Some(ref z) = p.z {
+        let zs = z.iter().map(|v| f64_lit(*v)).collect::<Vec<_>>().join(", ");
+        frags.push(format!(
+            ".with_z(vec![{zs}], {})",
+            z_reduce_ctor(&p.z_reduce)
+        ));
+    }
+    if p.n_bins != 20 {
+        frags.push(format!(".with_n_bins({})", p.n_bins));
+    }
+    if let Some(s) = p.bin_size {
+        frags.push(format!(".with_bin_size({})", f64_lit(s)));
+    }
+    if !matches!(p.color_map, ColorMap::Viridis) {
+        frags.push(format!(".with_color_map({})", color_map_ctor(&p.color_map)));
+    }
+    if p.log_color {
+        frags.push(".with_log_color(true)".to_string());
+    }
+    if p.min_count != 1 {
+        frags.push(format!(".with_min_count({})", p.min_count));
+    }
+    if p.normalize {
+        frags.push(".with_normalize(true)".to_string());
+    }
+    if !p.show_colorbar {
+        frags.push(".with_colorbar(false)".to_string());
+    }
+    if let Some(ref label) = p.colorbar_label {
+        frags.push(format!(".with_colorbar_label({})", str_lit(label)));
+    }
+    if let Some(ref stroke) = p.stroke_color {
+        frags.push(format!(".with_stroke({})", str_lit(stroke)));
+    }
+    if (p.stroke_width - 0.5).abs() > f64::EPSILON {
+        frags.push(format!(".with_stroke_width({})", f64_lit(p.stroke_width)));
+    }
+    if p.flat_top {
+        frags.push(".with_flat_top(true)".to_string());
+    }
+    if let Some((lo, hi)) = p.x_range {
+        frags.push(format!(".with_x_range({}, {})", f64_lit(lo), f64_lit(hi)));
+    }
+    if let Some((lo, hi)) = p.y_range {
+        frags.push(format!(".with_y_range({}, {})", f64_lit(lo), f64_lit(hi)));
+    }
+    if let Some((lo, hi)) = p.color_range {
+        frags.push(format!(
+            ".with_color_range({}, {})",
+            f64_lit(lo),
+            f64_lit(hi)
+        ));
+    }
+    chain("HexbinPlot::new()", frags)
+}
+
+/// Serialize a single `DensityPlot`. Called once per element of the CLI's
+/// `Vec<Plot>` (one curve for the simple case, N for `--color-by`/multi-`--y`
+/// overlay mode in `density.rs`) — the integration sites filter each `Plot`
+/// down to its `DensityPlot` and pass the resulting `Vec<String>` to
+/// `assemble()`.
+///
+/// `x_lo`/`x_hi` are read independently off the final struct rather than
+/// re-deriving which of the two CLI branches set them — `density.rs`'s
+/// single-curve branch only calls `with_x_range` when *both* `--x-min` and
+/// `--x-max` are given, while the multi-series branches call `with_x_lo`/
+/// `with_x_hi` independently, but both converge on the same two `Option<f64>`
+/// fields.
+pub fn emit_density_plot(p: &DensityPlot) -> String {
+    let mut frags: Vec<String> = Vec::new();
+    let ctor = if let Some((ref x, ref y)) = p.precomputed {
+        let xs = x.iter().map(|v| f64_lit(*v)).collect::<Vec<_>>().join(", ");
+        let ys = y.iter().map(|v| f64_lit(*v)).collect::<Vec<_>>().join(", ");
+        format!("DensityPlot::from_curve(vec![{xs}], vec![{ys}])")
+    } else {
+        let data = p
+            .data
+            .iter()
+            .map(|v| f64_lit(*v))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_data(vec![{data}])"));
+        "DensityPlot::new()".to_string()
+    };
+
+    if p.color != "steelblue" {
+        frags.push(format!(".with_color({})", str_lit(&p.color)));
+    }
+    if p.filled {
+        frags.push(".with_filled(true)".to_string());
+        if (p.opacity - 0.2).abs() > f64::EPSILON {
+            frags.push(format!(".with_opacity({})", f64_lit(p.opacity)));
+        }
+    }
+    if let Some(bw) = p.bandwidth {
+        frags.push(format!(".with_bandwidth({})", f64_lit(bw)));
+    }
+    if p.kde_samples != 200 {
+        frags.push(format!(".with_kde_samples({})", p.kde_samples));
+    }
+    if (p.stroke_width - 1.5).abs() > f64::EPSILON {
+        frags.push(format!(".with_stroke_width({})", f64_lit(p.stroke_width)));
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    if let Some(ref dash) = p.line_dash {
+        frags.push(format!(".with_line_dash({})", str_lit(dash)));
+    }
+    match (p.x_lo, p.x_hi) {
+        (Some(lo), Some(hi)) => {
+            frags.push(format!(".with_x_range({}, {})", f64_lit(lo), f64_lit(hi)))
+        }
+        (Some(lo), None) => frags.push(format!(".with_x_lo({})", f64_lit(lo))),
+        (None, Some(hi)) => frags.push(format!(".with_x_hi({})", f64_lit(hi))),
+        (None, None) => {}
+    }
+    if p.fit_y {
+        frags.push(".with_fit()".to_string());
+    }
+    chain(&ctor, frags)
+}
+
+fn upset_sort_ctor(s: &UpSetSort) -> &'static str {
+    match s {
+        UpSetSort::ByFrequency => "UpSetSort::ByFrequency",
+        UpSetSort::ByDegree => "UpSetSort::ByDegree",
+        UpSetSort::Natural => "UpSetSort::Natural",
+    }
+}
+
+/// Serialize an `UpSetPlot`'s resolved state. `upset.rs` always calls
+/// `with_data` (it computes intersection masks itself from binary
+/// set-membership columns; it never calls `with_sets` with raw elements), so
+/// the precomputed form is the only one ever reachable from the CLI —
+/// emitted here unconditionally. `show_counts`/`dot_empty_color` have no
+/// public setter reachable from any builder, so a CLI-built plot can never
+/// differ from their defaults; they're intentionally not serialized.
+pub fn emit_upset_plot(p: &UpSetPlot) -> String {
+    let names = p
+        .set_names
+        .iter()
+        .map(|s| str_lit(s))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sizes = p
+        .set_sizes
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let inter = p
+        .intersections
+        .iter()
+        .map(|i| format!("({}, {})", i.mask, i.count))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut frags = vec![format!(
+        ".with_data(vec![{names}], vec![{sizes}], vec![{inter}])"
+    )];
+
+    if !matches!(p.sort, UpSetSort::ByFrequency) {
+        frags.push(format!(".with_sort({})", upset_sort_ctor(&p.sort)));
+    }
+    if let Some(n) = p.max_visible {
+        frags.push(format!(".with_max_visible({n})"));
+    }
+    if !p.show_set_sizes {
+        frags.push(".without_set_sizes()".to_string());
+    }
+    if p.bar_color != "#333333" {
+        frags.push(format!(".with_bar_color({})", str_lit(&p.bar_color)));
+    }
+    if p.dot_color != "#333333" {
+        frags.push(format!(".with_dot_color({})", str_lit(&p.dot_color)));
+    }
+    chain("UpSetPlot::new()", frags)
+}
+
+// ── Per-plot-type emitters (Tier 2: parallel/ridgeline/stacked_area/streamgraph/raincloud) ──
+
+use kuva::plot::streamgraph::{StreamBaseline, StreamOrder};
+use kuva::plot::{
+    ParallelPlot, ParallelRow, RaincloudGroup, RaincloudPlot, RidgelineGroup, RidgelinePlot,
+    StackedAreaPlot, StreamgraphPlot,
+};
+
+fn emit_parallel_row(r: &ParallelRow) -> String {
+    let values = r
+        .values
+        .iter()
+        .map(|v| f64_lit(*v))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match &r.group {
+        Some(g) => format!(".with_row_group({}, vec![{}])", str_lit(g), values),
+        None => format!(".with_row(vec![{values}])"),
+    }
+}
+
+/// Serialize a `ParallelPlot`'s resolved state — works uniformly whether
+/// `parallel.rs` built it via the ungrouped (`with_row`) or `--group-col`
+/// (`with_row_group`) branch, since both converge on the same `rows` field.
+pub fn emit_parallel_plot(p: &ParallelPlot) -> String {
+    let axis_names = p
+        .axis_names
+        .iter()
+        .map(|n| str_lit(n))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let ctor = format!("ParallelPlot::new().with_axis_names(vec![{axis_names}])");
+
+    let mut frags: Vec<String> = p.rows.iter().map(emit_parallel_row).collect();
+
+    if !p.normalize {
+        frags.push(".with_normalize(false)".to_string());
+    }
+    if p.curved {
+        frags.push(".with_curved(true)".to_string());
+    }
+    if (p.stroke_width - 1.2).abs() > f64::EPSILON {
+        frags.push(format!(".with_stroke_width({})", f64_lit(p.stroke_width)));
+    }
+    if (p.opacity - 0.6).abs() > f64::EPSILON {
+        frags.push(format!(".with_opacity({})", f64_lit(p.opacity)));
+    }
+    if p.color != "steelblue" {
+        frags.push(format!(".with_color({})", str_lit(&p.color)));
+    }
+    if let Some(ref colors) = p.group_colors {
+        let list = colors
+            .iter()
+            .map(|c| str_lit(c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_group_colors(vec![{list}])"));
+    }
+    if !p.show_axis_ticks {
+        frags.push(".with_axis_ticks(false)".to_string());
+    }
+    if p.axis_ticks != 5 {
+        frags.push(format!(".with_tick_count({})", p.axis_ticks));
+    }
+    if p.show_mean {
+        frags.push(".with_mean(true)".to_string());
+    }
+    if (p.mean_stroke_width - 3.0).abs() > f64::EPSILON {
+        frags.push(format!(
+            ".with_mean_stroke_width({})",
+            f64_lit(p.mean_stroke_width)
+        ));
+    }
+    if p.inverted_axes.iter().any(|b| *b) {
+        let idxs = p
+            .inverted_axes
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| **b)
+            .map(|(i, _)| i.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_inverted_axes(vec![{idxs}])"));
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    if p.show_axis_bands {
+        frags.push(".with_axis_bands(true)".to_string());
+    }
+    chain(&ctor, frags)
+}
+
+fn emit_ridgeline_group(g: &RidgelineGroup) -> String {
+    let values = g
+        .values
+        .iter()
+        .map(|v| f64_lit(*v))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match &g.color {
+        Some(c) => format!(
+            ".with_group_color({}, vec![{}], {})",
+            str_lit(&g.label),
+            values,
+            str_lit(c)
+        ),
+        None => format!(".with_group({}, vec![{}])", str_lit(&g.label), values),
+    }
+}
+
+/// Serialize a `RidgelinePlot`'s resolved state — works uniformly across
+/// `ridgeline.rs`'s three CLI branches (`--group-by`, multi-`--y`, and the
+/// single-column fallback that uses group label `"data"`), since all three
+/// converge on the same `groups` field.
+pub fn emit_ridgeline_plot(p: &RidgelinePlot) -> String {
+    let mut frags: Vec<String> = p.groups.iter().map(emit_ridgeline_group).collect();
+    if !p.filled {
+        frags.push(".with_filled(false)".to_string());
+    }
+    if (p.opacity - 0.7).abs() > f64::EPSILON {
+        frags.push(format!(".with_opacity({})", f64_lit(p.opacity)));
+    }
+    if let Some(bw) = p.bandwidth {
+        frags.push(format!(".with_bandwidth({})", f64_lit(bw)));
+    }
+    if p.kde_samples != 200 {
+        frags.push(format!(".with_kde_samples({})", p.kde_samples));
+    }
+    if (p.stroke_width - 1.5).abs() > f64::EPSILON {
+        frags.push(format!(".with_stroke_width({})", f64_lit(p.stroke_width)));
+    }
+    if (p.overlap - 0.5).abs() > f64::EPSILON {
+        frags.push(format!(".with_overlap({})", f64_lit(p.overlap)));
+    }
+    if p.normalize {
+        frags.push(".with_normalize(true)".to_string());
+    }
+    if p.show_legend {
+        frags.push(".with_legend(true)".to_string());
+    }
+    if let Some(ref dash) = p.line_dash {
+        frags.push(format!(".with_line_dash({})", str_lit(dash)));
+    }
+    if !p.show_baseline {
+        frags.push(".with_baseline(false)".to_string());
+    }
+    chain("RidgelinePlot::new()", frags)
+}
+
+/// Serialize one series of a `StackedAreaPlot`/`StreamgraphPlot`-shaped
+/// builder: `.with_series(...)` followed immediately by the optional
+/// `.with_color(...)`/label call that mutate the just-pushed entry — mirrors
+/// the "call `with_series` then chain `with_color`/`with_legend`" pattern
+/// both plot types share.
+fn emit_area_series(
+    values: &[f64],
+    color: &Option<String>,
+    label: &Option<String>,
+    label_method: &str,
+) -> Vec<String> {
+    let vals = values
+        .iter()
+        .map(|v| f64_lit(*v))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut frags = vec![format!(".with_series(vec![{vals}])")];
+    if let Some(c) = color {
+        frags.push(format!(".with_color({})", str_lit(c)));
+    }
+    if let Some(l) = label {
+        frags.push(format!("{label_method}({})", str_lit(l)));
+    }
+    frags
+}
+
+/// Serialize a `StackedAreaPlot`'s resolved state — `stacked_area.rs` only
+/// ever builds it via one `--group-col` loop (`with_x` once, then
+/// `with_series`/`with_color`/`with_legend` per group), but this reads the
+/// struct's own parallel `series`/`colors`/`labels` vectors directly so it
+/// stays correct even if another construction path is added later.
+pub fn emit_stacked_area_plot(p: &StackedAreaPlot) -> String {
+    let xs =
+        p.x.iter()
+            .map(|v| f64_lit(*v))
+            .collect::<Vec<_>>()
+            .join(", ");
+    let mut frags: Vec<String> = vec![format!(".with_x(vec![{xs}])")];
+    for (i, s) in p.series.iter().enumerate() {
+        let color = p.colors.get(i).cloned().flatten();
+        let label = p.labels.get(i).cloned().flatten();
+        frags.extend(emit_area_series(s, &color, &label, ".with_legend"));
+    }
+    if (p.fill_opacity - 0.7).abs() > f64::EPSILON {
+        frags.push(format!(".with_fill_opacity({})", f64_lit(p.fill_opacity)));
+    }
+    if (p.stroke_width - 1.5).abs() > f64::EPSILON {
+        frags.push(format!(".with_stroke_width({})", f64_lit(p.stroke_width)));
+    }
+    if !p.show_strokes {
+        frags.push(".with_strokes(false)".to_string());
+    }
+    if p.normalized {
+        frags.push(".with_normalized()".to_string());
+    }
+    // `legend_position` has no CLI flag in `stacked_area.rs` (always the
+    // struct default `OutsideRightTop`) and `LegendPosition` has no `Debug`
+    // impl, so it's intentionally never emitted here.
+    chain("StackedAreaPlot::new()", frags)
+}
+
+fn stream_baseline_ctor(b: &StreamBaseline) -> &'static str {
+    match b {
+        StreamBaseline::Wiggle => "StreamBaseline::Wiggle",
+        StreamBaseline::Symmetric => "StreamBaseline::Symmetric",
+        StreamBaseline::Zero => "StreamBaseline::Zero",
+    }
+}
+
+fn stream_order_ctor(o: &StreamOrder) -> &'static str {
+    match o {
+        StreamOrder::InsideOut => "StreamOrder::InsideOut",
+        StreamOrder::ByTotal => "StreamOrder::ByTotal",
+        StreamOrder::Original => "StreamOrder::Original",
+    }
+}
+
+/// Serialize a `StreamgraphPlot`'s resolved state — one `--group-col` loop
+/// in `streamgraph.rs` builds every series via `with_x` once plus
+/// `with_series`/`with_color`/`with_label` per group; read generically off
+/// the struct's own parallel vectors, same approach as `emit_stacked_area_plot`.
+pub fn emit_streamgraph_plot(p: &StreamgraphPlot) -> String {
+    let xs =
+        p.x.iter()
+            .map(|v| f64_lit(*v))
+            .collect::<Vec<_>>()
+            .join(", ");
+    let mut frags: Vec<String> = vec![format!(".with_x(vec![{xs}])")];
+    for (i, s) in p.series.iter().enumerate() {
+        let color = p.colors.get(i).cloned().flatten();
+        let label = p.labels.get(i).cloned().flatten();
+        frags.extend(emit_area_series(s, &color, &label, ".with_label"));
+    }
+    if !matches!(p.baseline, StreamBaseline::Wiggle) {
+        frags.push(format!(
+            ".with_baseline({})",
+            stream_baseline_ctor(&p.baseline)
+        ));
+    }
+    if !matches!(p.order, StreamOrder::InsideOut) {
+        frags.push(format!(".with_order({})", stream_order_ctor(&p.order)));
+    }
+    if !p.smooth {
+        frags.push(".with_linear()".to_string());
+    }
+    if (p.fill_opacity - 0.85).abs() > f64::EPSILON {
+        frags.push(format!(".with_fill_opacity({})", f64_lit(p.fill_opacity)));
+    }
+    if p.stroke_between {
+        frags.push(".with_stroke()".to_string());
+        if (p.stroke_width - 0.8).abs() > f64::EPSILON {
+            frags.push(format!(".with_stroke_width({})", f64_lit(p.stroke_width)));
+        }
+    }
+    if !p.show_labels {
+        frags.push(".with_stream_labels(false)".to_string());
+    }
+    if (p.min_label_height - 14.0).abs() > f64::EPSILON {
+        frags.push(format!(
+            ".with_min_label_height({})",
+            f64_lit(p.min_label_height)
+        ));
+    }
+    if p.normalized {
+        frags.push(".with_normalized()".to_string());
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    // `legend_position` has no CLI flag in `streamgraph.rs` either — same
+    // reasoning as `emit_stacked_area_plot`.
+    chain("StreamgraphPlot::new()", frags)
+}
+
+fn emit_raincloud_group(g: &RaincloudGroup) -> String {
+    let values = g
+        .values
+        .iter()
+        .map(|v| f64_lit(*v))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(".with_group({}, vec![{}])", str_lit(&g.label), values)
+}
+
+/// Serialize a `RaincloudPlot`'s resolved state. `raincloud.rs` always calls
+/// `with_group_colors` (even for a single group), so `group_colors` is
+/// effectively always `Some` for a CLI-built plot, but the `None` case is
+/// still handled for correctness against the real struct shape.
+pub fn emit_raincloud_plot(p: &RaincloudPlot) -> String {
+    let mut frags: Vec<String> = p.groups.iter().map(emit_raincloud_group).collect();
+    if p.color != "steelblue" {
+        frags.push(format!(".with_color({})", str_lit(&p.color)));
+    }
+    if let Some(ref colors) = p.group_colors {
+        let list = colors
+            .iter()
+            .map(|c| str_lit(c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_group_colors(vec![{list}])"));
+    }
+    if (p.cloud_width - 30.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_cloud_width({})", f64_lit(p.cloud_width)));
+    }
+    if let Some(bw) = p.bandwidth {
+        frags.push(format!(".with_bandwidth({})", f64_lit(bw)));
+    }
+    if (p.bandwidth_scale - 1.0).abs() > f64::EPSILON {
+        frags.push(format!(
+            ".with_bandwidth_scale({})",
+            f64_lit(p.bandwidth_scale)
+        ));
+    }
+    if p.kde_samples != 200 {
+        frags.push(format!(".with_kde_samples({})", p.kde_samples));
+    }
+    if (p.cloud_alpha - 0.7).abs() > f64::EPSILON {
+        frags.push(format!(".with_cloud_alpha({})", f64_lit(p.cloud_alpha)));
+    }
+    if !p.show_cloud {
+        frags.push(".with_cloud(false)".to_string());
+    }
+    if (p.box_width - 0.08).abs() > f64::EPSILON {
+        frags.push(format!(".with_box_width({})", f64_lit(p.box_width)));
+    }
+    if !p.show_box {
+        frags.push(".with_box(false)".to_string());
+    }
+    if (p.rain_size - 3.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_rain_size({})", f64_lit(p.rain_size)));
+    }
+    if (p.rain_jitter - 0.05).abs() > f64::EPSILON {
+        frags.push(format!(".with_rain_jitter({})", f64_lit(p.rain_jitter)));
+    }
+    if (p.rain_alpha - 0.7).abs() > f64::EPSILON {
+        frags.push(format!(".with_rain_alpha({})", f64_lit(p.rain_alpha)));
+    }
+    if !p.show_rain {
+        frags.push(".with_rain(false)".to_string());
+    }
+    if p.flip {
+        frags.push(".with_flip(true)".to_string());
+    }
+    if p.horizontal {
+        frags.push(".with_horizontal(true)".to_string());
+    }
+    if (p.rain_offset - 0.20).abs() > f64::EPSILON {
+        frags.push(format!(".with_rain_offset({})", f64_lit(p.rain_offset)));
+    }
+    if (p.cloud_offset - 0.15).abs() > f64::EPSILON {
+        frags.push(format!(".with_cloud_offset({})", f64_lit(p.cloud_offset)));
+    }
+    if p.seed != 42 {
+        frags.push(format!(".with_seed({})", p.seed));
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    chain("RaincloudPlot::new()", frags)
+}
+
+// ── Per-plot-type emitters (Tier 2: strip/polar/rose/manhattan/volcano) ──────
+
+/// Serialize one `StripGroup`. `strip.rs` never builds per-point colored or
+/// shaped groups (only plain `.with_group`), but this handles all four
+/// `StripGroup` shapes generically since it just inspects the struct's own
+/// `point_colors`/`point_shapes` fields — matching the design principle of
+/// reading resolved state rather than re-deriving which CLI branch ran.
+fn emit_strip_group(g: &StripGroup) -> String {
+    match (&g.point_colors, &g.point_shapes) {
+        (Some(colors), Some(shapes)) => {
+            let triples = g
+                .values
+                .iter()
+                .zip(colors.iter())
+                .zip(shapes.iter())
+                .map(|((v, c), s)| {
+                    format!(
+                        "({}, {}, {})",
+                        f64_lit(*v),
+                        str_lit(c),
+                        marker_shape_ctor(*s)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(".with_styled_group({}, vec![{triples}])", str_lit(&g.label))
+        }
+        (Some(colors), None) => {
+            let pairs = g
+                .values
+                .iter()
+                .zip(colors.iter())
+                .map(|(v, c)| format!("({}, {})", f64_lit(*v), str_lit(c)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(".with_colored_group({}, vec![{pairs}])", str_lit(&g.label))
+        }
+        (None, Some(shapes)) => {
+            let pairs = g
+                .values
+                .iter()
+                .zip(shapes.iter())
+                .map(|(v, s)| format!("({}, {})", f64_lit(*v), marker_shape_ctor(*s)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(".with_shaped_group({}, vec![{pairs}])", str_lit(&g.label))
+        }
+        (None, None) => {
+            let values = g
+                .values
+                .iter()
+                .map(|v| f64_lit(*v))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(".with_group({}, vec![{values}])", str_lit(&g.label))
+        }
+    }
+}
+
+/// Serialize a `StripPlot`'s resolved state — works uniformly whether it came
+/// from the simple `--group-col` or the wide `--y` CLI branch in `strip.rs`,
+/// since both converge on the same `StripPlot` struct.
+pub fn emit_strip_plot(p: &StripPlot) -> String {
+    let mut frags: Vec<String> = p.groups.iter().map(emit_strip_group).collect();
+    if p.color != "steelblue" {
+        frags.push(format!(".with_color({})", str_lit(&p.color)));
+    }
+    if (p.point_size - 4.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_point_size({})", f64_lit(p.point_size)));
+    }
+    match &p.style {
+        StripStyle::Strip { jitter } if (*jitter - 0.3).abs() > f64::EPSILON => {
+            frags.push(format!(".with_jitter({})", f64_lit(*jitter)));
+        }
+        StripStyle::Strip { .. } => {}
+        StripStyle::Swarm => frags.push(".with_swarm()".to_string()),
+        StripStyle::Center => frags.push(".with_center()".to_string()),
+    }
+    if p.seed != 42 {
+        frags.push(format!(".with_seed({})", p.seed));
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    if let Some(ref colors) = p.group_colors {
+        let list = colors
+            .iter()
+            .map(|c| str_lit(c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_group_colors([{list}])"));
+    }
+    if let Some(op) = p.marker_opacity {
+        frags.push(format!(".with_marker_opacity({})", f64_lit(op)));
+    }
+    if let Some(w) = p.marker_stroke_width {
+        frags.push(format!(".with_marker_stroke_width({})", f64_lit(w)));
+    }
+    if p.show_tooltips {
+        frags.push(".with_tooltips()".to_string());
+    }
+    if let Some(ref labels) = p.tooltip_labels {
+        let list = labels
+            .iter()
+            .map(|l| str_lit(l))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_tooltip_labels(vec![{list}])"));
+    }
+    chain("StripPlot::new()", frags)
+}
+
+fn polar_mode_ctor(mode: &PolarMode) -> &'static str {
+    match mode {
+        PolarMode::Scatter => "PolarMode::Scatter",
+        PolarMode::Line => "PolarMode::Line",
+    }
+}
+
+/// Serialize one `PolarSeries`. `PolarSeries::marker_size`/`stroke_width`/
+/// `line_dash` have no public setter reachable from any `PolarPlot` builder
+/// method (only `color`/`marker_opacity`/`marker_stroke_width` can be set,
+/// each acting on the last-added series), so they're always default and
+/// never emitted here.
+fn emit_polar_series(s: &PolarSeries) -> Vec<String> {
+    let r =
+        s.r.iter()
+            .map(|v| f64_lit(*v))
+            .collect::<Vec<_>>()
+            .join(", ");
+    let theta = s
+        .theta
+        .iter()
+        .map(|v| f64_lit(*v))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut frags = match &s.label {
+        Some(label) => vec![format!(
+            ".with_series_labeled(vec![{r}], vec![{theta}], {}, {})",
+            str_lit(label),
+            polar_mode_ctor(&s.mode)
+        )],
+        None => match s.mode {
+            PolarMode::Scatter => vec![format!(".with_series(vec![{r}], vec![{theta}])")],
+            PolarMode::Line => vec![format!(".with_series_line(vec![{r}], vec![{theta}])")],
+        },
+    };
+    if let Some(ref color) = s.color {
+        frags.push(format!(".with_color({})", str_lit(color)));
+    }
+    if let Some(op) = s.marker_opacity {
+        frags.push(format!(".with_marker_opacity({})", f64_lit(op)));
+    }
+    if let Some(w) = s.marker_stroke_width {
+        frags.push(format!(".with_marker_stroke_width({})", f64_lit(w)));
+    }
+    frags
+}
+
+/// Serialize a `PolarPlot`'s resolved state. Handles both the simple and
+/// `--color-by` (per-group series) CLI construction paths in `polar.rs`
+/// uniformly, since both converge on the same `series` field.
+pub fn emit_polar_plot(p: &PolarPlot) -> String {
+    let mut frags: Vec<String> = Vec::new();
+    for s in &p.series {
+        frags.extend(emit_polar_series(s));
+    }
+    if let Some(v) = p.r_max {
+        frags.push(format!(".with_r_max({})", f64_lit(v)));
+    }
+    if let Some(v) = p.r_min {
+        frags.push(format!(".with_r_min({})", f64_lit(v)));
+    }
+    if p.theta_start != 0.0 {
+        frags.push(format!(".with_theta_start({})", f64_lit(p.theta_start)));
+    }
+    if !p.clockwise {
+        frags.push(".with_clockwise(false)".to_string());
+    }
+    if let Some(n) = p.r_grid_lines {
+        frags.push(format!(".with_r_grid_lines({n})"));
+    }
+    if p.theta_divisions != 12 {
+        frags.push(format!(".with_theta_divisions({})", p.theta_divisions));
+    }
+    if !p.show_grid {
+        frags.push(".with_grid(false)".to_string());
+    }
+    if !p.show_r_labels {
+        frags.push(".with_r_labels(false)".to_string());
+    }
+    if p.show_legend {
+        frags.push(".with_legend(true)".to_string());
+    }
+    if p.show_tooltips {
+        frags.push(".with_tooltips()".to_string());
+    }
+    if let Some(ref labels) = p.tooltip_labels {
+        let list = labels
+            .iter()
+            .map(|l| str_lit(l))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_tooltip_labels(vec![{list}])"));
+    }
+    chain("PolarPlot::new()", frags)
+}
+
+/// Serialize a `RosePlot`'s resolved state. `rose.rs`'s single-series CLI
+/// path (one `.with_slice(label, value)` call per row) always leaves the
+/// series named `"Values"` — used here as the anonymous-series heuristic,
+/// mirroring `emit_pyramid_plot`'s treatment of its own single-anonymous-
+/// series case. The `--compass` flag mutates `p.labels` in place before this
+/// runs, so the compass-transformed strings are already what gets baked in
+/// as literals — no need to re-call `with_compass_labels` here.
+pub fn emit_rose_plot(p: &RosePlot) -> String {
+    let mut frags: Vec<String> = Vec::new();
+    if p.series.len() == 1 && p.series[0].name == "Values" {
+        let slices = p
+            .labels
+            .iter()
+            .zip(p.series[0].values.iter())
+            .map(|(l, v)| format!("({}, {})", str_lit(l), f64_lit(*v)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_slices(vec![{slices}])"));
+    } else {
+        if !p.labels.is_empty() {
+            let list = p
+                .labels
+                .iter()
+                .map(|l| str_lit(l))
+                .collect::<Vec<_>>()
+                .join(", ");
+            frags.push(format!(".with_x_labels(vec![{list}])"));
+        }
+        // `RoseSeries::color` has no public setter reachable from any
+        // `RosePlot` builder method, so it's always `None` and never
+        // emitted here.
+        for s in &p.series {
+            let values = s
+                .values
+                .iter()
+                .map(|v| f64_lit(*v))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let ctor = match p.mode {
+                RoseMode::Grouped => "with_group",
+                RoseMode::Stacked => "with_stack",
+            };
+            frags.push(format!(".{ctor}({}, vec![{values}])", str_lit(&s.name)));
+        }
+    }
+    if !matches!(p.encoding, RoseEncoding::Area) {
+        frags.push(".with_encoding(RoseEncoding::Radius)".to_string());
+    }
+    if p.start_angle != 0.0 {
+        frags.push(format!(".with_start_angle({})", f64_lit(p.start_angle)));
+    }
+    if !p.clockwise {
+        frags.push(".with_clockwise(false)".to_string());
+    }
+    if p.inner_radius != 0.0 {
+        frags.push(format!(".with_inner_radius({})", f64_lit(p.inner_radius)));
+    }
+    if (p.gap - 1.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_gap({})", f64_lit(p.gap)));
+    }
+    if !p.show_grid {
+        frags.push(".with_grid(false)".to_string());
+    }
+    if p.grid_lines != 4 {
+        frags.push(format!(".with_grid_lines({})", p.grid_lines));
+    }
+    if !p.show_spokes {
+        frags.push(".with_spokes(false)".to_string());
+    }
+    if !p.show_labels {
+        frags.push(".with_show_labels(false)".to_string());
+    }
+    if p.show_values {
+        frags.push(".with_show_values(true)".to_string());
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    chain("RosePlot::new()", frags)
+}
+
+/// Shared by [`emit_manhattan_plot`] and [`emit_volcano_plot`] — both plot
+/// types use the same `LabelStyle` enum for gene-label placement.
+fn label_style_ctor(style: &LabelStyle) -> String {
+    match style {
+        LabelStyle::Exact => "LabelStyle::Exact".to_string(),
+        LabelStyle::Nudge => "LabelStyle::Nudge".to_string(),
+        LabelStyle::Arrow { offset_x, offset_y } => format!(
+            "LabelStyle::Arrow {{ offset_x: {}, offset_y: {} }}",
+            f64_lit(*offset_x),
+            f64_lit(*offset_y)
+        ),
+    }
+}
+
+/// Serialize a `ManhattanPlot`'s resolved state via `with_data_x`, which
+/// reconstructs the exact `(chromosome, x, pvalue)` triples regardless of
+/// whether `manhattan.rs` built the plot via `with_data` (sequential mode) or
+/// `with_data_bp` (genome-build mode) — `ManhattanPlot` doesn't retain which
+/// `GenomeBuild` was used, so this is the only generically faithful
+/// reconstruction available from the struct alone.
+///
+/// One caveat: `with_data_bp` also produces empty chromosome-band spans for
+/// chromosomes with zero data points (so they still appear on the x-axis);
+/// those are lost here since `with_data_x` derives spans purely from the
+/// data actually present. `manhattan.rs` never calls `with_point_labels`
+/// (only `with_label_top`), but any baked-in point labels are still
+/// re-attached generically below in case a future CLI path sets them.
+pub fn emit_manhattan_plot(p: &ManhattanPlot) -> String {
+    let data = p
+        .points
+        .iter()
+        .map(|pt| {
+            format!(
+                "({}, {}, {})",
+                str_lit(&pt.chromosome),
+                f64_lit(pt.x),
+                f64_lit(pt.pvalue)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut frags: Vec<String> = vec![format!(".with_data_x(vec![{data}])")];
+
+    let labeled: Vec<String> = p
+        .points
+        .iter()
+        .filter(|pt: &&ManhattanPoint| pt.label.is_some())
+        .map(|pt| {
+            format!(
+                "({}, {}, {})",
+                str_lit(&pt.chromosome),
+                f64_lit(pt.x),
+                str_lit(pt.label.as_deref().unwrap_or(""))
+            )
+        })
+        .collect();
+    if !labeled.is_empty() {
+        frags.push(format!(".with_point_labels(vec![{}])", labeled.join(", ")));
+    }
+
+    if (p.genome_wide - (-5e-8_f64.log10())).abs() > 1e-9 {
+        frags.push(format!(".with_genome_wide({})", f64_lit(p.genome_wide)));
+    }
+    if (p.suggestive - 5.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_suggestive({})", f64_lit(p.suggestive)));
+    }
+    if p.color_a != "steelblue" {
+        frags.push(format!(".with_color_a({})", str_lit(&p.color_a)));
+    }
+    if p.color_b != "#5aadcb" {
+        frags.push(format!(".with_color_b({})", str_lit(&p.color_b)));
+    }
+    if let Some(ref pal) = p.palette {
+        match palette_ctor(pal.name) {
+            Some(ctor) => frags.push(format!(".with_palette({ctor})")),
+            None => {
+                let colors = pal
+                    .colors()
+                    .iter()
+                    .map(|c| str_lit(c))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                frags.push(format!(
+                    ".with_palette(Palette::custom({}, vec![{colors}]))",
+                    str_lit(pal.name)
+                ));
+            }
+        }
+    }
+    if (p.point_size - 2.5).abs() > f64::EPSILON {
+        frags.push(format!(".with_point_size({})", f64_lit(p.point_size)));
+    }
+    if p.label_top != 0 {
+        frags.push(format!(".with_label_top({})", p.label_top));
+    }
+    if !matches!(p.label_style, LabelStyle::Nudge) {
+        frags.push(format!(
+            ".with_label_style({})",
+            label_style_ctor(&p.label_style)
+        ));
+    }
+    if let Some(f) = p.pvalue_floor {
+        frags.push(format!(".with_pvalue_floor({})", f64_lit(f)));
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    if p.show_tooltips {
+        frags.push(".with_tooltips()".to_string());
+    }
+    if let Some(ref labels) = p.tooltip_labels {
+        let list = labels
+            .iter()
+            .map(|l| str_lit(l))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_tooltip_labels(vec![{list}])"));
+    }
+    chain("ManhattanPlot::new()", frags)
+}
+
+/// Serialize a `VolcanoPlot`'s resolved state — `volcano.rs` only ever calls
+/// `with_points`, but this reads the struct's own `points` field generically.
+pub fn emit_volcano_plot(p: &VolcanoPlot) -> String {
+    let points = p
+        .points
+        .iter()
+        .map(|pt| {
+            format!(
+                "({}, {}, {})",
+                str_lit(&pt.name),
+                f64_lit(pt.log2fc),
+                f64_lit(pt.pvalue)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut frags: Vec<String> = vec![format!(".with_points(vec![{points}])")];
+
+    if (p.fc_cutoff - 1.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_fc_cutoff({})", f64_lit(p.fc_cutoff)));
+    }
+    if (p.p_cutoff - 0.05).abs() > f64::EPSILON {
+        frags.push(format!(".with_p_cutoff({})", f64_lit(p.p_cutoff)));
+    }
+    if p.color_up != "firebrick" {
+        frags.push(format!(".with_color_up({})", str_lit(&p.color_up)));
+    }
+    if p.color_down != "steelblue" {
+        frags.push(format!(".with_color_down({})", str_lit(&p.color_down)));
+    }
+    if p.color_ns != "#aaaaaa" {
+        frags.push(format!(".with_color_ns({})", str_lit(&p.color_ns)));
+    }
+    if (p.point_size - 3.0).abs() > f64::EPSILON {
+        frags.push(format!(".with_point_size({})", f64_lit(p.point_size)));
+    }
+    if p.label_top != 0 {
+        frags.push(format!(".with_label_top({})", p.label_top));
+    }
+    if !matches!(p.label_style, LabelStyle::Nudge) {
+        frags.push(format!(
+            ".with_label_style({})",
+            label_style_ctor(&p.label_style)
+        ));
+    }
+    if let Some(f) = p.pvalue_floor {
+        frags.push(format!(".with_pvalue_floor({})", f64_lit(f)));
+    }
+    if let Some(ref label) = p.legend_label {
+        frags.push(format!(".with_legend({})", str_lit(label)));
+    }
+    if p.show_tooltips {
+        frags.push(".with_tooltips()".to_string());
+    }
+    if let Some(ref labels) = p.tooltip_labels {
+        let list = labels
+            .iter()
+            .map(|l| str_lit(l))
+            .collect::<Vec<_>>()
+            .join(", ");
+        frags.push(format!(".with_tooltip_labels(vec![{list}])"));
+    }
+    chain("VolcanoPlot::new()", frags)
 }
