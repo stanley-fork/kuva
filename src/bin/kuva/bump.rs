@@ -208,19 +208,14 @@ pub fn run(args: BumpArgs) -> Result<(), String> {
 
     #[cfg(feature = "emit_code")]
     if args.base.emit_code {
-        if args.raw_value {
-            return Err(
-                "--emit-code is not supported together with --raw-value: ranks computed \
-                 from raw values are resolved internally by `BumpPlot` at render time and \
-                 are not exposed on any public field. Pre-rank your data (drop --raw-value \
-                 and pass a rank column) to use --emit-code with bump."
-                    .to_string(),
-            );
-        }
         print!(
             "{}",
             crate::emit_code::assemble(
-                &["kuva::plot::BumpPlot", "kuva::plot::bump::CurveStyle"],
+                &[
+                    "kuva::plot::BumpPlot",
+                    "kuva::plot::bump::CurveStyle",
+                    "kuva::plot::bump::BumpTieBreak",
+                ],
                 "Bump",
                 &[crate::emit_code::emit_bump_plot(&bp)],
                 &args.base,

@@ -1323,7 +1323,7 @@ pub fn emit_scatter_plot(p: &ScatterPlot) -> String {
 
 // ── Per-plot-type emitters (Tier 2) ───────────────────────────────────────────
 
-use kuva::plot::bump::{BumpSeries, CurveStyle};
+use kuva::plot::bump::{BumpSeries, BumpTieBreak, CurveStyle};
 use kuva::plot::radar::{RadarReference, RadarSeries};
 use kuva::plot::waterfall::{WaterfallBar, WaterfallKind};
 use kuva::plot::{BumpPlot, ForestPlot, ForestRow, RadarPlot};
@@ -1677,32 +1677,66 @@ fn curve_style_ctor(style: &CurveStyle) -> &'static str {
     }
 }
 
-fn emit_bump_series(s: &BumpSeries) -> String {
-    let ranks = s
-        .ranks
+fn emit_opt_f64_vec(values: &[Option<f64>]) -> String {
+    values
         .iter()
         .map(|r| match r {
             Some(v) => format!("Some({})", f64_lit(*v)),
             None => "None".to_string(),
         })
         .collect::<Vec<_>>()
-        .join(", ");
-    // `BumpSeries::color` has no public setter reachable from `with_series`/
-    // `with_ranked_series` (always `None`), so it's never emitted here.
-    format!(".with_ranked_series({}, vec![{ranks}])", str_lit(&s.name))
+        .join(", ")
 }
 
-/// Serialize a `BumpPlot`'s resolved *pre-ranked* series. Only covers the
-/// plain (non-`--raw-value`) CLI path: `BumpPlot::raw_values` — populated by
-/// the CLI's `--raw-value` branch via `with_raw_series_opt` — is `pub(crate)`
-/// to the `kuva` library crate and unreadable from this binary crate, and the
-/// tie-break ranking algorithm that resolves it into `series` only runs
-/// internally at render time. `tie_break`/`rank_ascending` are intentionally
-/// not emitted: they only affect that raw-value resolution and are no-ops on
-/// an already-resolved `series` list. See `bump.rs`'s `--emit-code` site,
-/// which rejects `--raw-value` combined with `--emit-code` up front.
+fn emit_bump_series(s: &BumpSeries) -> String {
+    // `BumpSeries::color` has no public setter reachable from `with_series`/
+    // `with_ranked_series` (always `None`), so it's never emitted here.
+    format!(
+        ".with_ranked_series({}, vec![{}])",
+        str_lit(&s.name),
+        emit_opt_f64_vec(&s.ranks)
+    )
+}
+
+fn tie_break_ctor(mode: &BumpTieBreak) -> &'static str {
+    match mode {
+        BumpTieBreak::Average => "BumpTieBreak::Average",
+        BumpTieBreak::Min => "BumpTieBreak::Min",
+        BumpTieBreak::Max => "BumpTieBreak::Max",
+        BumpTieBreak::Stable => "BumpTieBreak::Stable",
+    }
+}
+
+fn emit_bump_raw_series(
+    (name, values, _color): &(String, Vec<Option<f64>>, Option<String>),
+) -> String {
+    // `color` (the tuple's 3rd field) has no public setter reachable from
+    // `with_raw_series`/`with_raw_series_opt` (always `None`), so it's never
+    // emitted here — same reasoning as `BumpSeries::color` above.
+    format!(
+        ".with_raw_series_opt({}, vec![{}])",
+        str_lit(name),
+        emit_opt_f64_vec(values)
+    )
+}
+
+/// Serialize a `BumpPlot`'s resolved series — both the pre-ranked path
+/// (`series`) and the raw-value auto-ranking path (`raw_values`) are read
+/// directly off the struct, so this works uniformly regardless of which
+/// `bump.rs` CLI branch (`--raw-value` or not) built the plot.
 pub fn emit_bump_plot(p: &BumpPlot) -> String {
     let mut frags: Vec<String> = p.series.iter().map(emit_bump_series).collect();
+    frags.extend(p.raw_values.iter().map(emit_bump_raw_series));
+    // `rank_ascending`/`tie_break` only affect raw-value resolution — no-ops
+    // when `raw_values` is empty, so only emit them alongside raw series.
+    if !p.raw_values.is_empty() {
+        if p.rank_ascending {
+            frags.push(".with_rank_ascending(true)".to_string());
+        }
+        if !matches!(p.tie_break, BumpTieBreak::Average) {
+            frags.push(format!(".with_tie_break({})", tie_break_ctor(&p.tie_break)));
+        }
+    }
     if !p.x_labels.is_empty() {
         let list = p
             .x_labels

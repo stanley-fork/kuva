@@ -272,6 +272,23 @@ fn covered_subcommands() -> Vec<(&'static str, Vec<&'static str>)> {
                 "--rank-labels",
             ],
         ),
+        (
+            "bump_raw_value",
+            vec![
+                "bump",
+                "examples/data/bump.tsv",
+                "--series",
+                "series",
+                "--time",
+                "time",
+                "--rank",
+                "rank",
+                "--raw-value",
+                "--rank-ascending",
+                "--tie-break",
+                "min",
+            ],
+        ),
     ]
 }
 
