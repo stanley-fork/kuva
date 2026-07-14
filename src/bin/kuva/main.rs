@@ -27,6 +27,7 @@ mod mosaic;
 mod network;
 mod output;
 mod parallel;
+mod pareto;
 mod phylo;
 mod pie;
 mod polar;
@@ -153,6 +154,8 @@ enum Commands {
     Horizon(horizon::HorizonArgs),
     /// Parallel coordinates plot — multivariate comparison.
     Parallel(parallel::ParallelArgs),
+    /// Pareto chart — bars sorted descending, with a cumulative-percentage line.
+    Pareto(pareto::ParetoArgs),
     /// Venn diagram — 2–4 set overlaps.
     Venn(venn::VennArgs),
     /// Calendar heatmap — GitHub-style contribution grid.
@@ -229,6 +232,7 @@ fn main() {
         Commands::Survival(args) => survival::run(args),
         Commands::Horizon(args) => horizon::run(args),
         Commands::Parallel(args) => parallel::run(args),
+        Commands::Pareto(args) => pareto::run(args),
         Commands::Venn(args) => venn::run(args),
         Commands::Calendar(args) => calendar::run(args),
         Commands::Gantt(args) => gantt::run(args),

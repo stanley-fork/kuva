@@ -878,6 +878,24 @@ check "parallel curved" \
         --group-col species \
         --curved --show-mean --legend "Species" --title "Parallel Curved"
 
+# ── pareto ────────────────────────────────────────────────────────────────────
+check "pareto basic" \
+    "$BIN" pareto "$DATA/pareto.tsv" \
+        --label-col category --value-col count \
+        --title "Error Categories"
+
+check "pareto styled" \
+    "$BIN" pareto "$DATA/pareto.tsv" \
+        --label-col category --value-col count \
+        --color seagreen --line-color darkorange --threshold 90 \
+        --cumulative-labels --legend "Count,Cumulative %" --title "Pareto Styled"
+
+check "pareto horizontal with bucketing" \
+    "$BIN" pareto "$DATA/pareto.tsv" \
+        --label-col category --value-col count \
+        --horizontal --max-categories 4 --other-label "Misc" \
+        --cumulative-labels --title "Pareto Horizontal Bucketed"
+
 # ── venn ──────────────────────────────────────────────────────────────────────
 check "venn basic" \
     "$BIN" venn "$DATA/venn.tsv" \

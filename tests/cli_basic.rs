@@ -1850,6 +1850,84 @@ fn test_quiver_scale_auto_scale_exclusive() {
     );
 }
 
+// ── pareto ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_pareto_svg() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "pareto",
+        &data("pareto.tsv"),
+        "--label-col",
+        "category",
+        "--value-col",
+        "count",
+        "--title",
+        "Error Categories",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+    assert!(stdout.starts_with("<svg"), "output should start with <svg");
+    assert!(stdout.contains("<rect"), "should contain bars");
+    assert!(
+        stdout.contains("Missing field"),
+        "should contain a category label"
+    );
+}
+
+#[test]
+fn test_pareto_styled_options() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "pareto",
+        &data("pareto.tsv"),
+        "--label-col",
+        "category",
+        "--value-col",
+        "count",
+        "--color",
+        "seagreen",
+        "--line-color",
+        "darkorange",
+        "--threshold",
+        "90",
+        "--cumulative-labels",
+        "--legend",
+        "Count,Cumulative %",
+        "--title",
+        "Pareto Styled",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+    assert!(stdout.contains("Count"), "should contain bar legend label");
+    assert!(
+        stdout.contains("Cumulative %"),
+        "should contain line legend label"
+    );
+}
+
+#[test]
+fn test_pareto_horizontal_and_max_categories() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "pareto",
+        &data("pareto.tsv"),
+        "--label-col",
+        "category",
+        "--value-col",
+        "count",
+        "--horizontal",
+        "--max-categories",
+        "4",
+        "--other-label",
+        "Misc",
+        "--title",
+        "Horizontal Pareto",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+    assert!(stdout.starts_with("<svg"), "output should start with <svg");
+    assert!(stdout.contains("Misc"), "bucketed bar label override");
+    assert!(
+        stdout.contains(">100%<"),
+        "secondary x-axis should reach 100%"
+    );
+}
+
 // ── misc ─────────────────────────────────────────────────────────────────────
 
 #[test]

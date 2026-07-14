@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ParetoPlot`** — bar chart of category values, sorted descending by default, with a superimposed cumulative-percentage line on a secondary axis (fixed 0-100%, the "80/20 rule" chart). Optional dashed threshold reference line (default 80%, labeled with its percentage) and per-point cumulative-percentage labels. Legend shown by default ("Value" / "Cumulative %"). Secondary-axis ticks are formatted as percentages (`0%`, `20%`, …). Categorical axis defaults to rotated (-45°), collision-thinned labels. `.with_max_categories(n)` collapses a long tail of small categories into one stacked "Other" bar, decoded via per-segment legend entries, instead of cluttering the axis. `.with_horizontal(bool)` puts categories on Y and values on X. CLI: `kuva pareto`.
+- **Secondary X-axis (`Layout::with_x2_range`/`with_x2_label`/`with_log_x2`/`with_x2_tick_format`, `ComputedLayout::map_x2`)** — a top-drawn counterpart to the existing secondary Y-axis (right side), for plots whose secondary encoding pairs with the value axis rather than the category axis (used by horizontal `ParetoPlot`). Third-party plot types can use it directly via the same `Layout`/`ComputedLayout` fields.
+
 ### Fixed
 
 - **`Scatter3D`/`Surface3D` instances combined in one panel now share one 3D coordinate box** — each instance previously called `data_ranges()`/drew its own wireframe box independently, so two `Scatter3D` (or a mix with `Surface3D`) in the same `render_multiple` call each normalized to their own min/max and could project completely different data onto identical screen coordinates, with the box itself drawn twice. `render_multiple` now computes one merged `DataRanges3D` and draws the box once, shared by every 3D instance in the call.

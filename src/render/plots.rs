@@ -32,6 +32,7 @@ use crate::plot::manhattan::ManhattanPlot;
 use crate::plot::mosaic::MosaicPlot;
 use crate::plot::network::NetworkPlot;
 use crate::plot::parallel::ParallelPlot;
+use crate::plot::pareto::ParetoPlot;
 use crate::plot::phylo::PhyloTree;
 use crate::plot::polar::PolarPlot;
 use crate::plot::pr::PrPlot;
@@ -108,6 +109,7 @@ pub enum Plot {
     Slope(SlopePlot),
     Venn(VennPlot),
     Parallel(ParallelPlot),
+    Pareto(ParetoPlot),
     Mosaic(MosaicPlot),
     Ecdf(EcdfPlot),
     QQ(QQPlot),
@@ -343,6 +345,11 @@ impl From<VennPlot> for Plot {
 impl From<ParallelPlot> for Plot {
     fn from(p: ParallelPlot) -> Self {
         Plot::Parallel(p)
+    }
+}
+impl From<ParetoPlot> for Plot {
+    fn from(p: ParetoPlot) -> Self {
+        Plot::Pareto(p)
     }
 }
 impl From<MosaicPlot> for Plot {
@@ -647,6 +654,21 @@ impl Plot {
                         Some(((data_min, data_max), (cat_min, cat_max)))
                     } else {
                         Some(((cat_min, cat_max), (data_min, data_max)))
+                    }
+                }
+            }
+            Plot::Pareto(pp) => {
+                if pp.categories.is_empty() {
+                    None
+                } else {
+                    let bars = pp.render_bars();
+                    let cat_min = 0.5;
+                    let cat_max = bars.len() as f64 + 0.5;
+                    let data_max = bars.iter().map(|b| b.value()).fold(0.0_f64, f64::max);
+                    if pp.horizontal {
+                        Some(((0.0, data_max), (cat_min, cat_max)))
+                    } else {
+                        Some(((cat_min, cat_max), (0.0, data_max)))
                     }
                 }
             }

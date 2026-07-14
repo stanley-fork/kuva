@@ -42,6 +42,7 @@ EXAMPLES=(
     mosaic
     network
     parallel
+    pareto
     phylo
     pie
     polar

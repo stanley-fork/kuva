@@ -371,6 +371,12 @@ Click any image to go to the full documentation page.
 <div class="gallery-desc">Multi-dimensional lines across parallel axes; colored by group or continuous value.</div>
 </a></div>
 
+<div class="gallery-card"><a href="./plots/pareto.html">
+<img src="./assets/pareto/basic.svg" alt="Pareto Chart">
+<div class="gallery-caption">Pareto Chart</div>
+<div class="gallery-desc">Bars sorted descending by value with a cumulative-percentage line — the "80/20 rule" chart.</div>
+</a></div>
+
 <div class="gallery-card"><a href="./plots/pyramid.html">
 <img src="./assets/pyramid/multi_series.svg" alt="Population Pyramid">
 <div class="gallery-caption">Population Pyramid</div>

@@ -1,5 +1,6 @@
 use crate::plot::hexbin::{HexbinPlot, ZReduce};
 use crate::plot::legend::{LegendEntry, LegendGroup, LegendPosition};
+use crate::plot::pareto::ParetoBar;
 use crate::render::annotations::{ReferenceLine, ShadedRegion, TextAnnotation};
 use crate::render::datetime::DateTimeAxis;
 use crate::render::palette::Palette;
@@ -340,6 +341,18 @@ pub struct Layout {
     pub log_y2: bool,
     pub y2_tick_format: TickFormat,
     pub suppress_y2_ticks: bool,
+    /// Secondary X-axis (drawn on top, mirroring the secondary Y-axis on the
+    /// right) — used by horizontal `ParetoPlot` for its cumulative-% line, since
+    /// horizontal mode puts categories on Y and values on X, so the cumulative
+    /// line needs its own X-axis rather than the Y-based `y2` system.
+    pub x2_range: Option<(f64, f64)>,
+    pub data_x2_range: Option<(f64, f64)>,
+    pub x2_label: Option<String>,
+    pub log_x2: bool,
+    pub x2_tick_format: TickFormat,
+    pub suppress_x2_ticks: bool,
+    pub x2_label_offset: (f64, f64),
+    pub x2_label_wrap: Option<usize>,
     pub x_datetime: Option<DateTimeAxis>,
     pub y_datetime: Option<DateTimeAxis>,
     pub x_tick_rotate: Option<f64>,
@@ -506,6 +519,14 @@ impl Layout {
             log_y2: false,
             y2_tick_format: TickFormat::Auto,
             suppress_y2_ticks: false,
+            x2_range: None,
+            data_x2_range: None,
+            x2_label: None,
+            log_x2: false,
+            x2_tick_format: TickFormat::Auto,
+            suppress_x2_ticks: false,
+            x2_label_offset: (0.0, 0.0),
+            x2_label_wrap: None,
             x_datetime: None,
             y_datetime: None,
             x_tick_rotate: None,
@@ -585,6 +606,8 @@ impl Layout {
         let mut gantt_right_annot_px: f64 = 0.0;
         let mut bump_series_label_px: f64 = 0.0;
         let mut bump_n_time: usize = 0;
+        let mut has_pareto: bool = false;
+        let mut pareto_horizontal: bool = false;
 
         for plot in plots {
             if let Some(((xmin, xmax), (ymin, ymax))) = plot.bounds() {
@@ -608,6 +631,7 @@ impl Layout {
                     | Plot::Pr(_)
                     | Plot::Funnel(_)
                     | Plot::Streamgraph(_)
+                    | Plot::Pareto(_)
             ) {
                 anchor_y_zero = true;
             }
@@ -698,6 +722,47 @@ impl Layout {
                     has_legend = true;
                     for l in ll {
                         note_legend_label(&mut max_label_len, &mut max_label_w, l, 0);
+                    }
+                }
+            }
+
+            if let Plot::Pareto(pp) = plot {
+                has_pareto = true;
+                pareto_horizontal = pp.horizontal;
+                // Must match the render order in `add_pareto` (sorted descending by
+                // value unless `.with_sorted(false)`, then bucketed per
+                // `max_categories`), or tick labels won't line up with the bars
+                // they're supposed to label.
+                let bars = pp.render_bars();
+                let labels: Vec<String> = bars.iter().map(|b| b.label().to_string()).collect();
+                if pp.horizontal {
+                    y_labels = Some(labels);
+                } else {
+                    x_labels = Some(labels);
+                }
+                if pp.show_legend {
+                    if let Some(ref l) = pp.bar_legend_label {
+                        has_legend = true;
+                        note_legend_label(&mut max_label_len, &mut max_label_w, l, 0);
+                    }
+                    if let Some(ref l) = pp.line_legend_label {
+                        has_legend = true;
+                        note_legend_label(&mut max_label_len, &mut max_label_w, l, 0);
+                    }
+                    // Bucketed "Other" segments each get their own legend entry
+                    // (decoding the stack), same as the bar/line labels above.
+                    for bar in &bars {
+                        if let ParetoBar::Bucketed { segments, .. } = bar {
+                            for seg in segments {
+                                has_legend = true;
+                                note_legend_label(
+                                    &mut max_label_len,
+                                    &mut max_label_w,
+                                    &seg.label,
+                                    0,
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -1341,6 +1406,64 @@ impl Layout {
         layout.anchor_y_zero = anchor_y_zero;
         layout.data_x_range = Some(raw_x);
         layout.data_y_range = Some(raw_y);
+        if has_pareto {
+            // Cumulative percentage's true extent is (0, 100), always — but feeding
+            // that as *both* the padded and raw range left `resolve_axis_range`'s
+            // #98 capping check with nothing to cap (nice_max_padded == nice_max_raw,
+            // both exactly 100), so the axis topped out with zero headroom: the
+            // guaranteed-100% final point (and its label, if shown) sat flush
+            // against the plot's top edge and got clipped. Pad the *padded* input by
+            // the same 1% breathing room every other axis gets (see the y_max
+            // adjustment above) so the capping logic has genuine slack to work
+            // with — it then supplies its own small (~5%) headroom, same as it
+            // would for any other axis whose raw max lands exactly on a tick.
+            //
+            // `TickFormat::Percent` multiplies by 100 before appending "%" (it's
+            // designed for fractional 0..1 inputs) — cumulative values are already
+            // stored as 0..100, so that would double-multiply. A plain "%" suffix
+            // makes the axis unambiguous without relying on the axis title, same
+            // fix as the threshold-line label.
+            //
+            // Horizontal mode puts values on the X-axis, so the cumulative line
+            // pairs with a secondary X-axis (drawn on top) instead of Y (right).
+            if pareto_horizontal {
+                layout.x2_range = Some((0.0, 101.0));
+                layout.data_x2_range = Some((0.0, 100.0));
+                if layout.x2_label.is_none() {
+                    layout.x2_label = Some("Cumulative %".to_string());
+                }
+                if matches!(layout.x2_tick_format, TickFormat::Auto) {
+                    layout.x2_tick_format =
+                        TickFormat::Custom(Arc::new(|v: f64| format!("{v:.0}%")));
+                }
+            } else {
+                layout.y2_range = Some((0.0, 101.0));
+                layout.data_y2_range = Some((0.0, 100.0));
+                if layout.y2_label.is_none() {
+                    layout.y2_label = Some("Cumulative %".to_string());
+                }
+                if matches!(layout.y2_tick_format, TickFormat::Auto) {
+                    layout.y2_tick_format =
+                        TickFormat::Custom(Arc::new(|v: f64| format!("{v:.0}%")));
+                }
+                // Pareto's x-axis is always categorical text labels, and Pareto data
+                // often has many categories (unlike a typical hand-built bar chart) —
+                // default to rotated + collision-thinned labels so a many-category
+                // chart is readable out of the box (not needed in horizontal mode,
+                // where categories move to the Y-axis and read fine unrotated). The
+                // CLI already applied rotation on top of `Layout::auto_from_plots`;
+                // moving the default here means library (non-CLI) callers get the
+                // same behavior without having to know to set it themselves. Both
+                // can still be overridden afterward by chaining
+                // `.with_x_tick_rotate()` / `.with_x_label_overlap()`.
+                if layout.x_tick_rotate.is_none() {
+                    layout.x_tick_rotate = Some(-45.0);
+                }
+                if matches!(layout.x_label_overlap, AxisLabelOverlap::Allow) {
+                    layout.x_label_overlap = AxisLabelOverlap::Thin;
+                }
+            }
+        }
         layout.horizon_right_annot_px = horizon_right_annot_px;
         layout.gantt_right_annot_px = gantt_right_annot_px;
         if brick_has_notations {
@@ -2123,6 +2246,40 @@ impl Layout {
         self
     }
 
+    /// Set the secondary X-axis range (drawn on top, mirroring the secondary
+    /// Y-axis on the right). Used by horizontal `ParetoPlot`.
+    pub fn with_x2_range(mut self, min: f64, max: f64) -> Self {
+        self.x2_range = Some((min, max));
+        self
+    }
+
+    pub fn with_x2_label<S: Into<String>>(mut self, label: S) -> Self {
+        self.x2_label = Some(label.into());
+        self
+    }
+
+    /// Shift the x2-axis label by `(dx, dy)` pixels from its auto-computed position.
+    /// Positive `dx` moves right; positive `dy` moves down (closer to the plot).
+    pub fn with_x2_label_offset(mut self, dx: f64, dy: f64) -> Self {
+        self.x2_label_offset = (dx, dy);
+        self
+    }
+
+    pub fn with_x2_label_wrap(mut self, max_chars: usize) -> Self {
+        self.x2_label_wrap = if max_chars > 0 { Some(max_chars) } else { None };
+        self
+    }
+
+    pub fn with_log_x2(mut self) -> Self {
+        self.log_x2 = true;
+        self
+    }
+
+    pub fn with_x2_tick_format(mut self, fmt: TickFormat) -> Self {
+        self.x2_tick_format = fmt;
+        self
+    }
+
     pub fn with_x_datetime(mut self, axis: DateTimeAxis) -> Self {
         self.x_datetime = Some(axis);
         self
@@ -2431,6 +2588,12 @@ pub struct ComputedLayout {
     pub y2_tick_format: TickFormat,
     /// Pixel width consumed by the y2 axis (ticks + labels). 0.0 when no y2 axis.
     pub y2_axis_width: f64,
+    pub x2_range: Option<(f64, f64)>,
+    pub log_x2: bool,
+    pub x2_tick_format: TickFormat,
+    /// Pixel height consumed by the x2 axis (ticks + labels), drawn on top.
+    /// 0.0 when no x2 axis.
+    pub x2_axis_height: f64,
     /// Rotation angle for x-axis tick labels (degrees, typically -45.0). None = no rotation.
     pub x_tick_rotate: Option<f64>,
     /// Strategy for handling overlapping x-axis tick labels.
@@ -2501,6 +2664,8 @@ pub struct ComputedLayout {
     pub y_label_wrap: Option<usize>,
     /// Propagated from `Layout::y2_label_wrap`.
     pub y2_label_wrap: Option<usize>,
+    /// Propagated from `Layout::x2_label_wrap`.
+    pub x2_label_wrap: Option<usize>,
     /// Propagated from `Layout::legend_wrap`.
     pub legend_wrap: Option<usize>,
     /// Extra pixels added to `margin_bottom` for an OutsideBottom legend.
@@ -2828,6 +2993,24 @@ impl ComputedLayout {
             };
         margin_right += y2_axis_width;
 
+        let x2_label_lines = if let (Some(ref x2label), Some(max_chars)) =
+            (&layout.x2_label, layout.x2_label_wrap)
+        {
+            render_utils::wrap_text(x2label, max_chars).len()
+        } else {
+            1
+        };
+        let x2_axis_height = if let (Some(_), false) = (layout.x2_range, layout.suppress_x2_ticks) {
+            // Mirrors `y2_axis_width`'s shape, but for a horizontal axis: reserve
+            // the tick label's line height instead of measuring label text width.
+            line_height(label_size, FontStyle::Regular) * x2_label_lines as f64
+                + line_height(tick_size, FontStyle::Regular)
+                + 15.0 * s
+        } else {
+            0.0
+        };
+        margin_top += x2_axis_height;
+
         // Effective legend width: capped when legend_wrap is set.
         let mut effective_legend_width = if let Some(max_chars) = layout.legend_wrap {
             let cap = max_chars as f64 * mean_char_width(layout.body_size as f64) * s + 41.0 * s;
@@ -3087,6 +3270,18 @@ impl ComputedLayout {
             )
         });
 
+        let x2_range = layout.x2_range.map(|range| {
+            resolve_axis_range(
+                range,
+                layout.data_x2_range,
+                x_ticks,
+                layout.log_x2,
+                false,
+                layout.clamp_axis,
+                false,
+            )
+        });
+
         // Quantise legend line-height to a whole number of terminal rows so that
         // every legend entry maps to a distinct row without gaps.
         let legend_line_height = if let Some(tr) = layout.term_rows {
@@ -3132,6 +3327,10 @@ impl ComputedLayout {
             log_y2: layout.log_y2,
             y2_tick_format: layout.y2_tick_format.clone(),
             y2_axis_width,
+            x2_range,
+            log_x2: layout.log_x2,
+            x2_tick_format: layout.x2_tick_format.clone(),
+            x2_axis_height,
             x_tick_rotate: layout.x_tick_rotate,
             x_label_overlap: layout.x_label_overlap.clone(),
             legend_line_height,
@@ -3172,6 +3371,7 @@ impl ComputedLayout {
             x_label_wrap: layout.x_label_wrap,
             y_label_wrap: layout.y_label_wrap,
             y2_label_wrap: layout.y2_label_wrap,
+            x2_label_wrap: layout.x2_label_wrap,
             legend_wrap: layout.legend_wrap,
             legend_bottom_extra,
             legend_col_count,
@@ -3292,6 +3492,23 @@ impl ComputedLayout {
             }
         } else {
             self.map_y(y)
+        }
+    }
+
+    /// Map a value on the secondary X-axis (drawn on top) to a pixel X coordinate.
+    pub fn map_x2(&self, x: f64) -> f64 {
+        if let Some((x2_min, x2_max)) = self.x2_range {
+            let pw = self.plot_width();
+            if self.log_x2 {
+                let x = x.max(1e-10);
+                let log_min = x2_min.log10();
+                let log_max = x2_max.log10();
+                self.margin_left + (x.log10() - log_min) / (log_max - log_min) * pw
+            } else {
+                self.margin_left + (x - x2_min) / (x2_max - x2_min) * pw
+            }
+        } else {
+            self.map_x(x)
         }
     }
 

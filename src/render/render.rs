@@ -1,6 +1,8 @@
 use crate::render::alluvial_order::optimize_sankey_alluvial_order;
 use crate::render::annotations::{add_reference_lines, add_shaded_regions, add_text_annotations};
-use crate::render::axis::{add_axes_and_grid, add_labels_and_title, add_y2_axis, XLabelPlacer};
+use crate::render::axis::{
+    add_axes_and_grid, add_labels_and_title, add_x2_axis, add_y2_axis, XLabelPlacer,
+};
 use crate::render::layout::{ComputedLayout, Layout, TickFormat};
 use crate::render::palette::Palette;
 use crate::render::plots::Plot;
@@ -175,6 +177,7 @@ use crate::plot::manhattan::ManhattanPlot;
 use crate::plot::mosaic::MosaicPlot;
 use crate::plot::network::{NetworkPlot, NodeShape};
 use crate::plot::parallel::{ParallelPlot, ParallelRow};
+use crate::plot::pareto::ParetoPlot;
 use crate::plot::phylo::{PhyloTree, TreeBranchStyle, TreeOrientation};
 use crate::plot::pie::PieLabelPosition;
 use crate::plot::polar::{PolarMode, PolarPlot};
@@ -1371,6 +1374,230 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     flat_i += 1;
                 }
             }
+        }
+    }
+}
+
+// ── ParetoPlot ──────────────────────────────────────────────────────────────
+// Bars on the primary axis (values), cumulative-percentage line + markers on
+// the secondary axis (always 0..100). Vertical mode (default) puts values on Y
+// and the cumulative line on the secondary Y-axis (`map_y2`, right side);
+// horizontal mode puts values on X and the cumulative line on the secondary
+// X-axis (`map_x2`, top) instead, since the secondary axis always pairs with
+// whichever axis carries values. Single series each — bars share `bw_idx` 0
+// (not meant to be distinguished from each other, matching `BarPlot`'s own
+// single-color convention), the line uses `bw_idx` 1 so it gets a different BW
+// dash than a `bw_idx` 0 line would, though the two are already visually
+// distinct (fill vs. stroke) regardless.
+fn add_pareto(pp: &ParetoPlot, scene: &mut Scene, computed: &ComputedLayout) {
+    use crate::plot::pareto::ParetoBar;
+    use crate::render::palette::Palette;
+
+    if pp.categories.is_empty() {
+        return;
+    }
+    let bars = pp.render_bars();
+    let cum_pct = pp.cumulative_percentages();
+    let half_w = pp.width / 2.0;
+    let palette = Palette::category10();
+    let h = pp.horizontal;
+
+    // Single screen-space coordinate along the *value* axis for value `v`, and
+    // along the *category* axis for position `s` — abstracts the value/category
+    // axis swap so the bar-drawing loop below doesn't need two full copies.
+    let map_value = |v: f64| -> f64 {
+        if h {
+            computed.map_x(v)
+        } else {
+            computed.map_y(v)
+        }
+    };
+    let map_cat = |s: f64| -> f64 {
+        if h {
+            computed.map_y(s)
+        } else {
+            computed.map_x(s)
+        }
+    };
+
+    for (i, bar) in bars.iter().enumerate() {
+        let group_cat = i as f64 + 1.0;
+        let c0 = map_cat(group_cat - half_w);
+        let c1 = map_cat(group_cat + half_w);
+        match bar {
+            ParetoBar::Single(cat) => {
+                let v0 = map_value(0.0);
+                let v1 = map_value(cat.value);
+                let (x0, x1, y0, y1) = if h {
+                    (v0, v1, c0, c1)
+                } else {
+                    (c0, c1, v0, v1)
+                };
+                rect_bw(
+                    scene,
+                    computed,
+                    0,
+                    &pp.color,
+                    x0.min(x1),
+                    y0.min(y1),
+                    (x1 - x0).abs(),
+                    (y1 - y0).abs(),
+                    None,
+                    None,
+                    None,
+                );
+            }
+            ParetoBar::Bucketed { segments, .. } => {
+                // Stack the hidden categories within this one slot, largest at
+                // the base, so the bucket's composition is still visible (and
+                // legend-decodable) instead of collapsing into one opaque total.
+                let mut accum = 0.0;
+                for (seg_idx, seg) in segments.iter().enumerate() {
+                    let v0 = map_value(accum);
+                    let v1 = map_value(accum + seg.value);
+                    let (x0, x1, y0, y1) = if h {
+                        (v0, v1, c0, c1)
+                    } else {
+                        (c0, c1, v0, v1)
+                    };
+                    rect_bw(
+                        scene,
+                        computed,
+                        seg_idx,
+                        &palette[seg_idx % palette.len()],
+                        x0.min(x1),
+                        y0.min(y1),
+                        (x1 - x0).abs(),
+                        (y1 - y0).abs(),
+                        None,
+                        None,
+                        None,
+                    );
+                    accum += seg.value;
+                }
+            }
+        }
+    }
+
+    if pp.show_threshold {
+        if h {
+            let tx = computed.map_x2(pp.threshold);
+            scene.add(Primitive::Line {
+                x1: tx,
+                y1: computed.margin_top,
+                x2: tx,
+                y2: computed.margin_top + computed.plot_height(),
+                stroke: Color::from("#888888"),
+                stroke_width: computed.axis_stroke_width,
+                stroke_dasharray: Some("4,3".into()),
+            });
+            scene.add(Primitive::Text {
+                x: tx + 4.0,
+                y: computed.margin_top + 12.0,
+                content: format!("{:.0}%", pp.threshold),
+                size: computed.tick_size.saturating_sub(1).max(8),
+                anchor: TextAnchor::Start,
+                rotate: None,
+                bold: false,
+                color: Some(Color::from("#888888")),
+            });
+        } else {
+            let ty = computed.map_y2(pp.threshold);
+            scene.add(Primitive::Line {
+                x1: computed.margin_left,
+                y1: ty,
+                x2: computed.margin_left + computed.plot_width(),
+                y2: ty,
+                stroke: Color::from("#888888"),
+                stroke_width: computed.axis_stroke_width,
+                stroke_dasharray: Some("4,3".into()),
+            });
+            // Label the line with its percentage. The primary and secondary axes
+            // commonly have unrelated scales (e.g. primary 0..50 counts, secondary
+            // a fixed 0..100 percentage), so an unlabeled dashed line can be
+            // misread against the *primary* axis's gridlines/values — e.g. it can
+            // coincide in pixel position with a primary-axis tick that has nothing
+            // to do with it.
+            scene.add(Primitive::Text {
+                x: computed.margin_left + computed.plot_width() - 4.0,
+                y: ty - 4.0,
+                content: format!("{:.0}%", pp.threshold),
+                size: computed.tick_size.saturating_sub(1).max(8),
+                anchor: TextAnchor::End,
+                rotate: None,
+                bold: false,
+                color: Some(Color::from("#888888")),
+            });
+        }
+    }
+
+    let screen_pts: Vec<(f64, f64)> = (0..bars.len())
+        .map(|i| {
+            let cat = i as f64 + 1.0;
+            if h {
+                (computed.map_x2(cum_pct[i]), computed.map_y(cat))
+            } else {
+                (computed.map_x(cat), computed.map_y2(cum_pct[i]))
+            }
+        })
+        .collect();
+
+    let (line_stroke, line_da, marker_fill) = if computed.bw_mode {
+        use crate::render::bw::bw_dash;
+        (Color::from("#1a1a1a"), bw_dash(1).dasharray(), "#1a1a1a")
+    } else {
+        (Color::from(&pp.line_color), None, pp.line_color.as_str())
+    };
+
+    if screen_pts.len() >= 2 {
+        scene.add(Primitive::PolyLine {
+            points: screen_pts.clone(),
+            stroke: line_stroke.clone(),
+            stroke_width: 2.0,
+            stroke_dasharray: line_da,
+        });
+    }
+    for (i, &(x, y)) in screen_pts.iter().enumerate() {
+        draw_marker(
+            scene,
+            MarkerShape::Circle,
+            x,
+            y,
+            3.5,
+            marker_fill,
+            None,
+            Some(Color::from("#ffffff")),
+            Some(1.0),
+        );
+        if pp.show_cumulative_labels {
+            // In horizontal mode the label grows rightward from the point —
+            // fine everywhere except the guaranteed-100% last point, which sits
+            // at the plot's own right edge (the x2 axis headroom only clears
+            // the marker, not a further ~30px of label text) and would get cut
+            // off by the plot's clip region. Flip that one label to grow
+            // leftward (back into the plot) instead. Vertical mode doesn't need
+            // the same treatment: its label only needs modest vertical
+            // clearance, comfortably inside the headroom already reserved.
+            let is_last = i == screen_pts.len() - 1;
+            let (lx, ly, anchor) = if h {
+                if is_last {
+                    (x - 10.0, y, TextAnchor::End)
+                } else {
+                    (x + 10.0, y, TextAnchor::Start)
+                }
+            } else {
+                (x, y - 10.0, TextAnchor::Middle)
+            };
+            scene.add(Primitive::Text {
+                x: lx,
+                y: ly,
+                content: format!("{:.0}%", cum_pct[i]),
+                size: computed.tick_size,
+                anchor,
+                rotate: None,
+                bold: false,
+                color: None,
+            });
         }
     }
 }
@@ -10910,6 +11137,43 @@ pub fn collect_legend_entries(plots: &[Plot]) -> Vec<LegendEntry> {
                     });
                 }
             }
+            Plot::Pareto(pareto) => {
+                if pareto.show_legend {
+                    if let Some(ref label) = pareto.bar_legend_label {
+                        entries.push(LegendEntry {
+                            label: label.clone(),
+                            color: pareto.color.clone(),
+                            shape: LegendShape::Rect,
+                            dasharray: None,
+                        });
+                    }
+                    if let Some(ref label) = pareto.line_legend_label {
+                        entries.push(LegendEntry {
+                            label: label.clone(),
+                            color: pareto.line_color.clone(),
+                            shape: LegendShape::Line,
+                            dasharray: None,
+                        });
+                    }
+                    // Decode the bucketed "Other" stack, if any -- one entry per
+                    // hidden category, colored to match its segment in add_pareto.
+                    use crate::plot::pareto::ParetoBar;
+                    use crate::render::palette::Palette;
+                    let palette = Palette::category10();
+                    for bar in pareto.render_bars() {
+                        if let ParetoBar::Bucketed { segments, .. } = bar {
+                            for (i, seg) in segments.iter().enumerate() {
+                                entries.push(LegendEntry {
+                                    label: seg.label.clone(),
+                                    color: palette[i % palette.len()].to_string(),
+                                    shape: LegendShape::Rect,
+                                    dasharray: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             Plot::Scatter(scatter) => {
                 if let Some(label) = &scatter.legend_label {
                     entries.push(LegendEntry {
@@ -14874,6 +15138,9 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
         if layout.y2_range.is_some() {
             add_y2_axis(&mut scene, &computed, &layout);
         }
+        if layout.x2_range.is_some() {
+            add_x2_axis(&mut scene, &computed, &layout);
+        }
     }
 
     // For DicePlot: precompute the actual grid extents so that axis labels and
@@ -15006,6 +15273,9 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
             }
             Plot::Bar(b) => {
                 add_bar(b, &mut scene, &computed);
+            }
+            Plot::Pareto(pp) => {
+                add_pareto(pp, &mut scene, &computed);
             }
             Plot::Histogram(h) => {
                 add_histogram(h, &mut scene, &computed, histogram_bw_idx);
