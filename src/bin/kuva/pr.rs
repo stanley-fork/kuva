@@ -110,6 +110,22 @@ pub fn run(args: PrArgs) -> Result<(), String> {
         plot = plot.with_group(group);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::PrPlot", "kuva::plot::pr::PrGroup"],
+                "Pr",
+                &[crate::emit_code::emit_pr_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Pr(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -98,6 +98,22 @@ pub fn run(args: ContourArgs) -> Result<(), String> {
         plot = plot.with_legend(label.clone());
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::ContourPlot", "kuva::plot::ColorMap"],
+                "Contour",
+                &[crate::emit_code::emit_contour_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Contour(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -201,6 +201,28 @@ pub fn run(args: TreemapArgs) -> Result<(), String> {
         plot = plot.with_colorbar_label(lbl.clone());
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::TreemapPlot",
+                    "kuva::plot::TreemapNode",
+                    "kuva::plot::TreemapColorMode",
+                    "kuva::plot::TreemapLayout",
+                    "kuva::plot::ColorMap",
+                ],
+                "Treemap",
+                &[crate::emit_code::emit_treemap_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Treemap(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

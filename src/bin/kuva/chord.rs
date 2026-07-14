@@ -81,6 +81,22 @@ pub fn run(args: ChordArgs) -> Result<(), String> {
         plot = plot.with_legend(label.clone());
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::ChordPlot"],
+                "Chord",
+                &[crate::emit_code::emit_chord_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Chord(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

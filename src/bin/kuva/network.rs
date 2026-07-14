@@ -187,6 +187,33 @@ pub fn run(args: NetworkArgs) -> Result<(), String> {
         }
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        // `pending_matrix` (used by `--matrix` input) is a module-private
+        // field on `NetworkPlot`, unreachable from this binary crate. Its
+        // only public path back to real edges is the public `resolve_matrix`
+        // method — safe to call here even in edge-list mode, since it's a
+        // documented no-op once there's no pending matrix (and `render_multiple`
+        // calls it again unconditionally before rendering regardless).
+        plot.resolve_matrix();
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::NetworkPlot",
+                    "kuva::plot::NetworkLayout",
+                    "kuva::plot::NodeShape",
+                ],
+                "Network",
+                &[crate::emit_code::emit_network_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Network(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

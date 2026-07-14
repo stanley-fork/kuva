@@ -142,6 +142,22 @@ pub fn run(args: SyntenyArgs) -> Result<(), String> {
         plot = plot.with_legend(label.clone());
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::SyntenyPlot"],
+                "Synteny",
+                &[crate::emit_code::emit_synteny_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Synteny(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);
