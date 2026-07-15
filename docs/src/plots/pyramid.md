@@ -168,3 +168,5 @@ let plots = vec![Plot::Pyramid(plot)];
 | `.with_bar_gap(f)` | `0.04` | Gap between sub-bands in Grouped mode |
 | `.with_mode(PyramidMode)` | `Grouped` | `Grouped` (sub-bands) or `Overlap` (transparent overlay) |
 | `.with_legend(bool)` | `false` | Show a legend (one entry per series) |
+
+**See also:** [Bar Chart](./bar.md) for a single-direction categorical comparison, [Waffle Chart](./waffle.md) for another proportion-based layout.

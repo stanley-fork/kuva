@@ -162,3 +162,5 @@ let sa = StackedAreaPlot::new()
 | `.with_strokes(bool)` | Show/hide top-edge strokes (default `true`) |
 | `.with_normalized()` | Enable 100 % percent-stacking |
 | `.with_legend_position(pos)` | Any [`LegendPosition`](../reference/layout.md#legend) variant (default `OutsideRightTop`) |
+
+**See also:** [Streamgraph](./streamgraph.md) for a zero-centered alternative, [Waterfall Chart](./waterfall.md) for running-total (non-stacked) data.

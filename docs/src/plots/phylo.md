@@ -320,3 +320,5 @@ std::fs::write("phylo_heatmap.svg", svg).unwrap();
 ### `TreeBranchStyle` variants
 
 `Rectangular` (default) · `Slanted` · `Circular`
+
+**See also:** [Clustermap](./clustermap.md) for clustering by similarity rather than an explicit tree, [Synteny Plot](./synteny.md) for comparing genome structure across the same taxa.

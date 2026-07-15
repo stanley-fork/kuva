@@ -200,3 +200,5 @@ let plots = vec![Plot::Pr(pr)];
 | `.with_auc_label(bool)` | `true` | Append `AUC = …` to the legend entry |
 | `.with_line_width(px)` | `2.0` | Curve stroke width |
 | `.with_dasharray(s)` | — | SVG stroke-dasharray string (e.g. `"6 3"`) |
+
+**See also:** [ROC Curve](./roc.md) for the balanced-class counterpart.

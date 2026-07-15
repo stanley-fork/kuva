@@ -277,3 +277,5 @@ Column reordering works the same way via `with_x_categories`. Unlike `with_y_cat
 |--------|-------------|
 | `Layout::with_x_categories(labels)` | Column labels on the x-axis (left-to-right) |
 | `Layout::with_y_categories(labels)` | Row labels on the y-axis (bottom-to-top; pass `heatmap.row_labels` directly after `with_y_categories`) |
+
+**See also:** [Clustermap](./clustermap.md) for a hierarchically-clustered version, [2D Histogram](./histogram2d.md) for binned x/y density, [Hexbin Plot](./hexbin.md) for large scatter datasets.

@@ -297,3 +297,5 @@ let plots = vec![Plot::Roc(roc)];
 | `.with_auc_label(bool)` | `true` | Append `AUC = …` to the legend entry |
 | `.with_line_width(px)` | `2.0` | Curve stroke width |
 | `.with_dasharray(s)` | — | SVG stroke-dasharray string (e.g. `"8 4"`) |
+
+**See also:** [Precision-Recall Curve](./pr.md) for imbalanced-class model evaluation, [Kaplan-Meier Survival Curve](./survival.md) for another step-function statistical curve.

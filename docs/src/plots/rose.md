@@ -135,3 +135,5 @@ let plot = RosePlot::new()
 | `with_show_labels(bool)` | `true` | Sector labels around the perimeter |
 | `with_show_values(bool)` | `false` | Value labels at sector tips |
 | `with_legend(label)` | `None` | Enable legend |
+
+**See also:** [Polar Plot](./polar.md) for continuous polar scatter/line data, [Bar Chart](./bar.md) for the Cartesian equivalent.

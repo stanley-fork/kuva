@@ -261,6 +261,8 @@ let plot = TreemapPlot::new()
 | `TreemapNode::with_value(label, value, children)` | Inner node with explicit value |
 | `TreemapNode::leaf_colored(label, value, css_color)` | Leaf with explicit CSS color |
 
+**See also:** [Sunburst Chart](./sunburst.md) for a radial version of the same hierarchy, [Heatmap](./heatmap.md) for a flat (non-hierarchical) matrix of values.
+
 ---
 
-*See also: [Shared flags](./index.md#shared-flags) — output, appearance, axes, log scale.*
+*See also: [Shared flags](../cli/index.md#shared-flags) — output, appearance, axes, log scale.*

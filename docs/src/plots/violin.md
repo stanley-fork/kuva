@@ -231,3 +231,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 | `.with_overlay_color(s)` | Overlay point color (default `"rgba(0,0,0,0.45)"`) |
 | `.with_overlay_size(r)` | Overlay point radius in pixels (default `3.0`) |
 | `.with_horizontal(bool)` | Rotate chart: categories on Y-axis, values on X-axis (default `false`) |
+
+**See also:** [Box Plot](./boxplot.md) for a simpler quantile summary, [Raincloud Plot](./raincloud.md) for violin + box + points combined, [Ridgeline Plot](./ridgeline.md) for stacking many groups' densities.

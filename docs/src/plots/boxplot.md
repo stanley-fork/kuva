@@ -186,3 +186,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 | `.with_overlay_color(s)` | Color for overlay points (default `"rgba(0,0,0,0.45)"`) |
 | `.with_overlay_size(r)` | Radius of overlay points in pixels (default `3.0`) |
 | `.with_horizontal(bool)` | Rotate chart: categories on Y-axis, values on X-axis (default `false`) |
+
+**See also:** [Violin Plot](./violin.md) for the full density shape, [Raincloud Plot](./raincloud.md) for box + density + points combined, [Strip Plot](./strip.md) for the raw points alone.

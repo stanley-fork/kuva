@@ -163,3 +163,5 @@ std::fs::write("pie_legend.svg", svg).unwrap();
 | `.with_label_position(pos)` | Label placement: `Auto`, `Inside`, `Outside`, `None` (default `Auto`) |
 | `.with_min_label_fraction(f)` | Minimum slice fraction to receive a label (default `0.05`) |
 | `.with_legend("")` | Enable the per-slice legend; entry labels are the slice names from `.with_slice()`. Use `render_multiple` to render it |
+
+**See also:** [Waffle Chart](./waffle.md) for a square-grid part-to-whole alternative, [Sunburst Chart](./sunburst.md) for a hierarchical version, [Funnel Chart](./funnel.md) for sequential drop-off instead of a static share.

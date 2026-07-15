@@ -221,3 +221,5 @@ std::fs::write("trial.svg", svg).unwrap();
 | `.with_color(css)` | `"steelblue"` | Default bar color when no groups are present |
 | `.with_group_bg(css)` | `"#ebebeb"` | Background color for group header rows |
 | `.with_legend(label)` | none | Add a legend entry |
+
+**See also:** [Calendar Heatmap](./calendar.md) for daily activity instead of scheduled tasks, [Candlestick Plot](./candlestick.md) for another datetime-axis chart, [Waterfall Chart](./waterfall.md) for progress expressed as running totals.

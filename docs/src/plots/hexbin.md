@@ -283,3 +283,5 @@ let plot = HexbinPlot::new()
 | `.with_x_range(lo, hi)` | Clip data and fix x-axis extent |
 | `.with_y_range(lo, hi)` | Clip data and fix y-axis extent |
 | `.with_color_range(lo, hi)` | Clamp the colorbar scale to a fixed interval |
+
+**See also:** [2D Histogram](./histogram2d.md) for square-binned density, [Scatter Plot](./scatter.md) for the un-binned points, [Heatmap](./heatmap.md) for an arbitrary-matrix alternative.

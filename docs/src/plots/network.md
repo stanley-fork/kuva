@@ -164,3 +164,5 @@ Self-loops (`source == target`) are rendered as a small arc pointing outward fro
 | `.with_repel_labels()` | Push overlapping labels apart |
 | `.with_legend(s)` | Show a per-group colour legend |
 | `.with_label_size(px)` | Override label font size |
+
+**See also:** [Sankey Diagram](./sankey.md) for directed flow between stages, [Chord Diagram](./chord.md) for symmetric pairwise flows.

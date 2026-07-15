@@ -230,3 +230,5 @@ let plot = BarPlot::new()
 | Different color per bar | `.with_colored_bar()` × N  or  `.with_colored_bars()` |
 | Multiple series, side-by-side | `.with_group()` × N + `.with_legend()` |
 | Multiple series, stacked | `.with_group()` × N + `.with_legend()` + `.with_stacked()` |
+
+**See also:** [Lollipop Chart](./lollipop.md) for a lighter-weight alternative, [Pareto Chart](./pareto.md) for bars plus a cumulative-percentage line, [Waterfall Chart](./waterfall.md) for running-total bars.

@@ -86,3 +86,5 @@ let plot = BumpPlot::new()
 | `Min` | All tied series receive the best (minimum) rank number. |
 | `Max` | All tied series receive the worst (maximum) rank number. |
 | `Stable` | Tied series retain their insertion order. |
+
+**See also:** [Slope Chart](./slope.md) for a two-point-in-time version, [Parallel Coordinates](./parallel.md) for ranks across more than a time axis.

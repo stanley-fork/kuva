@@ -202,3 +202,5 @@ let dot = DotPlot::new()
 | `.with_color_range(min, max)` | Clamp color values before normalising (default: data extent) |
 | `.with_size_legend(label)` | Add a size key in the right margin |
 | `.with_colorbar(label)` | Add a colorbar in the right margin |
+
+**See also:** [Heatmap](./heatmap.md) for a filled-cell alternative, [Bar Chart](./bar.md) for a simpler categorical comparison, [Clustermap](./clustermap.md) for a clustered gene-expression view.

@@ -179,3 +179,5 @@ let layout = Layout::auto_from_twin_y_plots(&primary, &secondary)
 | `.with_y2_range(min, max)` | Override the secondary y-axis range |
 | `.with_y2_tick_format(fmt)` | Tick format for the secondary axis |
 | `.with_palette(palette)` | Auto-assign colors across all primary + secondary plots |
+
+**See also:** [Line Plot](./line.md) and [Series Plot](./series.md) for the single-axis building blocks a twin-Y plot combines.

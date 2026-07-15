@@ -167,3 +167,5 @@ let plots = vec![Plot::Lollipop(plot)];
 | `.with_domain_opacity(x0, x1, label, color, opacity)` | — | Domain rect with explicit opacity |
 | `.with_domain_height(h)` | `0.5` | Domain rect height in data units below the baseline |
 | `.with_legend(label)` | — | Attach a legend (colored circle entry) |
+
+**See also:** [Bar Chart](./bar.md) for the classic filled version, [Slope Chart](./slope.md) for before/after comparisons, [Pareto Chart](./pareto.md) for ranked bars with a cumulative line.

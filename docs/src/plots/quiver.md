@@ -120,3 +120,5 @@ Proportional heads are clamped to `[4, 14]` pixels so tiny arrows still show a v
 | `--legend <TXT>` | — | Legend entry label |
 
 See [kuva quiver](../cli/quiver.md) for CLI usage examples.
+
+**See also:** [Contour Plot](./contour.md) for a scalar-field alternative to a vector field, [Polar Plot](./polar.md) for angle/magnitude data in Cartesian form.

@@ -221,3 +221,5 @@ it expands the bottom margin automatically to accommodate the second row.
 | `.with_point_labels(iter)` | Attach gene/SNP names to specific `(chrom, x)` positions |
 | `.with_pvalue_floor(f)` | Explicit p-value floor for −log₁₀ transform |
 | `.with_legend(s)` | Show genome-wide and suggestive legend entries |
+
+**See also:** [Volcano Plot](./volcano.md) for effect-size vs. significance instead of genomic position, [Q-Q Plot](./qq.md) for checking genomic inflation directly.

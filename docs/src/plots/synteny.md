@@ -201,3 +201,5 @@ let plot = SyntenyPlot::new()
 |---------|-------------|
 | `Forward` | Parallel-sided trapezoid |
 | `Reverse` | Crossed / bowtie |
+
+**See also:** [Phylogenetic Tree](./phylo.md) for the evolutionary relationships between the same sequences, [Brick Plot](./brick.md) for per-base alignment detail.

@@ -151,3 +151,5 @@ let vp = VolcanoPlot::new()
 | `.with_label_style(s)` | `Nudge` (default), `Exact`, or `Arrow { offset_x, offset_y }` |
 | `.with_pvalue_floor(f)` | Explicit p-value floor for −log₁₀ transform |
 | `.with_legend(s)` | Show an Up / Down / NS legend box |
+
+**See also:** [Manhattan Plot](./manhattan.md) for genome-position-based significance, [Scatter Plot](./scatter.md) for the general x/y relationship it specializes.

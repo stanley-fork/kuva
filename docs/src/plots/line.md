@@ -312,3 +312,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 ### `LineStyle` variants
 
 `Solid` (default) · `Dashed` (`8 4`) · `Dotted` (`2 4`) · `DashDot` (`8 4 2 4`) · `Custom(String)`
+
+**See also:** [Scatter Plot](./scatter.md) for unconnected points, [Series Plot](./series.md) for multiple named series on one canvas, [Band Plot](./band.md) for an attached confidence interval.

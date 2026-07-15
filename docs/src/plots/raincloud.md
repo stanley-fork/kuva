@@ -254,3 +254,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 | `.with_seed(u64)` | RNG seed for reproducible jitter (default `42`) |
 | `.with_legend(s)` | Show per-group legend entries |
 | `.with_horizontal(bool)` | Rotate chart: categories on Y-axis, values on X-axis (default `false`) |
+
+**See also:** [Violin Plot](./violin.md), [Box Plot](./boxplot.md), and [Strip Plot](./strip.md) for the three components it combines.

@@ -226,3 +226,5 @@ kuva polar data.tsv --r r --theta theta --r-max 5.0 --theta-divisions 8
 | `--theta-divisions <N>` | `12` | Angular grid spokes |
 | `--theta-start <DEG>` | `0.0` | Where θ=0 appears (CW from north) |
 | `--legend` | off | Show legend |
+
+**See also:** [Ternary Plot](./ternary.md) for a different non-Cartesian coordinate system, [Nightingale Rose](./rose.md) for a polar bar-chart variant, [Radar / Spider Chart](./radar.md) for categorical polar comparison.

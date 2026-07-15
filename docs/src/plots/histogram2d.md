@@ -184,3 +184,5 @@ let layout = Layout::auto_from_plots(&plots)
 | `.with_correlation()` | Print Pearson r in the top-right corner |
 | `.with_log_count()` | Log-scale color mapping via `ln(count+1)`; colorbar label → "log(Count)" |
 | `Layout::with_colorbar_tick_format(fmt)` | Control colorbar tick label format (default `TickFormat::Auto`) |
+
+**See also:** [Hexbin Plot](./hexbin.md) for large-N scatter density, [Scatter Plot](./scatter.md) for the un-binned points, [Contour Plot](./contour.md) for smooth density contours.

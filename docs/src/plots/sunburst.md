@@ -216,3 +216,5 @@ let plot = SunburstPlot::new()
 | `.with_colorbar(bool)` | `false` | Show colorbar (auto-enabled by `ByValue`) |
 | `.with_colorbar_label(str)` | — | Colorbar label |
 | `.with_color_range(lo, hi)` | — | Clamp colorbar scale |
+
+**See also:** [Treemap](./treemap.md) for a rectangular version of the same hierarchy, [Pie Chart](./pie.md) for a single-ring (non-hierarchical) equivalent.

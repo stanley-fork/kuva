@@ -175,3 +175,5 @@ The `AA` byte in the hex color controls opacity: `ff` = fully opaque, `80` ≈ 5
 | `.with_color(s)` | Bar fill color; use 8-digit hex (`#RRGGBBAA`) for alpha transparency |
 | `.with_normalize()` | Scale heights so peak bar = 1.0 (relative frequency) |
 | `.with_legend(s)` | Attach a legend label to this series |
+
+**See also:** [Density Plot](./density.md) for a smoothed alternative, [Ridgeline Plot](./ridgeline.md) for comparing many groups, [Q-Q Plot](./qq.md) for checking normality.

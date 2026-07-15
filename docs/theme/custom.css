@@ -67,6 +67,55 @@ li.part-title.kuva-toggle.kuva-open::after {
   display: none;
 }
 
+/* ── Search UI ────────────────────────────────────────────────────────────
+   Two presentations of the same single search input (behavior lives in
+   `theme/custom.js`): a compact always-visible box at the top of the
+   sidebar on every normal page, and a full-width version on the dedicated
+   `search.html` page for reading through result stubs without the sidebar's
+   width squeeze. The top-bar icon now navigates to that page instead of
+   toggling the sidebar box in place. */
+#mdbook-sidebar #mdbook-search-wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: none;
+  padding: 0.75rem 0.75rem 0;
+  background-color: var(--sidebar-bg);
+}
+#mdbook-sidebar #mdbook-search-wrapper.hidden {
+  /* mdBook's `.hidden` rule is itself `display: none !important;` — has to
+     be beaten with `!important` too, specificity/source order can't win
+     against it. */
+  display: block !important;
+}
+#mdbook-sidebar .searchbar-outer,
+#mdbook-sidebar .searchresults-outer {
+  max-width: none;
+}
+#mdbook-sidebar .sidebar-scrollbox {
+  top: var(--kuva-search-height, 0px);
+}
+
+#kuva-fullpage-search-slot {
+  margin-top: 1rem;
+}
+#mdbook-search-wrapper.kuva-fullpage-search {
+  position: static;
+}
+#mdbook-search-wrapper.kuva-fullpage-search.hidden {
+  /* Overrides the sidebar rule's `!important` the same way — this version
+     is never toggled away either, since the whole point of this page is
+     to search. */
+  display: block !important;
+}
+#mdbook-search-wrapper.kuva-fullpage-search .searchbar-outer,
+#mdbook-search-wrapper.kuva-fullpage-search .searchresults-outer {
+  max-width: var(--content-max-width);
+}
+#mdbook-search-wrapper.kuva-fullpage-search #mdbook-searchbar {
+  font-size: 1.1rem;
+  padding: 14px 18px;
+}
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

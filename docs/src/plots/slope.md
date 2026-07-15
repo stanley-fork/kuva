@@ -159,3 +159,5 @@ let sp = SlopePlot::new()
 | `Auto` | Integers displayed without decimal point; trailing zeros stripped for floats. |
 | `Fixed(n)` | Exactly `n` decimal places. |
 | `Integer` | Round to the nearest integer (`{:.0}` format). |
+
+**See also:** [Lollipop Chart](./lollipop.md) for ranked single-value comparisons, [Bump Chart](./bump.md) for rank change across more than two time points, [Parallel Coordinates](./parallel.md) for more than two dimensions.

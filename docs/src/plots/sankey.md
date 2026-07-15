@@ -312,3 +312,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 |---------|----------|
 | `Label` | Reuse one palette color per visible label **(default)** |
 | `Left` | Propagate colors left-to-right from dominant parents |
+
+**See also:** [Network Plot](./network.md) for a general node/edge graph, [Chord Diagram](./chord.md) for circular pairwise flows.

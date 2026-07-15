@@ -155,3 +155,5 @@ let wf = WaterfallPlot::new()
 | `.with_connectors()` | Draw dashed connector lines between consecutive bars |
 | `.with_values()` | Print numeric values on each bar |
 | `.with_legend(s)` | Attach a legend label |
+
+**See also:** [Bar Chart](./bar.md) for a plain (non-cumulative) comparison, [Stacked Area Plot](./stacked_area.md) for a continuous running-total alternative.

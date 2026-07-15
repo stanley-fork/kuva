@@ -145,3 +145,5 @@ let plots = vec![Plot::Mosaic(plot)];
 | `.with_values(bool)` | `false` | Show raw value labels inside cells |
 | `.with_normalize(bool)` | `true` | Normalize each column to fill full plot height |
 | `.with_legend(label)` | — | Legend title (one entry per row category) |
+
+**See also:** [Venn Diagram](./venn.md) and [UpSet Plot](./upset.md) for other set/category-overlap views, [Dice Plot](./diceplot.md) for a per-cell multivariate grid.

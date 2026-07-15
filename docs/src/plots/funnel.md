@@ -116,3 +116,5 @@ let plot = FunnelPlot::new()
 | `.with_color_mode(mode)` | `Uniform` | `Uniform`, `ByStage`, or `Gradient`. |
 | `.with_stage_gap(f64)` | `4.0` | Pixel gap between adjacent bars. Mirrors `SankeyPlot::with_node_gap`. |
 | `.with_legend(label)` | `None` | Enable legend with given label. Mirrors `SankeyPlot::with_legend`. |
+
+**See also:** [Bar Chart](./bar.md) for a simpler categorical comparison, [Pie Chart](./pie.md) for a static (non-sequential) share view.

@@ -180,3 +180,5 @@ let plots = vec![Plot::Horizon(plot)];
 | `.with_value_labels(bool)` | `false` | Show the full-scale value at the right end of each row |
 | `.with_sign_colors(bool)` | `false` | Colorize `+`/`−` signs in row annotations (requires `value_labels`) |
 | `.with_legend(bool)` | `false` | Show a legend entry per series |
+
+**See also:** [Streamgraph](./streamgraph.md) and [Stacked Area Plot](./stacked_area.md) for other dense multi-series time layouts, [Ridgeline Plot](./ridgeline.md) for a similar folded/stacked idea applied to distributions.

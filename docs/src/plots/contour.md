@@ -167,3 +167,5 @@ let cp = ContourPlot::new()
 | `.with_line_color(s)` | Fixed color for all iso-lines (default: derive from colormap) |
 | `.with_line_width(px)` | Iso-line stroke width in pixels (default `1.0`) |
 | `.with_legend(s)` | Colorbar label (filled mode) or line legend entry (line mode) |
+
+**See also:** [Heatmap](./heatmap.md) for the raw gridded values, [2D Histogram](./histogram2d.md) for binned point density, [Scatter Plot](./scatter.md) for the underlying x/y/z points.

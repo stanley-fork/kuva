@@ -451,3 +451,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 ### `TrendLine` variants
 
 `Linear` — fits y = mx + b by ordinary least squares.
+
+**See also:** [Line Plot](./line.md) for connected/ordered data, [Hexbin Plot](./hexbin.md) for large-N density, [Joint Plot](./jointplot.md) for scatter with marginal distributions.

@@ -255,3 +255,5 @@ let density = DensityPlot::from_curve(x, y)
 | `.with_x_range(lo, hi)` | Clamp KDE evaluation to `[lo, hi]` with boundary reflection at both ends |
 | `.with_x_lo(lo)` | Set lower bound only; boundary reflection at `lo`, right tail still free |
 | `.with_x_hi(hi)` | Set upper bound only; boundary reflection at `hi`, left tail still free |
+
+**See also:** [Histogram](./histogram.md) for the raw binned counts, [Ridgeline Plot](./ridgeline.md) for stacking many densities, [Violin Plot](./violin.md) for density mirrored per category.

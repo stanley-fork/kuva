@@ -333,3 +333,5 @@ The stroke color always matches the fill color set by `.with_color()` or `.with_
 | `.with_legend(s)` | Attach a legend label |
 | `.with_marker_opacity(f)` | Fill alpha: `0.0` = hollow, `1.0` = solid (default: solid) |
 | `.with_marker_stroke_width(w)` | Outline stroke at the fill color; `None` = no stroke (default) |
+
+**See also:** [Box Plot](./boxplot.md) for a summary overlay, [Violin Plot](./violin.md) for the full density shape, [Raincloud Plot](./raincloud.md) for all three combined.

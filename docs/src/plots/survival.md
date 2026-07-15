@@ -161,3 +161,5 @@ let plots = vec![Plot::Survival(plot)];
 | `.with_censoring_size(px)` | `4.0` | Half-height of censoring ticks |
 | `.with_pvalue_text(s)` | — | P-value or annotation rendered in the upper-right corner |
 | `.with_legend(label)` | — | Legend title (one entry per group) |
+
+**See also:** [Forest Plot](./forest.md) for point-estimate meta-analysis, [ROC Curve](./roc.md) for another step-function statistical curve.

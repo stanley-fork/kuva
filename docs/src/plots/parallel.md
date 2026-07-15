@@ -166,3 +166,5 @@ let plots = vec![Plot::Parallel(plot)];
 | `.with_inverted_axis(i)` | — | Invert axis `i` (high values at bottom) |
 | `.with_inverted_axes(iter)` | — | Invert multiple axes |
 | `.with_legend(label)` | — | Legend title (one entry per group) |
+
+**See also:** [Radar / Spider Chart](./radar.md) for a polygon-based multivariate view, [Slope Chart](./slope.md) for a simpler two-point comparison.

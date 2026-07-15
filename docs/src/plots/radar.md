@@ -184,3 +184,5 @@ let plots = vec![Plot::Radar(plot)];
 | `.with_start_axis(k)` | — | Place axis `k` at the top (north) position |
 | `.with_axis_ticks(bool)` | `false` | Tick marks on each axis at grid ring intersections |
 | `.with_legend(bool)` | `false` | Show a legend box |
+
+**See also:** [Parallel Coordinates](./parallel.md) for more than a handful of dimensions, [Polar Plot](./polar.md) for continuous (non-spoke) polar data.

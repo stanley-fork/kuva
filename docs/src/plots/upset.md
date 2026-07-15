@@ -161,3 +161,5 @@ Non-participating dots are always shown in light gray (`#dddddd`) for contrast.
 ## Terminal output
 
 UpSet plots are not yet supported in terminal mode. Running `kuva upset --terminal` prints a message to stderr and exits cleanly; use `-o file.svg` to generate an SVG instead.
+
+**See also:** [Venn Diagram](./venn.md) for a small number of sets, [Mosaic Plot](./mosaic.md) for two-way categorical proportions.

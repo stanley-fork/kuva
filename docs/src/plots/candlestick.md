@@ -148,3 +148,5 @@ let plot = CandlestickPlot::new()
 | `.with_color_down(s)` | Bearish candle color (default red) |
 | `.with_color_doji(s)` | Doji candle color (default `#888888`) |
 | `.with_legend(s)` | Add a legend box with the given label |
+
+**See also:** [Gantt Chart](./gantt.md) for another time-boxed bar layout, [Waterfall Chart](./waterfall.md) for running-total bars.

@@ -139,3 +139,5 @@ let chord = ChordPlot::new()
 | `.with_gap(deg)` | Gap between arc segments in degrees (default `2.0`) |
 | `.with_opacity(f)` | Ribbon fill opacity `0.0`–`1.0` (default `0.7`) |
 | `.with_legend(s)` | Enable a per-node color legend |
+
+**See also:** [Sankey Diagram](./sankey.md) for staged, directional flow instead of pairwise, [Network Plot](./network.md) for a general graph layout.

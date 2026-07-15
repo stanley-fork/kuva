@@ -281,3 +281,5 @@ let plot = CalendarPlot::new()
 | `with_cell_gap(px)` | `2.0` | Gap between cells in pixels |
 | `with_legend(bool)` | `true` | Show the colorbar legend |
 | `with_legend_label(label)` | `None` | Label beneath the colorbar |
+
+**See also:** [Gantt Chart](./gantt.md) for scheduled/dated tasks rather than daily counts, [Heatmap](./heatmap.md) for the underlying matrix-of-values idea.

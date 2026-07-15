@@ -82,3 +82,5 @@ kuva forest data.tsv \
     --ci-lower-col lower --ci-upper-col upper \
     --weight-col weight --marker-size 6
 ```
+
+**See also:** [Kaplan-Meier Survival Curve](./survival.md) for another clinical/statistical curve, [Slope Chart](./slope.md) for a simpler before/after comparison.

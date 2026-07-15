@@ -112,3 +112,5 @@ kuva ridgeline samples.tsv --group-by group --value expression \
 | `.with_normalize(bool)` | `false` | Use PDF normalization instead of visual scaling |
 | `.with_legend(bool)` | `false` | Show a legend (y-axis labels are usually sufficient) |
 | `.with_line_dash(str)` | — | SVG stroke-dasharray for dashed outline |
+
+**See also:** [Density Plot](./density.md) for a single-group curve, [Violin Plot](./violin.md) for a categorical alternative, [Box Plot](./boxplot.md) for a quantile summary instead of the full curve.

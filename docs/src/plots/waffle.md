@@ -178,3 +178,5 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 |---------|-------------|
 | `Square` | Filled rectangle (default) |
 | `Circle` | Filled circle inscribed in the cell |
+
+**See also:** [Pie Chart](./pie.md) for the classic part-to-whole chart, [Population Pyramid](./pyramid.md) for another proportion-focused layout.
