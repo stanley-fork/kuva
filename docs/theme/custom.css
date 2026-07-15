@@ -38,6 +38,35 @@ h2 {
   padding-left: 0.6em;
 }
 
+/* ── Collapsible sidebar categories ─────────────────────────────────────────
+   Behavior lives in `theme/custom.js` (mdBook's own expand/collapse only
+   covers nested chapters like the CLI subcommand list, not these flat
+   `# Category` part-titles). This just renders the two states it toggles:
+   a rotating chevron on the part-title, and `display: none` on the
+   category's items while collapsed. */
+li.part-title.kuva-toggle {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 1.4em;
+}
+li.part-title.kuva-toggle::after {
+  content: "\276F"; /* ❯ */
+  position: absolute;
+  right: 0.4em;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7em;
+  color: var(--kuva-accent);
+  transition: transform 0.15s;
+}
+li.part-title.kuva-toggle.kuva-open::after {
+  transform: translateY(-50%) rotate(90deg);
+}
+.chapter-item.kuva-collapsed {
+  display: none;
+}
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

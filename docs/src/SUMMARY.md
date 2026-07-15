@@ -4,73 +4,97 @@
 [Gallery](./gallery.md)
 [Origins](./origins.md)
 
-# Plot Types
+# Distributions
 
-- [Scatter Plot](./plots/scatter.md)
-- [Line Plot](./plots/line.md)
-- [Bar Chart](./plots/bar.md)
 - [Histogram](./plots/histogram.md)
+- [2D Histogram](./plots/histogram2d.md)
 - [Density Plot](./plots/density.md)
 - [Ridgeline Plot](./plots/ridgeline.md)
 - [ECDF Plot](./plots/ecdf.md)
 - [Q-Q Plot](./plots/qq.md)
-- [2D Histogram](./plots/histogram2d.md)
-- [Hexbin Plot](./plots/hexbin.md)
-- [Treemap](./plots/treemap.md)
-- [Sunburst Chart](./plots/sunburst.md)
-- [Bump Chart](./plots/bump.md)
-- [Series Plot](./plots/series.md)
-- [Band Plot](./plots/band.md)
-- [Brick Plot](./plots/brick.md)
 - [Box Plot](./plots/boxplot.md)
 - [Violin Plot](./plots/violin.md)
-- [Pie Chart](./plots/pie.md)
-- [Heatmap](./plots/heatmap.md)
-- [Clustermap](./plots/clustermap.md)
-- [Joint Plot](./plots/jointplot.md)
 - [Strip Plot](./plots/strip.md)
 - [Raincloud Plot](./plots/raincloud.md)
-- [Waterfall Chart](./plots/waterfall.md)
+- [Hexbin Plot](./plots/hexbin.md)
+- [Heatmap](./plots/heatmap.md)
+
+# Relationships & Correlation
+
+- [Scatter Plot](./plots/scatter.md)
+- [Line Plot](./plots/line.md)
+- [Series Plot](./plots/series.md)
+- [Band Plot](./plots/band.md)
+- [Joint Plot](./plots/jointplot.md)
+- [Contour Plot](./plots/contour.md)
+- [Parallel Coordinates](./plots/parallel.md)
+- [Polar Plot](./plots/polar.md)
+- [Ternary Plot](./plots/ternary.md)
+- [Quiver Plot](./plots/quiver.md)
+
+# Categorical & Comparison
+
+- [Bar Chart](./plots/bar.md)
+- [Pie Chart](./plots/pie.md)
+- [Waffle Chart](./plots/waffle.md)
+- [Funnel Chart](./plots/funnel.md)
+- [Pareto Chart](./plots/pareto.md)
+- [Population Pyramid](./plots/pyramid.md)
+- [Lollipop Chart](./plots/lollipop.md)
+- [Slope Chart](./plots/slope.md)
 - [Dot Plot](./plots/dotplot.md)
 - [Dice Plot](./plots/diceplot.md)
+- [Mosaic Plot](./plots/mosaic.md)
+- [Venn Diagram](./plots/venn.md)
+- [UpSet Plot](./plots/upset.md)
+- [Radar / Spider Chart](./plots/radar.md)
+- [Nightingale Rose](./plots/rose.md)
+
+# Time Series
+
 - [Stacked Area Plot](./plots/stacked_area.md)
 - [Streamgraph](./plots/streamgraph.md)
 - [Candlestick Plot](./plots/candlestick.md)
-- [Contour Plot](./plots/contour.md)
-- [Chord Diagram](./plots/chord.md)
-- [Network Plot](./plots/network.md)
-- [Sankey Diagram](./plots/sankey.md)
-- [Phylogenetic Tree](./plots/phylo.md)
-- [Synteny Plot](./plots/synteny.md)
-- [UpSet Plot](./plots/upset.md)
-- [Volcano Plot](./plots/volcano.md)
-- [Manhattan Plot](./plots/manhattan.md)
-- [Forest Plot](./plots/forest.md)
+- [Waterfall Chart](./plots/waterfall.md)
+- [Horizon Chart](./plots/horizon.md)
+- [Calendar Heatmap](./plots/calendar.md)
+- [Gantt Chart](./plots/gantt.md)
+- [Bump Chart](./plots/bump.md)
+
+# Statistical & Model Evaluation
+
 - [ROC Curve](./plots/roc.md)
 - [Precision-Recall Curve](./plots/pr.md)
 - [Kaplan-Meier Survival Curve](./plots/survival.md)
-- [Slope Chart](./plots/slope.md)
-- [Lollipop Chart](./plots/lollipop.md)
-- [Venn Diagram](./plots/venn.md)
-- [Mosaic Plot](./plots/mosaic.md)
-- [Parallel Coordinates](./plots/parallel.md)
-- [Pareto Chart](./plots/pareto.md)
-- [Population Pyramid](./plots/pyramid.md)
-- [Waffle Chart](./plots/waffle.md)
-- [Horizon Chart](./plots/horizon.md)
-- [Polar Plot](./plots/polar.md)
-- [Ternary Plot](./plots/ternary.md)
-- [Radar / Spider Chart](./plots/radar.md)
+- [Forest Plot](./plots/forest.md)
+
+# Hierarchical & Network
+
+- [Treemap](./plots/treemap.md)
+- [Sunburst Chart](./plots/sunburst.md)
+- [Network Plot](./plots/network.md)
+- [Sankey Diagram](./plots/sankey.md)
+- [Chord Diagram](./plots/chord.md)
+- [Phylogenetic Tree](./plots/phylo.md)
+- [Clustermap](./plots/clustermap.md)
+
+# Genomics & Bioinformatics
+
+- [Manhattan Plot](./plots/manhattan.md)
+- [Volcano Plot](./plots/volcano.md)
+- [Synteny Plot](./plots/synteny.md)
+- [Brick Plot](./plots/brick.md)
+
+# 3D
+
 - [3D Scatter Plot](./plots/scatter3d.md)
 - [3D Surface Plot](./plots/surface3d.md)
+
+# Composite & Utility
+
 - [Twin-Y Plot](./plots/twin_y.md)
-- [Funnel Chart](./plots/funnel.md)
-- [Nightingale Rose](./plots/rose.md)
-- [Calendar Heatmap](./plots/calendar.md)
-- [Gantt Chart](./plots/gantt.md)
 - [Legend Plot](./plots/legend.md)
 - [Text Plot](./plots/text.md)
-- [Quiver Plot](./plots/quiver.md)
 
 # CLI
 
