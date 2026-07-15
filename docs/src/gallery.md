@@ -18,45 +18,6 @@
 
 Click any image to go to the full documentation page.
 
-<style>
-.gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.25rem;
-  margin-top: 1.5rem;
-}
-.gallery-card {
-  border: 1px solid var(--sidebar-bg, #e0e0e0);
-  border-radius: 6px;
-  overflow: hidden;
-  transition: box-shadow 0.15s;
-}
-.gallery-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-.gallery-card a {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-}
-.gallery-card img {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-.gallery-caption {
-  padding: 0.5rem 0.75rem;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-.gallery-desc {
-  padding: 0 0.75rem 0.6rem;
-  font-size: 0.8rem;
-  color: var(--fg, #555);
-  opacity: 0.8;
-}
-</style>
-
 <div class="gallery">
 
 <div class="gallery-card"><a href="./plots/scatter.html">
