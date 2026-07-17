@@ -2,6 +2,7 @@
 
 [Introduction](./introduction.md)
 [Gallery](./gallery.md)
+[Showcase](./showcase.md)
 [Origins](./origins.md)
 [Search](./search.md)
 
