@@ -17,6 +17,7 @@ EXAMPLES=(
     candlestick
     chord
     clustermap
+    colormap_swatches
     contour
     datetime
     density
@@ -60,6 +61,7 @@ EXAMPLES=(
     scatter
     scatter3d
     series
+    showcase
     slope
     stacked_area
     streamgraph

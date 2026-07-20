@@ -166,6 +166,7 @@
 - [Legends](./reference/legends.md)
 - [Themes](./reference/themes.md)
 - [Color Palettes](./reference/palettes.md)
+- [Colormaps](./reference/colormap.md)
 - [Black & White / Accessibility Mode](./reference/bw_mode.md)
 - [SVG Interactivity](./reference/interactive.md)
 - [Date & Time Axes](./reference/datetime.md)
