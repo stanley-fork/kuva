@@ -116,6 +116,20 @@ li.part-title.kuva-toggle.kuva-open::after {
   padding: 14px 18px;
 }
 
+/* ── Tables ──────────────────────────────────────────────────────────────
+   mdBook's own `table { margin: 0 auto }` centers each table as a whole
+   block. Harmless for one table on its own, but pages that stack several
+   short tables in a row (cli/index.md's per-category subcommand tables,
+   flag-reference tables throughout the plot pages) end up with each one
+   independently centered at a different width, so nothing lines up on the
+   left. Left-align the block and its header text instead. */
+table {
+  margin: 0;
+}
+table thead th {
+  text-align: left;
+}
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

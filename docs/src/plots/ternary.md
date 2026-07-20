@@ -136,3 +136,7 @@ kuva ternary data.tsv --a counts_a --b counts_b --c counts_c \
 | `--legend` | off | Show legend |
 
 **See also:** [Polar Plot](./polar.md) for another non-Cartesian coordinate system.
+
+---
+
+*See also: [Shared flags](../cli/index.md#shared-flags) — output, appearance, axes.*

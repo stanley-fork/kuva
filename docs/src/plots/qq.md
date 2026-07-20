@@ -195,3 +195,7 @@ kuva qq gwas.tsv --value pvalue --color-by study --genomic --ci-band --lambda
 | `--y-label <S>` | *(auto)* | Y-axis label |
 
 **See also:** [ECDF Plot](./ecdf.md) for an alternative distribution check, [Manhattan Plot](./manhattan.md) for genomic-inflation Q-Q use, [Histogram](./histogram.md) for a simpler distribution view.
+
+---
+
+*See also: [Shared flags](../cli/index.md#shared-flags) — output, appearance, axes.*

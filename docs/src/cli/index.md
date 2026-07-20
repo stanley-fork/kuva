@@ -97,6 +97,28 @@ kuva scatter data.tsv --x 0 --y 1          # by index
 kuva scatter data.tsv --x time --y value   # by name (requires header)
 ```
 
+### Parquet input
+
+Every subcommand that reads tabular data also accepts **`.parquet`** files, not just scatter or any single subcommand: parquet support lives in the shared input layer every subcommand goes through, so it applies uniformly across all of them.
+
+```bash
+kuva scatter data.parquet --x x --y y -o plot.svg
+cat data.parquet | kuva histogram --value-col value    # also detected via stdin
+```
+
+Requires building with the `parquet` feature (`cargo build --features cli,parquet`, or `cli,full,parquet` for every backend). Without it, a `.parquet` file is read as plain text and will fail to parse.
+
+Detection is automatic, no flag needed:
+
+| Input | How it's detected |
+|---|---|
+| File path | `.parquet` extension (case-insensitive) |
+| stdin | Magic bytes (`PAR1` header) sniffed from the piped data |
+
+Column selection (`--x`, `--y`, `--value-col`, etc.) works identically to CSV/TSV, by index or header name. Under the hood, only the requested columns are decoded from disk (a projected Arrow read), so memory and time scale with the columns you actually select rather than the full schema, useful for wide parquet files with many unused columns.
+
+`--no-header` and `--delimiter` are ignored for parquet input (with a warning) since parquet is self-describing: it always carries its own schema and column names, so there's no header row to skip and no delimiter to guess.
+
 ---
 
 ## Output
@@ -222,106 +244,103 @@ cat gwas.tsv | kuva manhattan --chr-col chr --pvalue-col pvalue --terminal
 
 ## Subcommands
 
+All 56 subcommands, grouped the same way plot pages are grouped in the sidebar. Each link goes straight to that subcommand's **CLI** section at the bottom of its library-equivalent page, right next to the Rust API it wraps — so full per-flag documentation, usage examples, and the builder reference live together on one page instead of two.
+
+### Distributions
+
 | Subcommand | Description |
 |---|---|
-| [scatter](./scatter.md) | Scatter plot of (x, y) point pairs |
-| [line](./line.md) | Line plot |
-| [bar](./bar.md) | Bar chart from label/value pairs |
-| [histogram](./histogram.md) | Frequency histogram from a single numeric column |
-| [density](./density.md) | Kernel density estimate curve |
-| [ridgeline](./ridgeline.md) | Stacked KDE density curves, one per group |
-| [box](./box.md) | Box-and-whisker plot |
-| [violin](./violin.md) | Kernel-density violin plot |
-| [pie](./pie.md) | Pie or donut chart |
-| [forest](./forest.md) | Forest plot — point estimates with confidence intervals |
-| [strip](./strip.md) | Strip / jitter plot |
-| [waterfall](./waterfall.md) | Waterfall / bridge chart |
-| [stacked-area](./stacked_area.md) | Stacked area chart |
-| [volcano](./volcano.md) | Volcano plot for differential expression |
-| [manhattan](./manhattan.md) | Manhattan plot for GWAS results |
-| [candlestick](./candlestick.md) | OHLC candlestick chart |
-| [heatmap](./heatmap.md) | Color-encoded matrix heatmap |
-| [hist2d](./hist2d.md) | Two-dimensional histogram |
-| [contour](./contour.md) | Contour plot from scattered (x, y, z) triplets |
-| [dot](./dot.md) | Dot plot (size + color at categorical positions) |
-| [upset](./upset.md) | UpSet plot for set-intersection analysis |
-| [chord](./chord.md) | Chord diagram for pairwise flow data |
-| [network](./network.md) | Network / graph diagram from edge list or matrix |
-| [sankey](./sankey.md) | Sankey / alluvial flow diagram |
-| [phylo](./phylo.md) | Phylogenetic tree |
-| [synteny](./synteny.md) | Synteny / genomic alignment ribbon plot |
-| [polar](./polar.md) | Polar coordinate scatter/line plot |
-| [ternary](./ternary.md) | Ternary (simplex) scatter plot |
-| [scatter3d](./scatter3d.md) | 3D scatter plot with orthographic projection |
-| [surface3d](./surface3d.md) | 3D surface mesh with depth-sorted rendering |
-| [quiver](./quiver.md) | 2-D vector field rendered as arrows |
+| [histogram](../plots/histogram.md#cli) | Frequency histogram from one or more numeric columns |
+| [hist2d](../plots/histogram2d.md#cli) | Two-dimensional histogram (density grid) from two numeric columns |
+| [density](../plots/density.md#cli) | Kernel density estimate curve |
+| [ridgeline](../plots/ridgeline.md#cli) | Stacked KDE density curves, one per group |
+| [ecdf](../plots/ecdf.md#cli) | Empirical cumulative distribution function |
+| [qq](../plots/qq.md#cli) | Q-Q (quantile-quantile) plot |
+| [box](../plots/boxplot.md#cli) | Box-and-whisker plot |
+| [violin](../plots/violin.md#cli) | Kernel-density violin plot |
+| [strip](../plots/strip.md#cli) | Strip / jitter plot |
+| [raincloud](../plots/raincloud.md#cli) | Half-violin KDE cloud, box, and jittered points combined |
+| [hexbin](../plots/hexbin.md#cli) | Hexagonal-bin density plot from two numeric columns |
+| [heatmap](../plots/heatmap.md#cli) | Color-encoded matrix heatmap |
 
----
+### Relationships & correlation
 
-## scatter3d
+| Subcommand | Description |
+|---|---|
+| [scatter](../plots/scatter.md#cli) | Scatter plot of (x, y) point pairs |
+| [line](../plots/line.md#cli) | Line plot |
+| [contour](../plots/contour.md#cli) | Contour plot from scattered (x, y, z) triplets |
+| [parallel](../plots/parallel.md#cli) | Parallel coordinates, one axis per variable |
+| [polar](../plots/polar.md#cli) | Polar coordinate scatter/line plot |
+| [ternary](../plots/ternary.md#cli) | Ternary (simplex) scatter plot |
+| [quiver](../plots/quiver.md#cli) | 2-D vector field rendered as arrows |
 
-3D scatter plot with orthographic projection and depth-sorted rendering.
+### Categorical & comparison
 
-**Input:** TSV/CSV with three numeric columns for X, Y, Z coordinates, plus an optional group column.
+| Subcommand | Description |
+|---|---|
+| [bar](../plots/bar.md#cli) | Bar chart from label/value pairs |
+| [pie](../plots/pie.md#cli) | Pie or donut chart |
+| [waffle](../plots/waffle.md#cli) | Proportional grid of filled cells |
+| [funnel](../plots/funnel.md#cli) | Stage-by-stage attrition funnel |
+| [pareto](../plots/pareto.md#cli) | Bars sorted descending, plus a cumulative-percentage line |
+| [pyramid](../plots/pyramid.md#cli) | Population pyramid (back-to-back horizontal bars) |
+| [lollipop](../plots/lollipop.md#cli) | Dot-and-stem alternative to bar charts |
+| [slope](../plots/slope.md#cli) | Paired before/after comparisons |
+| [dot](../plots/dotplot.md#cli) | Dot plot (size + color at categorical positions) |
+| [mosaic](../plots/mosaic.md#cli) | Mosaic / Marimekko two-way contingency table |
+| [venn](../plots/venn.md#cli) | Venn diagram, 2 to 4 overlapping sets |
+| [upset](../plots/upset.md#cli) | UpSet plot for set-intersection analysis |
+| [radar](../plots/radar.md#cli) | Radar / spider chart |
+| [rose](../plots/rose.md#cli) | Nightingale rose (coxcomb) chart |
 
-| Flag | Default | Description |
-|---|---|---|
-| `--x <COL>` | `0` | X coordinate column |
-| `--y <COL>` | `1` | Y coordinate column |
-| `--z <COL>` | `2` | Z coordinate column |
-| `--color-by <COL>` | — | Group by column for per-group colors |
-| `--color <CSS>` | `steelblue` | Point color |
-| `--size <PX>` | `3.0` | Point radius in pixels |
-| `--azimuth <DEG>` | `-60` | Azimuth viewing angle |
-| `--elevation <DEG>` | `30` | Elevation viewing angle |
-| `--z-color <MAP>` | — | Color by Z: viridis, inferno, grayscale |
-| `--depth-shade` | off | Fade distant points for depth cue |
-| `--z-axis-left` | off | Place Z-axis on the left side |
-| `--no-grid` | off | Hide grid lines on back walls |
-| `--no-box` | off | Hide wireframe bounding box |
-| `--grid-lines <N>` | `5` | Grid/tick divisions per axis |
+### Time series
 
-```bash
-kuva scatter3d data.tsv --x x --y y --z z \
-    --title "3D Scatter" --x-label "X" --y-label "Y" --z-label "Z"
+| Subcommand | Description |
+|---|---|
+| [stacked-area](../plots/stacked_area.md#cli) | Stacked area chart |
+| [streamgraph](../plots/streamgraph.md#cli) | Flowing stacked area with a displaced baseline |
+| [candlestick](../plots/candlestick.md#cli) | OHLC candlestick chart |
+| [waterfall](../plots/waterfall.md#cli) | Running total built from incremental bars |
+| [horizon](../plots/horizon.md#cli) | Folded stacked time series for many series in limited height |
+| [calendar](../plots/calendar.md#cli) | GitHub-style daily contribution grid |
+| [gantt](../plots/gantt.md#cli) | Task bars with milestones and a "now" line |
+| [bump](../plots/bump.md#cli) | Rank changes over time |
 
-kuva scatter3d data.tsv --x x --y y --z z --color-by group \
-    --z-color viridis --depth-shade
-```
+### Statistical & model evaluation
 
----
+| Subcommand | Description |
+|---|---|
+| [roc](../plots/roc.md#cli) | ROC curve for binary classifiers |
+| [pr](../plots/pr.md#cli) | Precision-recall curve |
+| [survival](../plots/survival.md#cli) | Kaplan-Meier survival curve |
+| [forest](../plots/forest.md#cli) | Point estimates with confidence intervals |
 
-## surface3d
+### Hierarchical & network
 
-3D surface mesh with depth-sorted filled quadrilaterals.
+| Subcommand | Description |
+|---|---|
+| [treemap](../plots/treemap.md#cli) | Tile a rectangle proportionally to values |
+| [sunburst](../plots/sunburst.md#cli) | Radial hierarchy chart |
+| [network](../plots/network.md#cli) | Graph diagram from an edge list or adjacency matrix |
+| [sankey](../plots/sankey.md#cli) | Sankey / alluvial flow diagram |
+| [chord](../plots/chord.md#cli) | Chord diagram for pairwise flow data |
+| [phylo](../plots/phylo.md#cli) | Phylogenetic tree from a Newick string or edge-list |
 
-**Input:** Either XYZ columns (long format, auto-pivoted to grid) or `--matrix` mode where each row is a grid row of Z values.
+### Genomics & bioinformatics
 
-| Flag | Default | Description |
-|---|---|---|
-| `--x <COL>` | `0` | X coordinate column (long format) |
-| `--y <COL>` | `1` | Y coordinate column (long format) |
-| `--z <COL>` | `2` | Z coordinate column (long format) |
-| `--matrix` | off | Read as Z-value matrix (one row per grid row) |
-| `--z-color <MAP>` | — | Color by Z: viridis, inferno, grayscale |
-| `--color <CSS>` | `steelblue` | Uniform surface color (when no colormap) |
-| `--alpha <F>` | `1.0` | Surface opacity (0.0–1.0) |
-| `--no-wireframe` | off | Disable wireframe edges on mesh |
-| `--resolution <N>` | — | Upsample grid to NxN via bilinear interpolation (max 1000) |
-| `--azimuth <DEG>` | `-60` | Azimuth viewing angle |
-| `--elevation <DEG>` | `30` | Elevation viewing angle |
-| `--z-axis-left` | off | Place Z-axis on the left side |
-| `--no-grid` | off | Hide grid lines on back walls |
-| `--no-box` | off | Hide wireframe bounding box |
-| `--grid-lines <N>` | `5` | Grid/tick divisions per axis |
+| Subcommand | Description |
+|---|---|
+| [manhattan](../plots/manhattan.md#cli) | Manhattan plot for GWAS results |
+| [volcano](../plots/volcano.md#cli) | Volcano plot for differential expression |
+| [synteny](../plots/synteny.md#cli) | Genomic alignment ribbon plot |
 
-```bash
-kuva surface3d data.tsv --x x --y y --z z --z-color viridis \
-    --title "3D Surface"
+### 3D
 
-kuva surface3d matrix.tsv --matrix --z-color inferno \
-    --resolution 50 --alpha 0.9
-```
+| Subcommand | Description |
+|---|---|
+| [scatter3d](../plots/scatter3d.md#cli) | 3D scatter plot with orthographic projection |
+| [surface3d](../plots/surface3d.md#cli) | 3D surface mesh with depth-sorted rendering |
 
 ---
 
