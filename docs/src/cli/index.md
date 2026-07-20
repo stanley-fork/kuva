@@ -269,6 +269,16 @@ kuva line prices.tsv --x date --y close \
 
 See [Reference → Date & Time Axes](../reference/datetime.md) for the underlying `DateTimeAxis` API.
 
+### Secondary Y axis *(twin-y)*
+
+| Flag | Description |
+|---|---|
+| `--y2-label <TEXT>` | Label for the secondary (right) Y axis |
+| `--y2-min <F>` | Fix the secondary Y axis lower bound; overrides auto-range |
+| `--y2-max <F>` | Fix the secondary Y axis upper bound; overrides auto-range |
+| `--log-y2` | Log-scale the secondary Y axis |
+| `--y2-tick-format <FORMAT>` | Tick label format for the secondary Y axis: auto (default), int, sci, percent, or fixed:N |
+
 ### Input
 
 | Flag | Description |
@@ -280,7 +290,7 @@ See [Reference → Date & Time Axes](../reference/datetime.md) for the underlyin
 
 ## Subcommands
 
-All 56 subcommands, grouped the same way plot pages are grouped in the sidebar. Each link goes straight to that subcommand's **CLI** section at the bottom of its library-equivalent page, right next to the Rust API it wraps — so full per-flag documentation, usage examples, and the builder reference live together on one page instead of two.
+All 57 subcommands, grouped the same way plot pages are grouped in the sidebar. Each link goes straight to that subcommand's **CLI** section at the bottom of its library-equivalent page, right next to the Rust API it wraps — so full per-flag documentation, usage examples, and the builder reference live together on one page instead of two.
 
 ### Distributions
 
@@ -377,6 +387,12 @@ All 56 subcommands, grouped the same way plot pages are grouped in the sidebar. 
 |---|---|
 | [scatter3d](../plots/scatter3d.md#cli) | 3D scatter plot with orthographic projection |
 | [surface3d](../plots/surface3d.md#cli) | 3D surface mesh with depth-sorted rendering |
+
+### Composite & Utility
+
+| Subcommand | Description |
+|---|---|
+| [twin-y](../plots/twin_y.md#cli) | Two series sharing an x-axis with independent primary/secondary y-scales |
 
 ---
 

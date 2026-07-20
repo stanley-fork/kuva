@@ -402,6 +402,15 @@ pub struct Layout {
     pub y_axis_min: Option<f64>,
     /// Override the upper bound of the y-axis after auto-ranging.
     pub y_axis_max: Option<f64>,
+    /// Override the lower bound of the secondary (twin-Y) y-axis after
+    /// auto-ranging — mirrors `y_axis_min` for the y2 axis. Unlike
+    /// `with_y2_range` (which still gets nice-rounded and capped near the
+    /// underlying data via the same path as the auto-computed range), this
+    /// is an unconditional override, exactly like `y_axis_min`/`y_axis_max`.
+    pub y2_axis_min: Option<f64>,
+    /// Override the upper bound of the secondary (twin-Y) y-axis after
+    /// auto-ranging. See `y2_axis_min`.
+    pub y2_axis_max: Option<f64>,
     /// Explicit major tick step for the x-axis.  Skips auto computation when set.
     pub x_tick_step: Option<f64>,
     /// Explicit major tick step for the y-axis.  Skips auto computation when set.
@@ -564,6 +573,8 @@ impl Layout {
             x_axis_max: None,
             y_axis_min: None,
             y_axis_max: None,
+            y2_axis_min: None,
+            y2_axis_max: None,
             x_tick_step: None,
             y_tick_step: None,
             minor_ticks: None,
@@ -2598,6 +2609,23 @@ impl Layout {
         self.y_axis_max = Some(v);
         self
     }
+
+    /// Unconditionally override the secondary (twin-Y) y-axis lower bound
+    /// after auto-ranging — the y2 counterpart to `with_y_axis_min`. Prefer
+    /// this over `with_y2_range` when the requested bound is far from the
+    /// secondary plots' own data range: `with_y2_range` still gets nice-
+    /// rounded and capped near the data (the same path the auto-computed
+    /// range takes), so a far-off request there can end up largely ignored.
+    pub fn with_y2_axis_min(mut self, v: f64) -> Self {
+        self.y2_axis_min = Some(v);
+        self
+    }
+    /// Unconditionally override the secondary (twin-Y) y-axis upper bound
+    /// after auto-ranging. See `with_y2_axis_min`.
+    pub fn with_y2_axis_max(mut self, v: f64) -> Self {
+        self.y2_axis_max = Some(v);
+        self
+    }
     pub fn with_x_tick_step(mut self, s: f64) -> Self {
         self.x_tick_step = Some(s);
         self
@@ -3364,6 +3392,17 @@ impl ComputedLayout {
                 false,
             )
         });
+        // Apply explicit y2-axis-range overrides (after auto-ranging/capping),
+        // exactly like x_axis_min/x_axis_max and y_axis_min/y_axis_max above.
+        let y2_range = if layout.y2_axis_min.is_some() || layout.y2_axis_max.is_some() {
+            let (auto_min, auto_max) = y2_range.unwrap_or((0.0, 1.0));
+            Some((
+                layout.y2_axis_min.unwrap_or(auto_min),
+                layout.y2_axis_max.unwrap_or(auto_max),
+            ))
+        } else {
+            y2_range
+        };
 
         let x2_range = layout.x2_range.map(|range| {
             resolve_axis_range(

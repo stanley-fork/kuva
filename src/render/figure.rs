@@ -988,6 +988,8 @@ fn clone_layout(l: &Layout) -> Layout {
     new.x_axis_max = l.x_axis_max;
     new.y_axis_min = l.y_axis_min;
     new.y_axis_max = l.y_axis_max;
+    new.y2_axis_min = l.y2_axis_min;
+    new.y2_axis_max = l.y2_axis_max;
     new.x_datetime = l.x_datetime.clone();
     new.y_datetime = l.y_datetime.clone();
     new.x_tick_rotate = l.x_tick_rotate;

@@ -55,6 +55,7 @@ mod survival;
 mod synteny;
 mod ternary;
 mod treemap;
+mod twin_y;
 mod upset;
 mod venn;
 mod violin;
@@ -166,6 +167,9 @@ enum Commands {
     Gantt(gantt::GanttArgs),
     /// Quiver plot — 2-D vector field rendered as arrows.
     Quiver(quiver::QuiverArgs),
+    /// Twin-Y (dual-axis) plot — two series sharing an x-axis with independent y-scales.
+    #[command(name = "twin-y")]
+    TwinY(twin_y::TwinYArgs),
     #[cfg(feature = "doom")]
     /// Generate a self-contained DOOM SVG playable in any browser.
     Doom(doom::DoomArgs),
@@ -239,6 +243,7 @@ fn main() {
         Commands::Calendar(args) => calendar::run(args),
         Commands::Gantt(args) => gantt::run(args),
         Commands::Quiver(args) => quiver::run(args),
+        Commands::TwinY(args) => twin_y::run(args),
         #[cfg(feature = "doom")]
         Commands::Doom(args) => doom::run(args),
         Commands::Man => unreachable!(),

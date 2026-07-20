@@ -266,6 +266,35 @@ pub struct DateArgs {
     pub x_date_tick_step: Option<usize>,
 }
 
+/// Controls for a secondary (right-hand) Y axis — currently only meaningful
+/// on `kuva twin-y`, which is the only subcommand with a real secondary Y axis
+/// exposed to CLI configuration (`ParetoPlot`'s secondary axis is fixed 0-100%
+/// and needs no flags).
+#[derive(Args, Debug)]
+#[command(next_help_heading = "Secondary Y axis")]
+pub struct Y2AxisArgs {
+    /// Label for the secondary (right) Y axis.
+    #[arg(long)]
+    pub y2_label: Option<String>,
+
+    /// Fix the secondary Y axis lower bound; overrides auto-range.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_min: Option<f64>,
+
+    /// Fix the secondary Y axis upper bound; overrides auto-range.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_max: Option<f64>,
+
+    /// Log-scale the secondary Y axis.
+    #[arg(long)]
+    pub log_y2: bool,
+
+    /// Tick label format for the secondary Y axis.
+    /// auto (default), int, sci, percent, or fixed:N (e.g. fixed:2 → "3.14").
+    #[arg(long, value_name = "FORMAT")]
+    pub y2_tick_format: Option<String>,
+}
+
 // ── Apply functions ───────────────────────────────────────────────────────────
 
 /// Apply base output/appearance args to a layout.
@@ -421,6 +450,28 @@ pub fn apply_axis_args(mut layout: Layout, args: &AxisArgs) -> Layout {
     if let Some(ref s) = args.x_label_overlap {
         if let Some(strategy) = parse_label_overlap(s) {
             layout = layout.with_x_label_overlap(strategy);
+        }
+    }
+    layout
+}
+
+/// Apply secondary-Y-axis args to a layout.
+pub fn apply_y2_axis_args(mut layout: Layout, args: &Y2AxisArgs) -> Layout {
+    if let Some(ref l) = args.y2_label {
+        layout = layout.with_y2_label(l.clone());
+    }
+    if let Some(v) = args.y2_min {
+        layout = layout.with_y2_axis_min(v);
+    }
+    if let Some(v) = args.y2_max {
+        layout = layout.with_y2_axis_max(v);
+    }
+    if args.log_y2 {
+        layout = layout.with_log_y2();
+    }
+    if let Some(ref fmt) = args.y2_tick_format {
+        if let Some(tf) = parse_tick_format(fmt) {
+            layout = layout.with_y2_tick_format(tf);
         }
     }
     layout

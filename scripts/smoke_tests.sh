@@ -1174,6 +1174,33 @@ check "minor gridlines log coverage" \
         --title "Minor Gridlines (log Y)" --x-label "X" --y-label "Y (log)"
 rm -f "$MINOR_LOG_DATA"
 
+# ── twin-y ────────────────────────────────────────────────────────────────────
+TWIN_Y_DATA="${TMPDIR:-/tmp}/kuva_twin_y_$$.tsv"
+printf 'month\ttemp\train\n1\t5\t80\n2\t8\t60\n3\t14\t45\n4\t20\t30\n5\t24\t20\n6\t22\t35\n' > "$TWIN_Y_DATA"
+
+check "twin-y basic" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --y-label "Temperature (C)" --y2-label "Rainfall (mm)" \
+        --title "Temperature & Rainfall"
+
+check "twin-y styled with legend" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --primary-color "#e69f00" --secondary-color "#0072b2" \
+        --primary-legend "Temperature" --secondary-legend "Rainfall" --legend
+
+check "twin-y scatter+line mix" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --primary-type scatter --secondary-type line
+
+check "twin-y explicit y2 range and log" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --y2-min 1 --y2-max 200 --log-y2
+
+check_error "twin-y unsupported plot type" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain --primary-type bar
+
+rm -f "$TWIN_Y_DATA"
+
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
