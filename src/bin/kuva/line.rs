@@ -8,7 +8,8 @@ use kuva::render::render::render_multiple;
 
 use crate::data::{ColSpec, DataTable, InputArgs};
 use crate::layout_args::{
-    apply_axis_args, apply_base_args, apply_log_args, AxisArgs, BaseArgs, LogArgs,
+    apply_axis_args, apply_base_args, apply_log_args, date_axis_from_args, AxisArgs, BaseArgs,
+    DateArgs, LogArgs,
 };
 use crate::output::write_output;
 
@@ -63,6 +64,8 @@ pub struct LineArgs {
     pub axis: AxisArgs,
     #[command(flatten)]
     pub log: LogArgs,
+    #[command(flatten)]
+    pub date: DateArgs,
 }
 
 pub fn run(args: LineArgs) -> Result<(), String> {
@@ -100,6 +103,15 @@ pub fn run(args: LineArgs) -> Result<(), String> {
     };
     let fill = args.fill;
     let legend = args.legend;
+    // When --x-date-format is set, the X column holds date/time strings, not
+    // plain numbers — parse it accordingly wherever `col_f64` would otherwise
+    // be used for X.
+    let read_x = |t: &DataTable, c: &ColSpec| -> Result<Vec<f64>, String> {
+        match &args.date.x_date_format {
+            Some(fmt) => t.col_date_f64(c, fmt),
+            None => t.col_f64(c),
+        }
+    };
 
     let line_plots: Vec<LinePlot> = if let Some(color_by) = args.color_by {
         if y_cols.len() > 1 {
@@ -118,7 +130,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
             .into_iter()
             .zip(colors)
             .map(|((name, subtable), grp_color)| {
-                let xs = subtable.col_f64(&x_col)?;
+                let xs = read_x(&subtable, &x_col)?;
                 let ys = subtable.col_f64(y_col)?;
                 let mut data: Vec<(f64, f64)> = xs.into_iter().zip(ys).collect();
                 data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -142,7 +154,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
     } else if y_cols.len() > 1 {
         // Multi-column mode: one series per y column, auto-colored by palette.
         let palette = Palette::category10();
-        let xs = table.col_f64(&x_col)?;
+        let xs = read_x(&table, &x_col)?;
 
         y_cols
             .iter()
@@ -172,7 +184,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
             .collect::<Result<Vec<_>, String>>()?
     } else {
         let y_col = &y_cols[0];
-        let xs = table.col_f64(&x_col)?;
+        let xs = read_x(&table, &x_col)?;
         let ys = table.col_f64(y_col)?;
         let mut data: Vec<(f64, f64)> = xs.into_iter().zip(ys).collect();
         data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -192,6 +204,9 @@ pub fn run(args: LineArgs) -> Result<(), String> {
 
     #[cfg(feature = "emit_code")]
     if args.base.emit_code {
+        // Known fidelity gap: see the matching comment in scatter.rs — the
+        // emitted snippet's x values are correct resolved f64 timestamps, but
+        // it won't include a `.with_x_datetime(...)` call for --x-date-format.
         let exprs: Vec<String> = line_plots
             .iter()
             .map(crate::emit_code::emit_line_plot)
@@ -215,6 +230,12 @@ pub fn run(args: LineArgs) -> Result<(), String> {
     let layout = apply_base_args(layout, &args.base);
     let layout = apply_axis_args(layout, &args.axis);
     let layout = apply_log_args(layout, &args.log);
+    let layout = if let Some(ref fmt) = args.date.x_date_format {
+        let xs = table.col_date_f64(&x_col, fmt)?;
+        layout.with_x_datetime(date_axis_from_args(&args.date, &xs))
+    } else {
+        layout
+    };
     let scene = render_multiple(plots, layout);
     write_output(scene, &args.base)
 }

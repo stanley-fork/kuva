@@ -8,7 +8,8 @@ use kuva::render::render::render_multiple;
 
 use crate::data::{ColSpec, DataTable, InputArgs};
 use crate::layout_args::{
-    apply_axis_args, apply_base_args, apply_log_args, AxisArgs, BaseArgs, LogArgs,
+    apply_axis_args, apply_base_args, apply_log_args, date_axis_from_args, AxisArgs, BaseArgs,
+    DateArgs, LogArgs,
 };
 use crate::output::write_output;
 
@@ -63,6 +64,8 @@ pub struct ScatterArgs {
     pub axis: AxisArgs,
     #[command(flatten)]
     pub log: LogArgs,
+    #[command(flatten)]
+    pub date: DateArgs,
 }
 
 pub fn run(args: ScatterArgs) -> Result<(), String> {
@@ -95,6 +98,15 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
     } else {
         args.y
     };
+    // When --x-date-format is set, the X column holds date/time strings, not
+    // plain numbers — parse it accordingly wherever `col_f64` would otherwise
+    // be used for X.
+    let read_x = |t: &DataTable, c: &ColSpec| -> Result<Vec<f64>, String> {
+        match &args.date.x_date_format {
+            Some(fmt) => t.col_date_f64(c, fmt),
+            None => t.col_f64(c),
+        }
+    };
 
     let mut plots: Vec<ScatterPlot> = if let Some(color_by) = args.color_by {
         if y_cols.len() > 1 {
@@ -111,7 +123,7 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
             .into_iter()
             .enumerate()
             .map(|(i, (name, subtable))| {
-                let xs = subtable.col_f64(&x_col)?;
+                let xs = read_x(&subtable, &x_col)?;
                 let ys = subtable.col_f64(y_col)?;
                 let data: Vec<(f64, f64)> = xs.into_iter().zip(ys).collect();
                 let grp_color = palette[i].to_string();
@@ -129,7 +141,7 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
     } else if y_cols.len() > 1 {
         // Multi-column mode: one series per y column, auto-colored by palette.
         let palette = Palette::category10();
-        let xs = table.col_f64(&x_col)?;
+        let xs = read_x(&table, &x_col)?;
         y_cols
             .iter()
             .enumerate()
@@ -151,7 +163,7 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
             .collect::<Result<Vec<_>, String>>()?
     } else {
         let y_col = &y_cols[0];
-        let xs = table.col_f64(&x_col)?;
+        let xs = read_x(&table, &x_col)?;
         let ys = table.col_f64(y_col)?;
         let data: Vec<(f64, f64)> = xs.into_iter().zip(ys).collect();
         let plot = ScatterPlot::new()
@@ -176,6 +188,11 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
 
     #[cfg(feature = "emit_code")]
     if args.base.emit_code {
+        // Known fidelity gap: `--x-date-format` resolves to plain f64 timestamp
+        // literals in the emitted point data (correct), but `assemble` has no
+        // `DateArgs` parameter, so the emitted snippet won't include the
+        // matching `.with_x_datetime(...)` call — the axis renders as a plain
+        // number scale until the emitted code adds that manually.
         let exprs: Vec<String> = plots
             .iter()
             .map(crate::emit_code::emit_scatter_plot)
@@ -199,6 +216,12 @@ pub fn run(args: ScatterArgs) -> Result<(), String> {
     let layout = apply_base_args(layout, &args.base);
     let layout = apply_axis_args(layout, &args.axis);
     let layout = apply_log_args(layout, &args.log);
+    let layout = if let Some(ref fmt) = args.date.x_date_format {
+        let xs = table.col_date_f64(&x_col, fmt)?;
+        layout.with_x_datetime(date_axis_from_args(&args.date, &xs))
+    } else {
+        layout
+    };
     let scene = render_multiple(plots, layout);
     write_output(scene, &args.base)
 }

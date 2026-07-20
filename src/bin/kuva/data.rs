@@ -204,6 +204,28 @@ impl DataTable {
             .collect()
     }
 
+    /// Extract a column as f64 Unix timestamps (seconds), parsing each cell with
+    /// `format` (a chrono strftime pattern, e.g. `"%Y-%m-%d"` or `"%m/%d/%Y %H:%M"`).
+    ///
+    /// Tries a full datetime parse first, falling back to a date-only parse at
+    /// midnight UTC when `format` has no time component — the same UTC-midnight
+    /// convention as `kuva::render::datetime::ymd`.
+    pub fn col_date_f64(&self, col: &ColSpec, format: &str) -> Result<Vec<f64>, String> {
+        let idx = self.resolve(col)?;
+        self.rows
+            .iter()
+            .enumerate()
+            .map(|(row_i, row)| {
+                let s = row
+                    .get(idx)
+                    .ok_or_else(|| format!("Row {row_i}: no column at index {idx}"))?;
+                parse_date_to_timestamp(s, format).ok_or_else(|| {
+                    format!("Row {row_i}: cannot parse '{s}' as a date/time with format '{format}'")
+                })
+            })
+            .collect()
+    }
+
     /// Extract a column as strings.
     pub fn col_str(&self, col: &ColSpec) -> Result<Vec<String>, String> {
         let idx = self.resolve(col)?;
@@ -263,6 +285,19 @@ impl DataTable {
             })
             .collect())
     }
+}
+
+/// Parse `s` as a date/time in `format`, returning a Unix timestamp (seconds).
+/// Tries a full datetime parse first; falls back to a date-only parse anchored
+/// at midnight UTC (so a pure-date format like `"%Y-%m-%d"` works without the
+/// caller needing to add a fake time-of-day to the format string).
+fn parse_date_to_timestamp(s: &str, format: &str) -> Option<f64> {
+    use chrono::{NaiveDate, NaiveDateTime};
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, format) {
+        return Some(dt.and_utc().timestamp() as f64);
+    }
+    let date = NaiveDate::parse_from_str(s, format).ok()?;
+    Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp() as f64)
 }
 
 fn sniff_delim(content: &str) -> char {

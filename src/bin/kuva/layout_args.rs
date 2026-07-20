@@ -1,4 +1,5 @@
 use clap::Args;
+use kuva::render::datetime::DateTimeAxis;
 use kuva::render::layout::{AxisLabelOverlap, AxisLine, Layout, TickAlign, TickFormat, TickPos};
 use kuva::render::palette::Palette;
 use kuva::render::theme::Theme;
@@ -8,6 +9,7 @@ use kuva::render::theme::Theme;
 //   Pie                    →  BaseArgs
 //   Bar / Box / Violin     →  BaseArgs + AxisArgs
 //   Scatter / Line / Hist  →  BaseArgs + AxisArgs + LogArgs
+//   Scatter / Line         →  ... + DateArgs (date/time X axis)
 
 #[derive(Args, Debug)]
 #[command(next_help_heading = "Output & appearance")]
@@ -238,6 +240,32 @@ pub struct LogArgs {
     pub log_y: bool,
 }
 
+#[derive(Args, Debug)]
+#[command(next_help_heading = "Date/time axis")]
+pub struct DateArgs {
+    /// Parse the X column as a date/time using this strftime-style format
+    /// (e.g. "%Y-%m-%d" or "%m/%d/%Y %H:%M") instead of a plain number.
+    /// Formats with no time component parse as midnight UTC.
+    #[arg(long, value_name = "FMT")]
+    pub x_date_format: Option<String>,
+
+    /// Tick spacing unit for the date axis: years, months, weeks, days, hours,
+    /// or minutes. Default: auto (inspects the data range and picks one).
+    /// Ignored unless --x-date-format is set.
+    #[arg(long, value_name = "UNIT")]
+    pub x_date_unit: Option<String>,
+
+    /// Tick label format (strftime-style), overriding the unit's default
+    /// format. Ignored in auto mode (i.e. when --x-date-unit is not set).
+    #[arg(long, value_name = "FMT")]
+    pub x_date_tick_format: Option<String>,
+
+    /// Draw one date-axis tick every N units instead of every 1.
+    /// Ignored unless --x-date-format is set.
+    #[arg(long, value_name = "N")]
+    pub x_date_tick_step: Option<usize>,
+}
+
 // ── Apply functions ───────────────────────────────────────────────────────────
 
 /// Apply base output/appearance args to a layout.
@@ -407,6 +435,56 @@ pub fn apply_log_args(mut layout: Layout, args: &LogArgs) -> Layout {
         layout = layout.with_log_y();
     }
     layout
+}
+
+/// Build a `DateTimeAxis` from `--x-date-*` flags and the already-parsed x
+/// values (needed for `DateTimeAxis::auto`'s data-range inspection). Callers
+/// only invoke this when `args.x_date_format` is set — that flag is what
+/// actually switches the x column from a numeric to a date/time parse; this
+/// function only decides how the resulting timestamps are ticked.
+pub fn date_axis_from_args(args: &DateArgs, xs: &[f64]) -> DateTimeAxis {
+    let axis = match args.x_date_unit.as_deref() {
+        Some(unit) => {
+            let fmt = args
+                .x_date_tick_format
+                .clone()
+                .unwrap_or_else(|| default_date_tick_format(unit).to_string());
+            match unit.to_ascii_lowercase().as_str() {
+                "years" | "year" => DateTimeAxis::years(&fmt),
+                "months" | "month" => DateTimeAxis::months(&fmt),
+                "weeks" | "week" => DateTimeAxis::weeks(&fmt),
+                "days" | "day" => DateTimeAxis::days(&fmt),
+                "hours" | "hour" => DateTimeAxis::hours(&fmt),
+                "minutes" | "minute" => DateTimeAxis::minutes(&fmt),
+                _ => auto_date_axis(xs),
+            }
+        }
+        None => auto_date_axis(xs),
+    };
+    match args.x_date_tick_step {
+        Some(step) => axis.with_step(step),
+        None => axis,
+    }
+}
+
+fn auto_date_axis(xs: &[f64]) -> DateTimeAxis {
+    let min = xs.iter().copied().fold(f64::MAX, f64::min);
+    let max = xs.iter().copied().fold(f64::MIN, f64::max);
+    DateTimeAxis::auto(min, max)
+}
+
+/// Default tick-label format per unit — matches the "Typical format" column
+/// in the Date & Time Axes reference docs.
+fn default_date_tick_format(unit: &str) -> &'static str {
+    match unit.to_ascii_lowercase().as_str() {
+        "years" | "year" => "%Y",
+        "months" | "month" => "%b %Y",
+        "weeks" | "week" => "%b %d",
+        "days" | "day" => "%Y-%m-%d",
+        "hours" | "hour" => "%H:%M",
+        "minutes" | "minute" => "%H:%M",
+        _ => "%Y-%m-%d",
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

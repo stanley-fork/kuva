@@ -234,6 +234,41 @@ cat gwas.tsv | kuva manhattan --chr-col chr --pvalue-col pvalue --terminal
 | `--log-x` | Logarithmic X axis |
 | `--log-y` | Logarithmic Y axis |
 
+### Date/time X axis *(scatter, line)*
+
+| Flag | Default | Description |
+|---|---|---|
+| `--x-date-format <FMT>` | — | Parse the X column as a date/time using this `strftime`-style format (e.g. `%Y-%m-%d`, `%m/%d/%Y %H:%M`) instead of a plain number. Formats with no time component parse as midnight UTC. |
+| `--x-date-unit <UNIT>` | auto | Tick spacing unit: `years`, `months`, `weeks`, `days`, `hours`, or `minutes`. Omit for auto mode, which inspects the data range and picks one. Ignored unless `--x-date-format` is set. |
+| `--x-date-tick-format <FMT>` | *(per-unit default)* | Tick label format, overriding the unit's default (see table below). Ignored in auto mode. |
+| `--x-date-tick-step <N>` | `1` | Draw one tick every `N` units instead of every 1. |
+
+Default tick format per unit (used when `--x-date-tick-format` is omitted):
+
+| Unit | Default format | Example |
+|---|---|---|
+| `years` | `%Y` | `2024` |
+| `months` | `%b %Y` | `Jan 2024` |
+| `weeks` | `%b %d` | `Jan 15` |
+| `days` | `%Y-%m-%d` | `2024-01-15` |
+| `hours` | `%H:%M` | `14:30` |
+| `minutes` | `%H:%M` | `14:30` |
+
+```bash
+# Auto mode: format and unit picked from the data range
+kuva line prices.tsv --x date --y close --x-date-format "%Y-%m-%d"
+
+# Explicit unit and tick format
+kuva scatter prices.tsv --x date --y close \
+    --x-date-format "%Y-%m-%d" --x-date-unit months --x-date-tick-format "%b %y"
+
+# One tick every 2 weeks
+kuva line prices.tsv --x date --y close \
+    --x-date-format "%Y-%m-%d" --x-date-unit weeks --x-date-tick-step 2
+```
+
+See [Reference → Date & Time Axes](../reference/datetime.md) for the underlying `DateTimeAxis` API.
+
 ### Input
 
 | Flag | Description |

@@ -334,11 +334,14 @@ Line plot. Identical column flags to scatter; adds line-style options.
 | `--dotted` | off | Dotted line style |
 | `--fill` | off | Fill area under the line |
 | `--legend` | off | Show legend |
+| `--x-date-format <FMT>` | — | Parse the X column as a date/time (see [Date/time X axis](../cli/index.md#datetime-x-axis-scatter-line)) |
 
 ```bash
 kuva line measurements.tsv --x time --y value --color-by group --legend
 
 kuva line measurements.tsv --x time --y value --fill --color "rgba(70,130,180,0.4)"
+
+kuva line prices.tsv --x date --y close --x-date-format "%Y-%m-%d"
 ```
 
 ---

@@ -126,6 +126,15 @@ check "scatter multi-y three columns no legend" \
 check_error "scatter multi-y color-by conflict" \
     "$BIN" scatter "$DATA/measurements.tsv" --x time --y value,time --color-by group
 
+check "scatter date x-axis auto" \
+    "$BIN" scatter "$DATA/candlestick.tsv" --x date --y close \
+        --x-date-format "%Y-%m-%d" --title "Close price over time"
+
+check "scatter date x-axis explicit unit" \
+    "$BIN" scatter "$DATA/candlestick.tsv" --x date --y close \
+        --x-date-format "%Y-%m-%d" --x-date-unit months --x-date-tick-format "%b %y" \
+        --title "Close price by month"
+
 # ── line ──────────────────────────────────────────────────────────────────────
 check "line color-by" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value --color-by group \
@@ -142,6 +151,10 @@ check "line multi-y two columns" \
 check "line multi-y with fill" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value,time --fill --legend \
         --title "Line Multi-Y Filled" --x-label "Time" --y-label "Value"
+
+check "line date x-axis auto" \
+    "$BIN" line "$DATA/candlestick.tsv" --x date --y close \
+        --x-date-format "%Y-%m-%d" --title "Close price over time"
 
 check "line multi-y dashed" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value,time --dashed \

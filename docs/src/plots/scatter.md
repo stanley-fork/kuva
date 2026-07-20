@@ -473,6 +473,7 @@ Scatter plot of (x, y) point pairs. Supports multi-series coloring, trend lines,
 | `--equation` | off | Annotate with regression equation (requires `--trend`) |
 | `--correlation` | off | Annotate with Pearson R² (requires `--trend`) |
 | `--legend` | off | Show legend |
+| `--x-date-format <FMT>` | — | Parse the X column as a date/time (see [Date/time X axis](../cli/index.md#datetime-x-axis-scatter-line)) |
 
 ```bash
 kuva scatter measurements.tsv --x time --y value --color steelblue
@@ -482,6 +483,8 @@ kuva scatter measurements.tsv --x time --y value \
 
 kuva scatter measurements.tsv --x time --y value \
     --trend --equation --correlation --log-y
+
+kuva scatter prices.tsv --x date --y close --x-date-format "%Y-%m-%d"
 ```
 
 ---
