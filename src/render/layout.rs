@@ -36,6 +36,14 @@ pub enum AxisLabelOverlap {
     Stagger,
 }
 
+/// Default subtitle font size as a fraction of the title size, used when the
+/// caller does not set one explicitly via `Layout::with_subtitle_size`.
+pub(crate) const SUBTITLE_SIZE_RATIO: f64 = 0.7;
+/// How far the subtitle colour is blended from the title colour toward the
+/// background (0 = title colour, 1 = background), muting it in both light and
+/// dark themes. 0.4 reproduces the familiar grey for black text on white.
+pub(crate) const SUBTITLE_MUTE: f64 = 0.4;
+
 /// Controls how tick labels are formatted on an axis.
 pub enum TickFormat {
     /// Smart default: integers as "5", minimal decimals, scientific notation for extremes.
@@ -256,6 +264,15 @@ pub struct Layout {
     pub x_label: Option<String>,
     pub y_label: Option<String>,
     pub title: Option<String>,
+    /// Optional secondary line rendered centred under the title at a smaller, muted size.
+    /// Use it for a one-line data summary.
+    pub subtitle: Option<String>,
+    /// Explicit subtitle font size in px. When `None`, defaults to
+    /// `round(SUBTITLE_SIZE_RATIO × title_size)`.
+    pub subtitle_size: Option<u32>,
+    /// Word-wrap width for the subtitle, in characters. Independent of `title_wrap`
+    /// since the subtitle renders at a different size.
+    pub subtitle_wrap: Option<usize>,
     pub x_categories: Option<Vec<String>>,
     pub y_categories: Option<Vec<String>>,
     pub show_legend: bool,
@@ -470,6 +487,9 @@ impl Layout {
             x_label: None,
             y_label: None,
             title: None,
+            subtitle: None,
+            subtitle_size: None,
+            subtitle_wrap: None,
             x_categories: None,
             y_categories: None,
             show_legend: false,
@@ -1736,6 +1756,30 @@ impl Layout {
         self
     }
 
+    /// Set a subtitle rendered centred under the title in a muted colour (the title
+    /// colour blended toward the background). Sized at `round(0.7 × title_size)` unless
+    /// overridden with [`with_subtitle_size`](Self::with_subtitle_size). Handy for a
+    /// one-line data summary. Like the title, it is a single line unless a wrap width is
+    /// set (via [`with_subtitle_wrap`](Self::with_subtitle_wrap) or the global wrap).
+    pub fn with_subtitle<S: Into<String>>(mut self, subtitle: S) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Set an explicit subtitle font size in px, overriding the default
+    /// `round(0.7 × title_size)`.
+    pub fn with_subtitle_size(mut self, size: u32) -> Self {
+        self.subtitle_size = Some(size);
+        self
+    }
+
+    /// Word-wrap the subtitle at `max_chars` characters, independently of the title
+    /// (the subtitle renders at a smaller size, so it fits more characters per line).
+    pub fn with_subtitle_wrap(mut self, max_chars: usize) -> Self {
+        self.subtitle_wrap = if max_chars > 0 { Some(max_chars) } else { None };
+        self
+    }
+
     pub fn with_x_label<S: Into<String>>(mut self, label: S) -> Self {
         self.x_label = Some(label.into());
         self
@@ -2052,9 +2096,10 @@ impl Layout {
         self
     }
 
-    /// Word-wrap all text elements (title, axis labels, legend) at `max_chars`
-    /// characters.  Acts as a fallback: per-element overrides (`with_title_wrap`,
-    /// `with_legend_wrap`, etc.) always take precedence regardless of call order.
+    /// Word-wrap all text elements (title, subtitle, axis labels, legend) at
+    /// `max_chars` characters.  Acts as a fallback: per-element overrides
+    /// (`with_title_wrap`, `with_subtitle_wrap`, `with_legend_wrap`, etc.) always
+    /// take precedence regardless of call order.
     pub fn with_wrap(mut self, max_chars: usize) -> Self {
         let v = if max_chars > 0 { Some(max_chars) } else { None };
         if self.title_wrap.is_none() {
@@ -2071,6 +2116,9 @@ impl Layout {
         }
         if self.legend_wrap.is_none() {
             self.legend_wrap = v;
+        }
+        if self.subtitle_wrap.is_none() {
+            self.subtitle_wrap = v;
         }
         self
     }
@@ -2584,6 +2632,8 @@ pub struct ComputedLayout {
     pub log_y: bool,
     pub font_family: Option<String>,
     pub title_size: u32,
+    /// Scaled, rounded subtitle font size in px (explicit override or `0.7 × title_size`).
+    pub subtitle_size: u32,
     pub label_size: u32,
     pub tick_size: u32,
     pub body_size: u32,
@@ -2666,6 +2716,12 @@ pub struct ComputedLayout {
     pub title_y: f64,
     /// Propagated from `Layout::title_wrap`.
     pub title_wrap: Option<usize>,
+    /// Number of wrapped title lines, computed once in `from_layout` so the
+    /// subtitle-positioning logic in `axis.rs` reuses it instead of re-wrapping
+    /// the title a second time (keeping reservation and rendering in lockstep).
+    pub title_lines: usize,
+    /// Propagated from `Layout::subtitle_wrap`.
+    pub subtitle_wrap: Option<usize>,
     /// Propagated from `Layout::x_label_wrap`.
     pub x_label_wrap: Option<usize>,
     /// Propagated from `Layout::y_label_wrap`.
@@ -2760,8 +2816,22 @@ impl ComputedLayout {
         } else {
             10.0 * s
         };
+        // Subtitle: a smaller, muted line below the title. Reserve its height on top of
+        // the title block (without moving the title) so the plot starts below it. Must
+        // match the rendering in `add_labels_and_title`.
+        // Explicit override (scaled to the canvas) or the 0.7× default; rounded so the
+        // reservation matches the size `add_labels_and_title` actually renders.
+        let subtitle_size = match layout.subtitle_size {
+            Some(px) => (px as f64 * s).round().max(1.0),
+            None => (title_size * SUBTITLE_SIZE_RATIO).round().max(1.0),
+        };
+        let subtitle_lines = match &layout.subtitle {
+            Some(sub) => render_utils::wrap_or_single(sub, layout.subtitle_wrap).len(),
+            None => 0,
+        };
+        let subtitle_h = subtitle_lines as f64 * line_height(subtitle_size, FontStyle::Regular);
         let mut title_y = base_margin_top / 2.0;
-        let mut margin_top = base_margin_top;
+        let mut margin_top = base_margin_top + subtitle_h;
         // BrickPlot per-block notation labels are drawn above the top row.
         if layout.brick_notation_tiers > 0 {
             let body = layout.body_size as f64 * s;
@@ -3324,6 +3394,7 @@ impl ComputedLayout {
                 .or(layout.theme.font_family.clone())
                 .or(Some(DEFAULT_FONT_FAMILY.to_string())),
             title_size: (layout.title_size as f64 * s).round().max(1.0) as u32,
+            subtitle_size: subtitle_size as u32,
             label_size: (layout.label_size as f64 * s).round().max(1.0) as u32,
             tick_size: (layout.tick_size as f64 * s).round().max(1.0) as u32,
             body_size: (layout.body_size as f64 * s).round().max(1.0) as u32,
@@ -3376,6 +3447,8 @@ impl ComputedLayout {
             dice_y_label_pos: None,
             title_y,
             title_wrap: layout.title_wrap,
+            title_lines,
+            subtitle_wrap: layout.subtitle_wrap,
             x_label_wrap: layout.x_label_wrap,
             y_label_wrap: layout.y_label_wrap,
             y2_label_wrap: layout.y2_label_wrap,
