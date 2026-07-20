@@ -89,7 +89,7 @@ check_error() {
 # ── scatter ───────────────────────────────────────────────────────────────────
 check "scatter basic" \
     "$BIN" scatter "$DATA/scatter.tsv" --x x --y y \
-        --title "Scatter Plot" --x-label "X" --y-label "Y"
+        --title "Scatter Plot" --subtitle "n = 240 points" --subtitle-wrap 8 --x-label "X" --y-label "Y"
 
 check "scatter color-by" \
     "$BIN" scatter "$DATA/scatter.tsv" --x x --y y --color-by group --legend \
@@ -129,7 +129,7 @@ check_error "scatter multi-y color-by conflict" \
 # ── line ──────────────────────────────────────────────────────────────────────
 check "line color-by" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value --color-by group \
-        --title "Growth Curves" --x-label "Time" --y-label "Value"
+        --title "Growth Curves" --subtitle "coloured by group" --x-label "Time" --y-label "Value"
 
 check "line color-by legend" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value --color-by group --legend \
