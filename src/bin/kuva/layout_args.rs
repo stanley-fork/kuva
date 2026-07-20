@@ -80,6 +80,13 @@ pub struct BaseArgs {
     #[arg(long)]
     pub bw: bool,
 
+    /// Draw a semi-opaque background rect behind in-fill value labels (Bar,
+    /// Treemap, Sunburst, Waffle, Mosaic, Funnel, Gantt) for readability over
+    /// busy fills. On automatically with `--bw`; this flag forces it on for
+    /// color output too.
+    #[arg(long)]
+    pub label_background: bool,
+
     /// Wrap all text (title, axis labels, legend) at N characters.
     /// Per-element flags (--title-wrap, etc.) override this when set.
     #[arg(long, value_name = "CHARS")]
@@ -280,6 +287,9 @@ pub fn apply_base_args(mut layout: Layout, args: &BaseArgs) -> Layout {
     }
     if args.bw {
         layout = layout.with_bw_mode();
+    }
+    if args.label_background {
+        layout = layout.with_label_background(true);
     }
     // Global wrap first, then per-element overrides.
     if let Some(n) = args.wrap {

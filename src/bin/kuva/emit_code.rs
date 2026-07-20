@@ -211,6 +211,9 @@ pub fn emit_base_args(args: &BaseArgs) -> Vec<String> {
     if args.bw {
         frags.push(".with_bw_mode()".to_string());
     }
+    if args.label_background {
+        frags.push(".with_label_background(true)".to_string());
+    }
     if let Some(n) = args.wrap {
         frags.push(format!(".with_wrap({n})"));
     }

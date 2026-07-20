@@ -8,7 +8,7 @@ use crate::render::palette::Palette;
 use crate::render::plots::Plot;
 use crate::render::render_utils::{self, linear_regression, pearson_corr, percentile};
 use crate::render::text_metrics::{
-    ascent, cap_height, center_offset, mean_char_width, measure_text_width, text_height,
+    ascent, cap_height, center_offset, descent, mean_char_width, measure_text_width, text_height,
     widest_text_width, FontStyle,
 };
 use crate::render::theme::Theme;
@@ -148,6 +148,95 @@ fn path_bw(
                 stroke_dasharray: None,
             })));
         }
+    }
+}
+
+/// Draw a semi-opaque background rect behind an in-fill value label, sized to
+/// the glyphs plus a small pad, so the label stays readable over a busy fill
+/// or BW-mode hatch pattern. Gated on `computed.label_background` (see
+/// `Layout::with_label_background`) — a no-op otherwise. `(x, y)` is the
+/// label's own anchor point (the same point passed to the paired
+/// `Primitive::Text`), `text_width` is the already-measured rendered width of
+/// the label content, and `rotate` mirrors the angle (if any) passed to that
+/// `Primitive::Text` so the background tilts with rotated labels (e.g.
+/// `SunburstPlot`'s `rotate_labels`).
+#[allow(clippy::too_many_arguments)]
+fn label_bg_rect(
+    scene: &mut Scene,
+    computed: &ComputedLayout,
+    x: f64,
+    y: f64,
+    anchor: TextAnchor,
+    text_width: f64,
+    size: u32,
+    bold: bool,
+    rotate: Option<f64>,
+) {
+    if !computed.label_background {
+        return;
+    }
+    let style = if bold {
+        FontStyle::Bold
+    } else {
+        FontStyle::Regular
+    };
+    let pad_x = size as f64 * 0.3;
+    let pad_y = size as f64 * 0.15;
+    let (dx_lo, dx_hi) = match anchor {
+        TextAnchor::Start => (-pad_x, text_width + pad_x),
+        TextAnchor::Middle => (-(text_width / 2.0 + pad_x), text_width / 2.0 + pad_x),
+        TextAnchor::End => (-(text_width + pad_x), pad_x),
+    };
+    let dy_lo = -ascent(size as f64, style) - pad_y;
+    let dy_hi = descent(size as f64, style) + pad_y;
+    let fill = Color::from(&computed.theme.legend_bg);
+
+    if let Some(angle_deg) = rotate {
+        let rad = angle_deg.to_radians();
+        let (sin_a, cos_a) = rad.sin_cos();
+        let corner = |dx: f64, dy: f64| -> (f64, f64) {
+            (
+                round2(x + dx * cos_a - dy * sin_a),
+                round2(y + dx * sin_a + dy * cos_a),
+            )
+        };
+        let (x0, y0) = corner(dx_lo, dy_lo);
+        let (x1, y1) = corner(dx_hi, dy_lo);
+        let (x2, y2) = corner(dx_hi, dy_hi);
+        let (x3, y3) = corner(dx_lo, dy_hi);
+        scene.add(Primitive::Path(Box::new(PathData {
+            d: format!("M {x0} {y0} L {x1} {y1} L {x2} {y2} L {x3} {y3} Z"),
+            fill: Some(fill),
+            stroke: Color::None,
+            stroke_width: 0.0,
+            opacity: Some(0.82),
+            stroke_dasharray: None,
+        })));
+    } else {
+        scene.add(Primitive::Rect {
+            x: round2(x + dx_lo),
+            y: round2(y + dy_lo),
+            width: round2(dx_hi - dx_lo),
+            height: round2(dy_hi - dy_lo),
+            fill,
+            stroke: None,
+            stroke_width: None,
+            opacity: Some(0.82),
+        });
+    }
+}
+
+/// Color for an in-fill value label's text: `fallback` (chosen for contrast
+/// against the plot's own fill, independent of theme — usually white) when no
+/// background rect is drawn, or the theme's paired `text_color` when
+/// `label_bg_rect` *is* drawing one, since the label then sits on
+/// `theme.legend_bg` instead of the fill and needs the color that's
+/// legible against *that* (white-on-white otherwise).
+fn in_fill_label_color(computed: &ComputedLayout, fallback: &str) -> Color {
+    if computed.label_background {
+        Color::from(computed.theme.text_color.as_str())
+    } else {
+        Color::from(fallback)
     }
 }
 
@@ -18210,13 +18299,24 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     format!("{}", val)
                 };
                 // Only show if text fits width (measure the widest line for multi-line labels)
-                if widest_text_width(label.split('\n'), label_size as f64, FontStyle::Regular)
-                    < col_w * 0.9
-                {
+                let widest =
+                    widest_text_width(label.split('\n'), label_size as f64, FontStyle::Regular);
+                if widest < col_w * 0.9 {
                     let cx = col_x + col_w / 2.0;
                     let cy = seg_top
                         + seg_h / 2.0
                         + center_offset(label_size as f64, FontStyle::Regular);
+                    label_bg_rect(
+                        scene,
+                        computed,
+                        cx,
+                        cy,
+                        TextAnchor::Middle,
+                        widest,
+                        label_size,
+                        false,
+                        None,
+                    );
                     scene.add(Primitive::Text {
                         x: cx,
                         y: cy,
@@ -18225,7 +18325,7 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         anchor: TextAnchor::Middle,
                         rotate: None,
                         bold: false,
-                        color: Some(Color::from("white")),
+                        color: Some(in_fill_label_color(computed, "white")),
                     });
                 }
             }
@@ -20487,6 +20587,15 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     )
                 };
 
+                let label_style = if bold {
+                    FontStyle::Bold
+                } else {
+                    FontStyle::Regular
+                };
+                let label_w = measure_text_width(&label, font_size as f64, label_style);
+                label_bg_rect(
+                    scene, computed, lx, ly, anchor, label_w, font_size, bold, None,
+                );
                 scene.add(Primitive::Text {
                     x: round2(lx),
                     y: round2(ly),
@@ -20495,7 +20604,7 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     anchor,
                     rotate: None,
                     bold,
-                    color: Some(Color::from("#ffffff")),
+                    color: Some(in_fill_label_color(computed, "#ffffff")),
                 });
             }
         }
@@ -20941,6 +21050,18 @@ fn add_sunburst(sb: &SunburstPlot, scene: &mut Scene, computed: &ComputedLayout)
                 None
             };
 
+            let label_w = measure_text_width(&label, font_size as f64, FontStyle::Regular);
+            label_bg_rect(
+                scene,
+                computed,
+                lx,
+                ly,
+                TextAnchor::Middle,
+                label_w,
+                font_size,
+                false,
+                rotate,
+            );
             scene.add(Primitive::Text {
                 x: round2(lx),
                 y: round2(ly),
@@ -20949,7 +21070,7 @@ fn add_sunburst(sb: &SunburstPlot, scene: &mut Scene, computed: &ComputedLayout)
                 anchor: TextAnchor::Middle,
                 rotate,
                 bold: false,
-                color: Some(Color::from("#ffffff")),
+                color: Some(in_fill_label_color(computed, "#ffffff")),
             });
         }
 
@@ -21492,7 +21613,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     (
                         bar_x + bar_w / 2.0,
                         TextAnchor::Middle,
-                        Color::from("#ffffff"),
+                        in_fill_label_color(computed, "#ffffff"),
                     )
                 } else {
                     let rx = if is_mirror {
@@ -21507,9 +21628,17 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     };
                     (rx, anc, Color::from("#333333"))
                 };
+                let label_y =
+                    bar_y + bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular);
+                if text_fits {
+                    let label_w = measure_text_width(&label, font_size as f64, FontStyle::Regular);
+                    label_bg_rect(
+                        scene, computed, lx, label_y, anchor, label_w, font_size, false, None,
+                    );
+                }
                 scene.add(Primitive::Text {
                     x: lx,
-                    y: bar_y + bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular),
+                    y: label_y,
                     content: label,
                     size: font_size,
                     anchor,
@@ -23961,15 +24090,28 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         let est_text_w =
                             measure_text_width(&task.label, label_size as f64, FontStyle::Regular);
                         if bar_width >= gp.label_min_width && bar_width > est_text_w + 6.0 {
+                            let label_y =
+                                y_center + center_offset(label_size as f64, FontStyle::Regular);
+                            label_bg_rect(
+                                scene,
+                                computed,
+                                x_start + bar_width * 0.5,
+                                label_y,
+                                TextAnchor::Middle,
+                                est_text_w,
+                                label_size,
+                                false,
+                                None,
+                            );
                             scene.add(Primitive::Text {
                                 x: x_start + bar_width * 0.5,
-                                y: y_center + center_offset(label_size as f64, FontStyle::Regular),
+                                y: label_y,
                                 content: task.label.clone(),
                                 size: label_size,
                                 anchor: TextAnchor::Middle,
                                 rotate: None,
                                 bold: false,
-                                color: Some(Color::from("white")),
+                                color: Some(in_fill_label_color(computed, "white")),
                             });
                         }
                         // Outside labels drawn post-clip via add_gantt_labels

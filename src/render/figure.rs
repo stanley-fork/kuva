@@ -1013,6 +1013,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.horizon_right_annot_px = l.horizon_right_annot_px;
     new.gantt_right_annot_px = l.gantt_right_annot_px;
     new.bw_mode = l.bw_mode;
+    new.label_background = l.label_background;
     new
 }
 

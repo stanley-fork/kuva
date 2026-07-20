@@ -451,6 +451,11 @@ pub struct Layout {
     /// Produces output that is legible when printed in greyscale and meets
     /// common journal accessibility requirements.
     pub bw_mode: bool,
+    /// Draw a semi-opaque background rect behind in-fill value labels (Bar,
+    /// Treemap, Sunburst, Waffle, Mosaic, Funnel, Gantt) for readability over
+    /// busy fills or hatch patterns. `None` (the default) follows `bw_mode` —
+    /// on automatically in BW mode, off otherwise; `Some(_)` overrides that.
+    pub label_background: Option<bool>,
 }
 
 impl Layout {
@@ -560,6 +565,7 @@ impl Layout {
             horizon_right_annot_px: 0.0,
             gantt_right_annot_px: 0.0,
             bw_mode: false,
+            label_background: None,
         }
     }
 
@@ -2036,6 +2042,14 @@ impl Layout {
         self
     }
 
+    /// Explicitly force in-fill value labels' background rect on (`true`) or
+    /// off (`false`), overriding the `bw_mode`-linked default. Applies to
+    /// Bar, Treemap, Sunburst, Waffle, Mosaic, Funnel, and Gantt.
+    pub fn with_label_background(mut self, enabled: bool) -> Self {
+        self.label_background = Some(enabled);
+        self
+    }
+
     /// Enable SVG interactivity: hover highlighting, click-to-pin, search box,
     /// coordinate readout, and legend-driven dim/highlight.
     pub fn with_interactive(mut self) -> Self {
@@ -2686,6 +2700,9 @@ pub struct ComputedLayout {
     pub legend_entry_limit: usize,
     /// Propagated from `Layout::bw_mode`.
     pub bw_mode: bool,
+    /// Resolved from `Layout::label_background`, defaulting to `Layout::bw_mode`
+    /// when unset.
+    pub label_background: bool,
 }
 
 /// Resolves one axis's final `(min, max)` from its padded `range`, its raw
@@ -3385,6 +3402,7 @@ impl ComputedLayout {
             legend_col_count,
             legend_entry_limit: layout.legend_entry_limit,
             bw_mode: layout.bw_mode,
+            label_background: layout.label_background.unwrap_or(layout.bw_mode),
         };
         s.recompute_transforms();
         s
