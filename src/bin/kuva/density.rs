@@ -97,6 +97,30 @@ pub fn run(args: DensityArgs) -> Result<(), String> {
                 Ok(Plot::Density(dp))
             })
             .collect::<Result<Vec<_>, String>>()?;
+
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            let exprs: Vec<String> = plots
+                .iter()
+                .filter_map(|pl| match pl {
+                    Plot::Density(d) => Some(crate::emit_code::emit_density_plot(d)),
+                    _ => None,
+                })
+                .collect();
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::DensityPlot"],
+                    "Density",
+                    &exprs,
+                    &args.base,
+                    Some(&args.axis),
+                    Some(&args.log),
+                )
+            );
+            return Ok(());
+        }
+
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
         let layout = apply_axis_args(layout, &args.axis);
@@ -172,6 +196,29 @@ pub fn run(args: DensityArgs) -> Result<(), String> {
         }
         vec![Plot::Density(dp)]
     };
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        let exprs: Vec<String> = plots
+            .iter()
+            .filter_map(|pl| match pl {
+                Plot::Density(d) => Some(crate::emit_code::emit_density_plot(d)),
+                _ => None,
+            })
+            .collect();
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::DensityPlot"],
+                "Density",
+                &exprs,
+                &args.base,
+                Some(&args.axis),
+                Some(&args.log),
+            )
+        );
+        return Ok(());
+    }
 
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

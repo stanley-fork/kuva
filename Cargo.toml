@@ -39,6 +39,10 @@ parquet    = ["cli", "dep:parquet", "dep:bytes", "dep:arrow-array", "dep:arrow-s
 # Build downloads doom.wasm + doom1.wad from the kuva doom-assets release.
 # Run once: cargo build --bin kuva --features cli,doom
 doom = ["cli"]
+# Adds `--emit-code` to every subcommand: prints the equivalent Rust library
+# code for the plot instead of rendering it. CLI-only, no extra dependencies,
+# gated separately so minimal CLI builds can skip it.
+emit_code = ["cli"]
 
 [dependencies]
 bytes = { version = "1", optional = true }
@@ -65,6 +69,9 @@ image = "0.24"
 # test to read advance widths from the bundled TTFs. Not a runtime dependency:
 # the advances ship as a precompiled const table in src/render/text_metrics/data.rs.
 ttf-parser = "0.25"
+# Used only by the `--emit-code` compile-check test: confirms emitted snippets
+# actually compile against the real kuva crate, not just "look right".
+trybuild = "1"
 
 [[bench]]
 name = "render"

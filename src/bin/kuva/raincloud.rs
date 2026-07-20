@@ -120,6 +120,22 @@ pub fn run(args: RaincloudArgs) -> Result<(), String> {
 
     plot = plot.with_group_colors(colors);
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::RaincloudPlot"],
+                "Raincloud",
+                &[crate::emit_code::emit_raincloud_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Raincloud(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

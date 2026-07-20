@@ -114,6 +114,29 @@ pub fn run(args: EcdfArgs) -> Result<(), String> {
         vec![Plot::Ecdf(plot)]
     };
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        let exprs: Vec<String> = plots
+            .iter()
+            .map(|p| match p {
+                Plot::Ecdf(e) => crate::emit_code::emit_ecdf_plot(e),
+                _ => unreachable!(),
+            })
+            .collect();
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::EcdfPlot"],
+                "Ecdf",
+                &exprs,
+                &args.base,
+                Some(&args.axis),
+                Some(&args.log),
+            )
+        );
+        return Ok(());
+    }
+
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);
     let layout = apply_axis_args(layout, &args.axis);

@@ -204,6 +204,27 @@ pub fn run(args: SunburstArgs) -> Result<(), String> {
         plot = plot.with_colorbar_label(lbl.clone());
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::SunburstPlot",
+                    "kuva::plot::TreemapNode",
+                    "kuva::plot::SunburstColorMode",
+                    "kuva::plot::ColorMap",
+                ],
+                "Sunburst",
+                &[crate::emit_code::emit_sunburst_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Sunburst(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

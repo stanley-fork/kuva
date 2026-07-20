@@ -176,6 +176,27 @@ pub fn run(args: Scatter3DArgs) -> Result<(), String> {
         }
         plot = apply_options(plot, &args, &z_cmap);
 
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            // The per-group legend below is built directly as `LegendEntry`s
+            // on the layout, bypassing `Scatter3DPlot::legend_label` — the
+            // emitted snippet faithfully reproduces the merged, per-point-
+            // colored plot but omits that group legend (no plot-struct field
+            // carries it).
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::Scatter3DPlot", "kuva::plot::ColorMap"],
+                    "Scatter3D",
+                    &[crate::emit_code::emit_scatter3d_plot(&plot)],
+                    &args.base,
+                    None,
+                    None,
+                )
+            );
+            return Ok(());
+        }
+
         let plots = vec![Plot::Scatter3D(plot)];
         let mut layout = Layout::auto_from_plots(&plots);
 
@@ -222,8 +243,25 @@ pub fn run(args: Scatter3DArgs) -> Result<(), String> {
         if args.depth_shade {
             plot = plot.with_depth_shade();
         }
+        let plot = apply_options(plot, &args, &z_cmap);
 
-        let plots = vec![Plot::Scatter3D(apply_options(plot, &args, &z_cmap))];
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::Scatter3DPlot", "kuva::plot::ColorMap"],
+                    "Scatter3D",
+                    &[crate::emit_code::emit_scatter3d_plot(&plot)],
+                    &args.base,
+                    None,
+                    None,
+                )
+            );
+            return Ok(());
+        }
+
+        let plots = vec![Plot::Scatter3D(plot)];
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
         let scene = render_multiple(plots, layout);

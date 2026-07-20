@@ -333,3 +333,49 @@ The stroke color always matches the fill color set by `.with_color()` or `.with_
 | `.with_legend(s)` | Attach a legend label |
 | `.with_marker_opacity(f)` | Fill alpha: `0.0` = hollow, `1.0` = solid (default: solid) |
 | `.with_marker_stroke_width(w)` | Outline stroke at the fill color; `None` = no stroke (default) |
+
+**See also:** [Box Plot](./boxplot.md) for a summary overlay, [Violin Plot](./violin.md) for the full density shape, [Raincloud Plot](./raincloud.md) for all three combined.
+
+---
+
+## CLI
+
+Strip / jitter plot — individual points along a categorical axis.
+
+**Input:** group label column + numeric value column, one observation per row.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--group-col <COL>` | `0` | Group label column |
+| `--value-col <COL>` | `1` | Numeric value column |
+| `--y <COL>[,<COL>…]` | — | Comma-separated columns; each column becomes a separate group (column name = group label). Overrides `--group-col` + `--value-col` when 2+ columns given |
+| `--color <CSS>` | `steelblue` | Point color |
+| `--point-size <PX>` | `4.0` | Point radius in pixels |
+| `--swarm` | off | Beeswarm (non-overlapping) layout |
+| `--center` | off | All points at group center (no spread) |
+| `--legend` | off | Color groups by palette and show a legend |
+
+Default layout when neither `--swarm` nor `--center` is given: random jitter (±30 % of slot width).
+
+`--legend` assigns a distinct palette color to each group and adds a legend. Combine with `--interactive` to enable legend toggle (click a legend entry to show/hide that group).
+
+```bash
+kuva strip samples.tsv --group-col group --value-col expression
+
+kuva strip samples.tsv --group-col group --value-col expression --swarm
+
+# multi-column: each numeric column is a group
+kuva strip data.tsv --y col_a,col_b,col_c
+
+# colored groups with legend
+kuva strip samples.tsv --group-col group --value-col expression \
+    --legend -o strip_legend.svg
+
+# interactive: hover, search, legend toggle
+kuva strip samples.tsv --group-col group --value-col expression \
+    --legend --interactive -o strip_interactive.svg
+```
+
+---
+
+*See also: [Shared flags](../cli/index.md#shared-flags) — output, appearance, axes, log scale.*

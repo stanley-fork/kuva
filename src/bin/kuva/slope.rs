@@ -128,6 +128,22 @@ pub fn run(args: SlopeArgs) -> Result<(), String> {
         plot = plot.with_point(label.as_str(), before, after);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::SlopePlot"],
+                "Slope",
+                &[crate::emit_code::emit_slope_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Slope(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

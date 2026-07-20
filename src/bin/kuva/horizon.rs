@@ -102,6 +102,22 @@ pub fn run(args: HorizonArgs) -> Result<(), String> {
         plot = plot.with_series("", x_vals, y_vals);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::HorizonPlot"],
+                "Horizon",
+                &[crate::emit_code::emit_horizon_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Horizon(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -136,6 +136,23 @@ pub fn run(args: BarArgs) -> Result<(), String> {
         if args.horizontal {
             plot = plot.with_horizontal(true);
         }
+
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::BarPlot"],
+                    "Bar",
+                    &[crate::emit_code::emit_bar_plot(&plot)],
+                    &args.base,
+                    Some(&args.axis),
+                    None,
+                )
+            );
+            return Ok(());
+        }
+
         let plots = vec![Plot::Bar(plot)];
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
@@ -283,6 +300,23 @@ pub fn run(args: BarArgs) -> Result<(), String> {
         if args.horizontal {
             plot = plot.with_horizontal(true);
         }
+
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::BarPlot"],
+                    "Bar",
+                    &[crate::emit_code::emit_bar_plot(&plot)],
+                    &args.base,
+                    Some(&args.axis),
+                    None,
+                )
+            );
+            return Ok(());
+        }
+
         let plots = vec![Plot::Bar(plot)];
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
@@ -354,6 +388,22 @@ pub fn run(args: BarArgs) -> Result<(), String> {
     }
     if args.horizontal {
         plot = plot.with_horizontal(true);
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::BarPlot"],
+                "Bar",
+                &[crate::emit_code::emit_bar_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Bar(plot)];

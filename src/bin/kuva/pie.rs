@@ -127,6 +127,22 @@ pub fn run(args: PieArgs) -> Result<(), String> {
         plot = plot.with_slice(label, value, color);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::PiePlot", "kuva::plot::PieLabelPosition"],
+                "Pie",
+                &[crate::emit_code::emit_pie_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Pie(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

@@ -365,3 +365,5 @@ Access the populated map via `.template` and pass it to `with_template()`.
 | `.with_notations(iter)` | Per-row `Option<String>`; `Some(_)` = render per-block `(kmer)count` labels above that row |
 | `BrickTemplate::new().dna()` | Pre-built DNA (A/C/G/T) color template |
 | `BrickTemplate::new().rna()` | Pre-built RNA (A/C/G/U) color template |
+
+**See also:** [Synteny Plot](./synteny.md) for genome-to-genome structural comparison.

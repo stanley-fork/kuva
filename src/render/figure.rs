@@ -976,6 +976,14 @@ fn clone_layout(l: &Layout) -> Layout {
     new.log_y2 = l.log_y2;
     new.y2_tick_format = l.y2_tick_format.clone();
     new.suppress_y2_ticks = l.suppress_y2_ticks;
+    new.x2_range = l.x2_range;
+    new.data_x2_range = l.data_x2_range;
+    new.x2_label = l.x2_label.clone();
+    new.log_x2 = l.log_x2;
+    new.x2_tick_format = l.x2_tick_format.clone();
+    new.suppress_x2_ticks = l.suppress_x2_ticks;
+    new.x2_label_offset = l.x2_label_offset;
+    new.x2_label_wrap = l.x2_label_wrap;
     new.x_axis_min = l.x_axis_min;
     new.x_axis_max = l.x_axis_max;
     new.y_axis_min = l.y_axis_min;

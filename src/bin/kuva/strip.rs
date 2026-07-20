@@ -86,6 +86,23 @@ pub fn run(args: StripArgs) -> Result<(), String> {
         let pal = Palette::category10();
         let colors: Vec<String> = (0..args.y.len()).map(|i| pal[i].to_string()).collect();
         plot = plot.with_group_colors(colors).with_legend("");
+
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::StripPlot"],
+                    "Strip",
+                    &[crate::emit_code::emit_strip_plot(&plot)],
+                    &args.base,
+                    Some(&args.axis),
+                    None,
+                )
+            );
+            return Ok(());
+        }
+
         let plots = vec![Plot::Strip(plot)];
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
@@ -134,6 +151,22 @@ pub fn run(args: StripArgs) -> Result<(), String> {
         let pal = Palette::category10();
         let colors: Vec<String> = (0..plot.groups.len()).map(|i| pal[i].to_string()).collect();
         plot = plot.with_group_colors(colors).with_legend("");
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::StripPlot"],
+                "Strip",
+                &[crate::emit_code::emit_strip_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Strip(plot)];

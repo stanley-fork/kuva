@@ -141,6 +141,26 @@ pub fn run(args: HexbinArgs) -> Result<(), String> {
         plot = plot.with_z(zs, cli_to_z_reduce(&args.reduce));
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::HexbinPlot",
+                    "kuva::plot::ZReduce",
+                    "kuva::plot::ColorMap",
+                ],
+                "Hexbin",
+                &[crate::emit_code::emit_hexbin_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                Some(&args.log),
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Hexbin(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

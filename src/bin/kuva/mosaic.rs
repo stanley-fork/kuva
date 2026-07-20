@@ -100,6 +100,22 @@ pub fn run(args: MosaicArgs) -> Result<(), String> {
         plot = plot.with_cell(col_cat.as_str(), row_cat.as_str(), *value);
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::MosaicPlot"],
+                "Mosaic",
+                &[crate::emit_code::emit_mosaic_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::Mosaic(plot)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);

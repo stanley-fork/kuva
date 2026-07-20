@@ -126,6 +126,27 @@ pub fn run(args: PhyloArgs) -> Result<(), String> {
         tree = tree.with_legend(label.clone());
     }
 
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::PhyloTree",
+                    "kuva::plot::PhyloNode",
+                    "kuva::plot::TreeOrientation",
+                    "kuva::plot::TreeBranchStyle",
+                ],
+                "PhyloTree",
+                &[crate::emit_code::emit_phylo_tree(&tree)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
+    }
+
     let plots = vec![Plot::PhyloTree(tree)];
     let layout = Layout::auto_from_plots(&plots);
     let layout = apply_base_args(layout, &args.base);
