@@ -26,6 +26,8 @@ source ~/.cargo/env
 
 Verify with `cargo --version`. You only need to do this once.
 
+kuva itself only needs Rust 1.87. The one exception is PDF output: `--features pdf`/`full` pulls in `krilla`, which requires Rust >= 1.92. If `rustup show` reports an older version and you plan to use `--features full` or `pdf`, run `rustup update` first.
+
 ### Step 2 — install kuva
 
 **From crates.io** (recommended once a release is published):
@@ -128,7 +130,7 @@ Column selection (`--x`, `--y`, `--value-col`, etc.) works identically to CSV/TS
 | *(omitted)* | SVG to stdout |
 | `-o out.svg` | SVG to file |
 | `-o out.png` | PNG (requires `--features png`) |
-| `-o out.pdf` | PDF (requires `--features pdf`) |
+| `-o out.pdf` | PDF (requires `--features pdf`; needs Rust >= 1.92 to build — higher than kuva's own MSRV, see [Installation](#installation)) |
 
 Format is inferred from the file extension. Any unrecognised extension is treated as SVG.
 

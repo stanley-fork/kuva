@@ -52,7 +52,7 @@ pub fn write_output(mut scene: Scene, args: &BaseArgs) -> Result<(), String> {
                 "pdf" => {
                     #[cfg(feature = "pdf")]
                     {
-                        let bytes = kuva::PdfBackend.render_scene(&scene)?;
+                        let bytes = kuva::PdfBackend::new().render_scene(&scene)?;
                         fs::write(path, bytes).map_err(|e| e.to_string())
                     }
                     #[cfg(not(feature = "pdf"))]

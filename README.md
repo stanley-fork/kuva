@@ -54,9 +54,11 @@ kuva = "0.4"
 
 # Optional backends
 kuva = { version = "0.4", features = ["png"] }   # PNG output
-kuva = { version = "0.4", features = ["pdf"] }   # PDF output
+kuva = { version = "0.4", features = ["pdf"] }   # PDF output — requires Rust >= 1.92 (higher than kuva's own MSRV; see below)
 kuva = { version = "0.4", features = ["full"] }  # PNG + PDF
 ```
+
+> **Note on the `pdf` feature's Rust version:** kuva's own MSRV is 1.87, but the `pdf` feature depends on [`krilla`](https://github.com/LaurenzV/krilla) (the maintained successor to the now-archived `svg2pdf`), which requires Rust >= 1.92. This isn't reflected in kuva's crate-level `rust-version` — doing so would force every kuva user, including ones who never enable `pdf`, onto the newer toolchain via Cargo's rust-version-aware dependency resolver. If you don't enable `pdf`/`full`, kuva itself still only needs Rust 1.87.
 
 Then in Rust:
 

@@ -27,10 +27,27 @@ exclude = [
 [package.metadata.docs.rs]
 all-features = true
 
+[package.metadata.msrv]
+# The `pdf` feature's real minimum Rust version — higher than `package.rust-version`
+# above, which intentionally excludes it (see README.md's note and CHANGELOG.md).
+# krilla (the `pdf` feature's PDF backend) sets this floor; bump it in lockstep
+# with krilla's own MSRV. Read by .github/workflows/ci.yml's `pdf-msrv` job so
+# CI actually verifies `--features cli,full` builds at *this* version, not at
+# `package.rust-version` (which is no longer sufficient for that feature combo).
+pdf_feature = "1.92"
+
 [features]
 default    = []
 png        = ["dep:fontdue", "dep:png", "dep:flate2"]
-pdf        = ["dep:svg2pdf", "dep:flate2"]
+# svg2pdf (the previous pdf backend) was archived upstream by its own
+# maintainer in favour of krilla/krilla-svg (same author) — see CHANGELOG.md.
+# krilla-svg 0.8.x requires Rust 1.92; this is *not* reflected in the crate's
+# own `rust-version` (kept at 1.87) since that field is crate-wide and would
+# otherwise force every kuva user — even ones who never enable `pdf` — onto
+# a newer MSRV via Cargo's rust-version-aware resolver. Building with
+# `--features pdf` (or `full`) genuinely requires Rust >= 1.92; documented in
+# README/CHANGELOG rather than enforced through Cargo metadata.
+pdf        = ["dep:krilla", "dep:krilla-svg", "dep:usvg", "dep:flate2"]
 embed_font = ["dep:flate2"]
 cli        = ["dep:clap", "dep:clap_mangen", "dep:csv"]
 full       = ["embed_font", "png", "pdf"]
@@ -55,7 +72,13 @@ png         = { version = "0.18", optional = true }
 parquet      = { version = "58.3", features = ["arrow"], optional = true }
 arrow-array  = { version = "58.3", optional = true }
 arrow-schema = { version = "58.3", optional = true }
-svg2pdf     = { version = "0.13", optional = true }
+krilla      = { version = "0.8", optional = true }
+krilla-svg  = { version = "0.8", optional = true }
+# Parses kuva's own SVG output into a usvg::Tree for krilla-svg's `draw_svg`.
+# Pinned to the exact minor version krilla-svg 0.8.x itself depends on, since
+# `usvg::Tree`/`usvg::Options` are part of krilla-svg's public API surface —
+# an incompatible bump here would fail to type-check against krilla-svg.
+usvg        = { version = "=0.47.0", optional = true }
 clap        = { version = "4", features = ["derive"], optional = true }
 clap_mangen = { version = "0.2", optional = true }
 csv         = { version = "1", optional = true }

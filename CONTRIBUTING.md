@@ -8,7 +8,7 @@ Thank you for considering a contribution. This document describes how the codeba
 
 ## Toolchain & formatting
 
-The repo pins its dev/CI toolchain via `rust-toolchain.toml` — `rustup` picks this up automatically (installing it on first use if needed), so `cargo build`/`test`/`clippy`/`fmt` all use the same compiler, rustfmt, and clippy version as CI without any manual setup. `rust-version` in `Cargo.toml` is a separate, lower floor (the oldest compiler the *library* must compile on); CI has a dedicated `msrv` job that builds against it.
+The repo pins its dev/CI toolchain via `rust-toolchain.toml` — `rustup` picks this up automatically (installing it on first use if needed), so `cargo build`/`test`/`clippy`/`fmt` all use the same compiler, rustfmt, and clippy version as CI without any manual setup. `rust-version` in `Cargo.toml` is a separate, lower floor (the oldest compiler the *library* must compile on); CI's `msrv` job builds the no-feature and non-PDF-feature combinations against it. The `pdf` feature has its own, higher floor (`krilla`'s MSRV, tracked in `[package.metadata.msrv] pdf_feature` in `Cargo.toml` — kept separate from `rust-version` deliberately, see README.md's note); CI's `pdf-msrv` job builds `--features cli,full` against that value instead. Bump `pdf_feature` in lockstep if krilla's own MSRV changes.
 
 Run `cargo ci-fmt` before opening a PR — CI fails on any formatting diff. If you need to `git blame` a file, run this once per clone so reformatting-only commits (tagged in `.git-blame-ignore-revs`) don't obscure real authorship:
 
@@ -132,6 +132,7 @@ Nothing below is checked by CI — each step is easy to miss because the crate s
 - [ ] **`CHANGELOG.md`** — rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`; add the new compare link at the bottom (`[X.Y.Z]: .../compare/vPREV...vX.Y.Z`) and repoint the `[Unreleased]` link to `compare/vX.Y.Z...HEAD`.
 - [ ] **`man/kuva.1`** — regenerate: `cargo build --bin kuva && ./target/debug/kuva man > man/kuva.1`. The version string is baked in at build time, so it silently goes stale on every release otherwise.
 - [ ] **`README.md`** — bump the `kuva = "X.Y"` version in the install/dependency section (currently 4 occurrences: base + `png`/`pdf`/`full` feature examples).
+- [ ] **`rust-toolchain.toml`** — confirm its pinned `channel` is still >= `[package.metadata.msrv] pdf_feature` in `Cargo.toml`. The release workflow's pre-built binaries (`features: cli,full`) build with whatever toolchain this file resolves to — if it ever drops below the `pdf` feature's real MSRV (e.g. a future krilla bump), the release binaries silently stop including working PDF support even though this file isn't checked by CI.
 - [ ] Run `cargo ci-fmt && cargo ci-clippy && cargo test --features cli,full` — confirm clean before tagging.
 - [ ] Merge `dev` → `main`, then tag `vX.Y.Z` on `main` and push the tag — this triggers `.github/workflows/release.yml`, which builds and attaches cross-platform CLI binaries to the GitHub Release.
 - [ ] `cargo publish` once the tag is pushed.

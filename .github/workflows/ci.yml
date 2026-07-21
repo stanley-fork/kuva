@@ -78,5 +78,32 @@ jobs:
       - name: Build library (no features) at MSRV
         run: cargo +${{ steps.msrv.outputs.version }} build
 
-      - name: Build library (CLI + all backends) at MSRV
-        run: cargo +${{ steps.msrv.outputs.version }} build --features cli,full
+      # Excludes `pdf`: krilla (the pdf feature's backend) needs a newer Rust
+      # than package.rust-version — verified separately by the pdf-msrv job
+      # below, at its own higher floor.
+      - name: Build library (CLI + non-PDF backends) at MSRV
+        run: cargo +${{ steps.msrv.outputs.version }} build --features cli,png,embed_font
+
+  pdf-msrv:
+    name: PDF feature MSRV build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read PDF feature's MSRV from Cargo.toml
+        id: pdf_msrv
+        run: echo "version=$(sed -n 's/^pdf_feature = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Install PDF feature's MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.pdf_msrv.outputs.version }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      # `full` = png + pdf + embed_font; this is the combination the release
+      # workflow's pre-built binaries use (features: cli,full), so verify it
+      # builds cleanly at the pdf feature's own real MSRV floor rather than
+      # package.rust-version (which no longer covers it).
+      - name: Build library (CLI + all backends, including pdf) at pdf's MSRV
+        run: cargo +${{ steps.pdf_msrv.outputs.version }} build --features cli,full
