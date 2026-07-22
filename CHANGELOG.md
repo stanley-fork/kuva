@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Scatter3D`/`Surface3D` instances combined in one panel now share one 3D coordinate box** — each instance previously called `data_ranges()`/drew its own wireframe box independently, so two `Scatter3D` (or a mix with `Surface3D`) in the same `render_multiple` call each normalized to their own min/max and could project completely different data onto identical screen coordinates, with the box itself drawn twice. `render_multiple` now computes one merged `DataRanges3D` and draws the box once, shared by every 3D instance in the call.
 - **Twin-Y x-axis no longer clips a secondary series that extends further than the primary series** — `Layout::auto_from_twin_y_plots`'s `with_y2_auto` unioned the *padded* x-range across primary and secondary, but left `data_x_range` (the *raw* extent used by the axis-range capping added for [#98](https://github.com/Psy-Fer/kuva/issues/98)) pinned to primary's range alone. When the capped branch triggered, the x-axis max was computed from primary's raw max instead of the true combined max, rounding the axis short and clipping secondary's data past that point. `data_x_range` is now unioned across both series.
 
+### Security
+
+- **Data-derived text (group names, legend/category labels) is now XML-escaped before being written into SVG attribute values** (e.g. `data-group="..."`, `data-x="..."`) in interactive-mode output. Previously these were interpolated raw, so a crafted data file's label could break out of the attribute and inject arbitrary markup (a stored-XSS-style issue) into the rendered SVG. Fixed at every `extra_attrs` call site in `src/render/render.rs` via a new `render_utils::escape_attr`.
+- **Arbitrary/unrecognized color strings (`Color::Css`, e.g. an unrecognized `--color-by` value) are now XML-escaped when written into `fill`/`stroke` attributes**, and `stroke-dasharray`, root `font-family`/`fill`, and the background-rect `fill` in the SVG backend are now escaped as well, closing the same class of attribute-breakout issue for CSS-derived values.
+- **`--terminal` output now filters control characters (ESC, C0/C1, DEL) out of data-derived labels** before they reach the character grid, replacing them with `U+FFFD`. Previously a label containing a raw escape sequence (e.g. from an untrusted data file) could be replayed into the operator's real terminal when the rendered grid was printed, potentially triggering an ANSI/OSC-based terminal escape injection.
+
+Reported via private disclosure (GHSA-3c48-9r95-hqhr). See the advisory for full details once published.
+
 ## [0.4.0] — 2026-07-09
 
 ### Added

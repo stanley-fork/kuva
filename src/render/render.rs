@@ -908,7 +908,7 @@ fn add_scatter(scatter: &ScatterPlot, scene: &mut Scene, computed: &ComputedLayo
                     .as_deref()
                     .or(scatter.legend_label.as_deref());
                 let group_attr = group
-                    .map(|g| format!(r#" data-group="{g}""#))
+                    .map(|g| format!(r#" data-group="{}""#, render_utils::escape_attr(g)))
                     .unwrap_or_default();
                 Some(format!(
                     r#"class="tt" data-x="{x}" data-y="{y}"{group_attr}"#,
@@ -1085,7 +1085,10 @@ fn add_line(line: &LinePlot, scene: &mut Scene, computed: &ComputedLayout, bw_id
         scene.add(Primitive::GroupStart {
             transform: None,
             title: None,
-            extra_attrs: Some(format!("class=\"tt\" data-group=\"{}\"", group)),
+            extra_attrs: Some(format!(
+                "class=\"tt\" data-group=\"{}\"",
+                render_utils::escape_attr(group)
+            )),
         });
     }
 
@@ -1461,7 +1464,9 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     let extra = if computed.interactive {
                         Some(format!(
                             "class=\"tt\" data-group=\"{}\" data-x=\"{}\" data-y=\"{:.4}\"",
-                            series_label, group.label, bar_val.value
+                            render_utils::escape_attr(series_label),
+                            render_utils::escape_attr(&group.label),
+                            bar_val.value
                         ))
                     } else {
                         None
@@ -1531,7 +1536,9 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     let extra = if computed.interactive {
                         Some(format!(
                             "class=\"tt\" data-group=\"{}\" data-x=\"{}\" data-y=\"{:.4}\"",
-                            series_label, group.label, bar_val.value
+                            render_utils::escape_attr(series_label),
+                            render_utils::escape_attr(&group.label),
+                            bar_val.value
                         ))
                     } else {
                         None
@@ -3490,7 +3497,7 @@ fn add_strip_points(
         if computed.interactive {
             Some(format!(
                 "class=\"tt\" data-group=\"{}\" data-y=\"{v}\"",
-                group_label
+                render_utils::escape_attr(group_label)
             ))
         } else {
             None
@@ -8899,7 +8906,7 @@ fn add_legend_with_offset(
         if computed.interactive {
             let grp_attr = format!(
                 r#"class="legend-entry" data-group="{lbl}""#,
-                lbl = entry.label
+                lbl = render_utils::escape_attr(&entry.label)
             );
             scene.add(Primitive::GroupStart {
                 transform: None,
