@@ -1,6 +1,6 @@
 # kuva
 
-**kuva** is a scientific plotting library for Rust that renders plots to SVG. It targets bioinformatics use cases and ships with 60 plot types — from standard scatter and bar charts to Manhattan plots, UpSet plots, phylogenetic trees, and synteny diagrams. A `kuva` CLI binary lets you render plots directly from the shell without writing any Rust.
+**kuva** is a scientific plotting library for Rust that renders plots to SVG. It targets bioinformatics use cases and ships with 64 plot types — from standard scatter and bar charts to Manhattan plots, UpSet plots, phylogenetic trees, and synteny diagrams. A `kuva` CLI binary lets you render plots directly from the shell without writing any Rust.
 
 ## Design
 
