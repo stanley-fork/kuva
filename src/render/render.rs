@@ -548,6 +548,12 @@ pub struct Scene {
     pub font_family: Option<String>,
     pub elements: Vec<Primitive>,
     /// Raw SVG strings to emit inside a `<defs>` block (e.g. linearGradients).
+    ///
+    /// **Not escaped.** kuva's own call sites only ever push algorithmically
+    /// generated SVG (gradients, clip paths, hatch patterns) here, never
+    /// data-derived text. If you populate this from a library consumer, you
+    /// are responsible for ensuring it never contains untrusted content —
+    /// it is emitted into the output verbatim.
     pub defs: Vec<String>,
     /// Set to `true` when any `GroupStart { title: Some(_) }` is added.
     /// The SVG backend uses this to inject hover-highlight CSS.
@@ -559,6 +565,12 @@ pub struct Scene {
     pub axis_meta: Option<AxisMeta>,
     /// Raw `<script>` blocks to emit just before `</svg>`.
     /// Used by pixel-space interactive plots (e.g. CalendarPlot).
+    ///
+    /// **Not escaped and executed as-is by any SVG viewer that runs
+    /// scripts.** kuva's own call sites only ever push a fixed, static JS
+    /// constant here, never data-derived text. If you populate this from a
+    /// library consumer, you are responsible for ensuring it never contains
+    /// untrusted content.
     pub scripts: Vec<String>,
 }
 
