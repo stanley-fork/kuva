@@ -96,7 +96,7 @@ kuva ridgeline samples.tsv --group-by group --value expression --overlap 0.6
 kuva box samples.tsv --group-col group --value-col expression --terminal
 ```
 
-Input is auto-detected TSV or CSV. `.parquet` files are also supported. Columns are selectable by name or 0-based index. Pipe from stdin by omitting the file argument. Output defaults to SVG on stdout; use `-o file.svg/png/pdf` to write a file.
+Input is auto-detected TSV or CSV. `.parquet` files are also supported. Columns are selectable by name or 0-based index. Pipe from stdin by omitting the file argument. Output defaults to SVG on stdout; use a `.svg`, `.png`, or `.pdf` extension with `-o` to write a file. Extensions are case-insensitive, and other extensions are rejected.
 
 ---
 

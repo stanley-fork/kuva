@@ -132,7 +132,7 @@ Column selection (`--x`, `--y`, `--value-col`, etc.) works identically to CSV/TS
 | `-o out.png` | PNG (requires `--features png`) |
 | `-o out.pdf` | PDF (requires `--features pdf`; needs Rust >= 1.92 to build — higher than kuva's own MSRV, see [Installation](#installation)) |
 
-Format is inferred from the file extension. Any unrecognised extension is treated as SVG.
+Format is inferred from the file extension case-insensitively. Output paths must end in `.svg`, `.png`, or `.pdf`; other or missing extensions are rejected before input is read.
 
 ---
 
@@ -144,7 +144,7 @@ These flags are available on every subcommand.
 
 | Flag | Default | Description |
 |---|---|---|
-| `-o`, `--output <FILE>` | stdout (SVG) | Output file path (mutually exclusive with `--terminal`) |
+| `-o`, `--output <FILE>` | stdout (SVG) | `.svg`, `.png`, or `.pdf` output path, case-insensitive (mutually exclusive with `--terminal`) |
 | `--title <TEXT>` | — | Title displayed above the chart |
 | `--subtitle <TEXT>` | — | Secondary line under the title, smaller and muted ([Reference → Layout](../reference/layout.md)) |
 | `--width <PX>` | `800` | Canvas width in pixels |

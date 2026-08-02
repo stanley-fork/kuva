@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CLI output extensions now select formats case-insensitively and reject unsupported paths:** `-o plot.PNG` and `-o plot.PdF` now use their intended backends, while unknown or missing extensions return an error instead of silently writing SVG content under a misleading file name.
 - **`examples/all_plots_simple.rs`/`all_plots_complex.rs` (the "every plot type in one figure" gallery assets) were missing `ParetoPlot`, `BandPlot`, and `LegendPlot`** — Replaced some plot repeats to include missing plot types.
 - **`man/kuva.1` was missing the `twin-y` subcommand** — regenerated (`kuva man > man/kuva.1`).
 - **`Scatter3D`/`Surface3D` instances combined in one panel now share one 3D coordinate box** — each instance previously called `data_ranges()`/drew its own wireframe box independently, so two `Scatter3D` (or a mix with `Surface3D`) in the same `render_multiple` call each normalized to their own min/max and could project completely different data onto identical screen coordinates, with the box itself drawn twice. `render_multiple` now computes one merged `DataRanges3D` and draws the box once, shared by every 3D instance in the call.
