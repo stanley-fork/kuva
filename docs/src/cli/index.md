@@ -88,7 +88,12 @@ kuva scatter - < data.tsv
 
 ### Header detection
 
-If the first field of the first row fails to parse as a number, the row is treated as a header. Override with `--no-header`.
+The first row is treated as a header when either its first field fails to parse as a number, or some column holds a non-numeric label sitting atop an otherwise all-numeric column (so a leading numeric key column no longer hides the header, e.g. `5,data` above `0,1` / `1,2`).
+
+Two flags override the auto-detection (they are mutually exclusive):
+
+- `--header`: force the first row to be a header even if it looks like data (useful for all-numeric column names such as years).
+- `--no-header`: force the first row to be data even if it looks like a header.
 
 ### Column selection
 
@@ -119,7 +124,7 @@ Detection is automatic, no flag needed:
 
 Column selection (`--x`, `--y`, `--value-col`, etc.) works identically to CSV/TSV, by index or header name. Under the hood, only the requested columns are decoded from disk (a projected Arrow read), so memory and time scale with the columns you actually select rather than the full schema, useful for wide parquet files with many unused columns.
 
-`--no-header` and `--delimiter` are ignored for parquet input (with a warning) since parquet is self-describing: it always carries its own schema and column names, so there's no header row to skip and no delimiter to guess.
+`--header`, `--no-header`, and `--delimiter` are ignored for parquet input (with a warning) since parquet is self-describing: it always carries its own schema and column names, so there's no header row to skip and no delimiter to guess.
 
 ---
 
@@ -285,6 +290,7 @@ See [Reference → Date & Time Axes](../reference/datetime.md) for the underlyin
 
 | Flag | Description |
 |---|---|
+| `--header` | Force first row as a header (overrides auto-detection) |
 | `--no-header` | Treat first row as data, not a header |
 | `-d`, `--delimiter <CHAR>` | Override field delimiter |
 

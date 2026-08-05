@@ -90,7 +90,7 @@ pub fn run(args: ParetoArgs) -> Result<(), String> {
     let proj: Vec<ColSpec> = vec![label_col.clone(), value_col.clone()];
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;

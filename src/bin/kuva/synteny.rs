@@ -46,7 +46,7 @@ pub fn run(args: SyntenyArgs) -> Result<(), String> {
     // Primary input file: sequences TSV (name, length).
     let seqs_table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &[],
     )?;
@@ -54,7 +54,7 @@ pub fn run(args: SyntenyArgs) -> Result<(), String> {
     // Blocks file.
     let blocks_table = DataTable::parse(
         Some(args.blocks_file.as_path()),
-        false,
+        args.input.header_mode(),
         args.input.delimiter,
         &[],
     )?;

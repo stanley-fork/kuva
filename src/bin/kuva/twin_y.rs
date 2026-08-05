@@ -82,7 +82,7 @@ pub fn run(args: TwinYArgs) -> Result<(), String> {
 
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &[x_col.clone(), y_col.clone(), y2_col.clone()],
     )?;
