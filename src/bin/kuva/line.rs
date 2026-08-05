@@ -81,7 +81,7 @@ pub fn run(args: LineArgs) -> Result<(), String> {
     }
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
