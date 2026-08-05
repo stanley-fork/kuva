@@ -14,8 +14,13 @@ use kuva::render::theme::Theme;
 #[derive(Args, Debug)]
 #[command(next_help_heading = "Output & appearance")]
 pub struct BaseArgs {
-    /// Output file. SVG/PNG/PDF inferred from extension. Defaults to SVG on stdout.
-    #[arg(short = 'o', long)]
+    /// Output file. Extension must be .svg, .png, or .pdf (case-insensitive).
+    /// Defaults to SVG on stdout.
+    #[arg(
+        short = 'o',
+        long,
+        value_parser = crate::output::output_path_parser()
+    )]
     pub output: Option<std::path::PathBuf>,
 
     /// Plot title displayed above the chart.
