@@ -1,74 +1,14 @@
-pub fn cases() -> Vec<(&'static str, Vec<&'static str>)> {
-    vec![
-        ("pie", vec!["pie", "examples/data/pie.tsv"]),
-        (
-            "heatmap",
-            vec![
-                "heatmap",
-                "examples/data/heatmap.tsv",
-                "--values",
-                "--legend",
-                "Expr",
-            ],
-        ),
-        (
-            "network",
-            vec![
-                "network",
-                "examples/data/network.tsv",
-                "--source-col",
-                "source",
-                "--target-col",
-                "target",
-                "--weight-col",
-                "weight",
-                "--group-col",
-                "group",
-                "--directed",
-                "--labels",
-                "--legend",
-                "groups",
-            ],
-        ),
-        (
-            "surface3d",
-            vec![
-                "surface3d",
-                "examples/data/surface3d.tsv",
-                "--x-label",
-                "X",
-                "--y-label",
-                "Y",
-                "--z-label",
-                "Z",
-            ],
-        ),
-        (
-            "scatter3d",
-            vec![
-                "scatter3d",
-                "examples/data/scatter3d.tsv",
-                "--color-by",
-                "group",
-            ],
-        ),
-        (
-            "stacked_area",
-            vec![
-                "stacked-area",
-                "examples/data/stacked_area.tsv",
-                "--x-col",
-                "week",
-                "--group-col",
-                "species",
-                "--y-col",
-                "abundance",
-                "--normalize",
-            ],
-        ),
-    ]
-}
+//! Shared fixtures for the `--emit-code` compile tests.
+//!
+//! Included via `#[path]` into more than one integration-test binary, so any
+//! given helper is used by some binaries and not others. `#![allow(dead_code)]`
+//! keeps that from tripping the unused-code lint per-binary — the standard
+//! idiom for a `tests/` support module.
+#![allow(dead_code)]
 
+/// Every `--emit-code`-wired subcommand, with a CLI invocation (minus the
+/// trailing `--emit-code`) known to produce output against the checked-in
+/// example data.
 pub fn all_cases() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
         ("pie", vec!["pie", "examples/data/pie.tsv"]),
@@ -804,9 +744,33 @@ pub fn all_cases() -> Vec<(&'static str, Vec<&'static str>)> {
     ]
 }
 
+/// The small full-feature `trybuild` link sample: one simple plot (`pie`) and
+/// one 3D plot (`surface3d`). The all-command compile proof lives in
+/// `emit_code_minimal_compiles.rs`; this is just a belt-and-suspenders check
+/// that emitted code still links under the full feature set.
 pub fn full_feature_cases() -> Vec<(&'static str, Vec<&'static str>)> {
-    cases()
+    all_cases()
         .into_iter()
         .filter(|(name, _)| matches!(*name, "pie" | "surface3d"))
         .collect()
+}
+
+/// Split a captured `--emit-code` snippet into its leading `use ...;` lines
+/// (kept at module scope) and the remaining statements (wrapped in
+/// `fn main() { ... }`), producing a compilable program.
+pub fn wrap_as_program(snippet: &str) -> String {
+    let mut uses = String::new();
+    let mut body = String::new();
+    let mut past_uses = false;
+    for line in snippet.lines() {
+        if !past_uses && (line.starts_with("use ") || line.is_empty()) {
+            uses.push_str(line);
+            uses.push('\n');
+        } else {
+            past_uses = true;
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+    format!("{uses}\nfn main() {{\n{body}}}\n")
 }

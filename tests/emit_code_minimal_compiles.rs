@@ -58,25 +58,6 @@ fn toml_string(value: &Path) -> String {
     format!("\"{value}\"")
 }
 
-fn wrap_as_program(snippet: &str) -> String {
-    let mut uses = String::new();
-    let mut body = String::new();
-    let mut past_uses = false;
-
-    for line in snippet.lines() {
-        if !past_uses && (line.starts_with("use ") || line.is_empty()) {
-            uses.push_str(line);
-            uses.push('\n');
-        } else {
-            past_uses = true;
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-
-    format!("{uses}\nfn main() {{\n{body}}}\n")
-}
-
 #[test]
 fn all_emit_code_snippets_compile_without_full_features() {
     let package = TemporaryPackage::new();
@@ -115,7 +96,7 @@ kuva = {{ path = {}, default-features = false }}
             .unwrap_or_else(|error| panic!("emit-code output for {name} was not UTF-8: {error}"));
         fs::write(
             source_dir.join(format!("{name}.rs")),
-            wrap_as_program(&snippet),
+            representative::wrap_as_program(&snippet),
         )
         .unwrap_or_else(|error| panic!("failed to write generated {name} fixture: {error}"));
     }

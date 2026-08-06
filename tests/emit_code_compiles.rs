@@ -59,25 +59,6 @@ fn emit_code_snippets_are_structurally_sound() {
     }
 }
 
-/// Split a captured snippet into its leading `use ...;` lines (kept at module
-/// scope) and the remaining statements (wrapped in `fn main() { ... }`).
-fn wrap_as_program(snippet: &str) -> String {
-    let mut uses = String::new();
-    let mut body = String::new();
-    let mut past_uses = false;
-    for line in snippet.lines() {
-        if !past_uses && (line.starts_with("use ") || line.is_empty()) {
-            uses.push_str(line);
-            uses.push('\n');
-        } else {
-            past_uses = true;
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    format!("{uses}\nfn main() {{\n{body}}}\n")
-}
-
 fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/emit_code_fixtures")
 }
@@ -94,7 +75,7 @@ fn emit_code_snippets_compile() {
     let cases = trybuild::TestCases::new();
     for (name, args) in representative_subcommands() {
         let snippet = run_emit_code(&args);
-        let program = wrap_as_program(&snippet);
+        let program = representative::wrap_as_program(&snippet);
         let path = dir.join(format!("{name}.rs"));
         fs::write(&path, program).unwrap_or_else(|e| panic!("failed to write {path:?}: {e}"));
         cases.pass(path);
