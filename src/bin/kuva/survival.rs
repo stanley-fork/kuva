@@ -60,7 +60,7 @@ pub fn run(args: SurvivalArgs) -> Result<(), String> {
     }
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -101,6 +101,22 @@ pub fn run(args: SurvivalArgs) -> Result<(), String> {
         let event_vals = table.col_f64(&event_col)?;
         let events: Vec<bool> = event_vals.into_iter().map(|v| v > 0.5).collect();
         plot = plot.with_colored_group("All", times, events, pal[0].to_string());
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::SurvivalPlot"],
+                "Survival",
+                &[crate::emit_code::emit_survival_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Survival(plot)];

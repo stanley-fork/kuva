@@ -1,4 +1,5 @@
 use clap::Args;
+use kuva::render::datetime::DateTimeAxis;
 use kuva::render::layout::{AxisLabelOverlap, AxisLine, Layout, TickAlign, TickFormat, TickPos};
 use kuva::render::palette::Palette;
 use kuva::render::theme::Theme;
@@ -8,17 +9,27 @@ use kuva::render::theme::Theme;
 //   Pie                    →  BaseArgs
 //   Bar / Box / Violin     →  BaseArgs + AxisArgs
 //   Scatter / Line / Hist  →  BaseArgs + AxisArgs + LogArgs
+//   Scatter / Line         →  ... + DateArgs (date/time X axis)
 
 #[derive(Args, Debug)]
 #[command(next_help_heading = "Output & appearance")]
 pub struct BaseArgs {
-    /// Output file. SVG/PNG/PDF inferred from extension. Defaults to SVG on stdout.
-    #[arg(short = 'o', long)]
+    /// Output file. Extension must be .svg, .png, or .pdf (case-insensitive).
+    /// Defaults to SVG on stdout.
+    #[arg(
+        short = 'o',
+        long,
+        value_parser = crate::output::output_path_parser()
+    )]
     pub output: Option<std::path::PathBuf>,
 
     /// Plot title displayed above the chart.
     #[arg(long)]
     pub title: Option<String>,
+
+    /// Subtitle displayed under the title at a smaller, muted size (e.g. a data summary).
+    #[arg(long)]
+    pub subtitle: Option<String>,
 
     /// Canvas width in pixels. Default is auto-computed from plot content.
     #[arg(long)]
@@ -80,14 +91,25 @@ pub struct BaseArgs {
     #[arg(long)]
     pub bw: bool,
 
-    /// Wrap all text (title, axis labels, legend) at N characters.
-    /// Per-element flags (--title-wrap, etc.) override this when set.
+    /// Draw a semi-opaque background rect behind in-fill value labels (Bar,
+    /// Treemap, Sunburst, Waffle, Mosaic, Funnel, Gantt) for readability over
+    /// busy fills. On automatically with `--bw`; this flag forces it on for
+    /// color output too.
+    #[arg(long)]
+    pub label_background: bool,
+
+    /// Wrap all text (title, subtitle, axis labels, legend) at N characters.
+    /// Per-element flags (--title-wrap, --subtitle-wrap, etc.) override this when set.
     #[arg(long, value_name = "CHARS")]
     pub wrap: Option<usize>,
 
     /// Wrap the plot title at N characters.
     #[arg(long, value_name = "CHARS")]
     pub title_wrap: Option<usize>,
+
+    /// Wrap the subtitle at N characters (independent of --title-wrap).
+    #[arg(long, value_name = "CHARS")]
+    pub subtitle_wrap: Option<usize>,
 
     /// Wrap the x-axis label at N characters.
     #[arg(long, value_name = "CHARS")]
@@ -111,6 +133,16 @@ pub struct BaseArgs {
     /// Has no effect on PNG/PDF output (those backends always have the font).
     #[arg(long, conflicts_with = "terminal")]
     pub embed_font: bool,
+
+    /// Print the equivalent Rust library code for this plot instead of rendering it.
+    /// The emitted snippet bakes in the resolved data as literals (a copy-pasteable
+    /// starting point, not a live re-parse of your input file). Ignores --output
+    /// and all rendering flags; prints to stdout.
+    ///
+    /// Requires the `emit_code` build feature (cargo build --features cli,emit_code).
+    #[cfg(feature = "emit_code")]
+    #[arg(long, conflicts_with = "terminal")]
+    pub emit_code: bool,
 }
 
 #[derive(Args, Debug)]
@@ -213,6 +245,61 @@ pub struct LogArgs {
     pub log_y: bool,
 }
 
+#[derive(Args, Debug)]
+#[command(next_help_heading = "Date/time axis")]
+pub struct DateArgs {
+    /// Parse the X column as a date/time using this strftime-style format
+    /// (e.g. "%Y-%m-%d" or "%m/%d/%Y %H:%M") instead of a plain number.
+    /// Formats with no time component parse as midnight UTC.
+    #[arg(long, value_name = "FMT")]
+    pub x_date_format: Option<String>,
+
+    /// Tick spacing unit for the date axis: years, months, weeks, days, hours,
+    /// or minutes. Default: auto (inspects the data range and picks one).
+    /// Ignored unless --x-date-format is set.
+    #[arg(long, value_name = "UNIT")]
+    pub x_date_unit: Option<String>,
+
+    /// Tick label format (strftime-style), overriding the unit's default
+    /// format. Ignored in auto mode (i.e. when --x-date-unit is not set).
+    #[arg(long, value_name = "FMT")]
+    pub x_date_tick_format: Option<String>,
+
+    /// Draw one date-axis tick every N units instead of every 1.
+    /// Ignored unless --x-date-format is set.
+    #[arg(long, value_name = "N")]
+    pub x_date_tick_step: Option<usize>,
+}
+
+/// Controls for a secondary (right-hand) Y axis — currently only meaningful
+/// on `kuva twin-y`, which is the only subcommand with a real secondary Y axis
+/// exposed to CLI configuration (`ParetoPlot`'s secondary axis is fixed 0-100%
+/// and needs no flags).
+#[derive(Args, Debug)]
+#[command(next_help_heading = "Secondary Y axis")]
+pub struct Y2AxisArgs {
+    /// Label for the secondary (right) Y axis.
+    #[arg(long)]
+    pub y2_label: Option<String>,
+
+    /// Fix the secondary Y axis lower bound; overrides auto-range.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_min: Option<f64>,
+
+    /// Fix the secondary Y axis upper bound; overrides auto-range.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_max: Option<f64>,
+
+    /// Log-scale the secondary Y axis.
+    #[arg(long)]
+    pub log_y2: bool,
+
+    /// Tick label format for the secondary Y axis.
+    /// auto (default), int, sci, percent, or fixed:N (e.g. fixed:2 → "3.14").
+    #[arg(long, value_name = "FORMAT")]
+    pub y2_tick_format: Option<String>,
+}
+
 // ── Apply functions ───────────────────────────────────────────────────────────
 
 /// Apply base output/appearance args to a layout.
@@ -225,6 +312,9 @@ pub fn apply_base_args(mut layout: Layout, args: &BaseArgs) -> Layout {
     }
     if let Some(ref t) = args.title {
         layout = layout.with_title(t.clone());
+    }
+    if let Some(ref s) = args.subtitle {
+        layout = layout.with_subtitle(s.clone());
     }
     // When rendering to the terminal, auto-select a theme matched to the
     // terminal background unless the user has already chosen one via --theme.
@@ -271,12 +361,18 @@ pub fn apply_base_args(mut layout: Layout, args: &BaseArgs) -> Layout {
     if args.bw {
         layout = layout.with_bw_mode();
     }
+    if args.label_background {
+        layout = layout.with_label_background(true);
+    }
     // Global wrap first, then per-element overrides.
     if let Some(n) = args.wrap {
         layout = layout.with_wrap(n);
     }
     if let Some(n) = args.title_wrap {
         layout = layout.with_title_wrap(n);
+    }
+    if let Some(n) = args.subtitle_wrap {
+        layout = layout.with_subtitle_wrap(n);
     }
     if let Some(n) = args.x_label_wrap {
         layout = layout.with_x_label_wrap(n);
@@ -364,6 +460,28 @@ pub fn apply_axis_args(mut layout: Layout, args: &AxisArgs) -> Layout {
     layout
 }
 
+/// Apply secondary-Y-axis args to a layout.
+pub fn apply_y2_axis_args(mut layout: Layout, args: &Y2AxisArgs) -> Layout {
+    if let Some(ref l) = args.y2_label {
+        layout = layout.with_y2_label(l.clone());
+    }
+    if let Some(v) = args.y2_min {
+        layout = layout.with_y2_axis_min(v);
+    }
+    if let Some(v) = args.y2_max {
+        layout = layout.with_y2_axis_max(v);
+    }
+    if args.log_y2 {
+        layout = layout.with_log_y2();
+    }
+    if let Some(ref fmt) = args.y2_tick_format {
+        if let Some(tf) = parse_tick_format(fmt) {
+            layout = layout.with_y2_tick_format(tf);
+        }
+    }
+    layout
+}
+
 /// Apply log-scale args to a layout.
 pub fn apply_log_args(mut layout: Layout, args: &LogArgs) -> Layout {
     if args.log_x {
@@ -373,6 +491,56 @@ pub fn apply_log_args(mut layout: Layout, args: &LogArgs) -> Layout {
         layout = layout.with_log_y();
     }
     layout
+}
+
+/// Build a `DateTimeAxis` from `--x-date-*` flags and the already-parsed x
+/// values (needed for `DateTimeAxis::auto`'s data-range inspection). Callers
+/// only invoke this when `args.x_date_format` is set — that flag is what
+/// actually switches the x column from a numeric to a date/time parse; this
+/// function only decides how the resulting timestamps are ticked.
+pub fn date_axis_from_args(args: &DateArgs, xs: &[f64]) -> DateTimeAxis {
+    let axis = match args.x_date_unit.as_deref() {
+        Some(unit) => {
+            let fmt = args
+                .x_date_tick_format
+                .clone()
+                .unwrap_or_else(|| default_date_tick_format(unit).to_string());
+            match unit.to_ascii_lowercase().as_str() {
+                "years" | "year" => DateTimeAxis::years(&fmt),
+                "months" | "month" => DateTimeAxis::months(&fmt),
+                "weeks" | "week" => DateTimeAxis::weeks(&fmt),
+                "days" | "day" => DateTimeAxis::days(&fmt),
+                "hours" | "hour" => DateTimeAxis::hours(&fmt),
+                "minutes" | "minute" => DateTimeAxis::minutes(&fmt),
+                _ => auto_date_axis(xs),
+            }
+        }
+        None => auto_date_axis(xs),
+    };
+    match args.x_date_tick_step {
+        Some(step) => axis.with_step(step),
+        None => axis,
+    }
+}
+
+fn auto_date_axis(xs: &[f64]) -> DateTimeAxis {
+    let min = xs.iter().copied().fold(f64::MAX, f64::min);
+    let max = xs.iter().copied().fold(f64::MIN, f64::max);
+    DateTimeAxis::auto(min, max)
+}
+
+/// Default tick-label format per unit — matches the "Typical format" column
+/// in the Date & Time Axes reference docs.
+fn default_date_tick_format(unit: &str) -> &'static str {
+    match unit.to_ascii_lowercase().as_str() {
+        "years" | "year" => "%Y",
+        "months" | "month" => "%b %Y",
+        "weeks" | "week" => "%b %d",
+        "days" | "day" => "%Y-%m-%d",
+        "hours" | "hour" => "%H:%M",
+        "minutes" | "minute" => "%H:%M",
+        _ => "%Y-%m-%d",
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

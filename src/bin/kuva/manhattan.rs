@@ -77,7 +77,7 @@ pub fn run(args: ManhattanArgs) -> Result<(), String> {
     ];
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -143,6 +143,26 @@ pub fn run(args: ManhattanArgs) -> Result<(), String> {
     }
     if args.legend {
         plot = plot.with_legend("GWAS thresholds");
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::ManhattanPlot",
+                    "kuva::plot::LabelStyle",
+                    "kuva::Palette",
+                ],
+                "Manhattan",
+                &[crate::emit_code::emit_manhattan_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Manhattan(plot)];

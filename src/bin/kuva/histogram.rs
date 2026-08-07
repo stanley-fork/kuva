@@ -61,7 +61,7 @@ pub fn run(args: HistogramArgs) -> Result<(), String> {
 
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &y_specs,
     )?;
@@ -88,7 +88,7 @@ pub fn run(args: HistogramArgs) -> Result<(), String> {
             .cloned()
             .fold(f64::NEG_INFINITY, f64::max);
         let pal = Palette::category10();
-        let plots: Vec<Plot> = y_specs
+        let hists: Vec<Histogram> = y_specs
             .iter()
             .enumerate()
             .zip(all_values)
@@ -106,9 +106,31 @@ pub fn run(args: HistogramArgs) -> Result<(), String> {
                 if args.legend {
                     h = h.with_legend(table.col_display_name(col));
                 }
-                Plot::Histogram(h)
+                h
             })
             .collect();
+
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            let exprs: Vec<String> = hists
+                .iter()
+                .map(crate::emit_code::emit_histogram_plot)
+                .collect();
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::Histogram"],
+                    "Histogram",
+                    &exprs,
+                    &args.base,
+                    Some(&args.axis),
+                    Some(&args.log),
+                )
+            );
+            return Ok(());
+        }
+
+        let plots: Vec<Plot> = hists.into_iter().map(Plot::Histogram).collect();
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
         let layout = apply_axis_args(layout, &args.axis);
@@ -137,6 +159,22 @@ pub fn run(args: HistogramArgs) -> Result<(), String> {
 
     if args.normalize {
         plot = plot.with_normalize();
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::Histogram"],
+                "Histogram",
+                &[crate::emit_code::emit_histogram_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                Some(&args.log),
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Histogram(plot)];

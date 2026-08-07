@@ -77,7 +77,7 @@ pub fn run(args: VolcanoArgs) -> Result<(), String> {
     ];
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -128,6 +128,22 @@ pub fn run(args: VolcanoArgs) -> Result<(), String> {
     }
     if args.legend {
         plot = plot.with_legend("DEG status");
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::VolcanoPlot", "kuva::plot::LabelStyle"],
+                "Volcano",
+                &[crate::emit_code::emit_volcano_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Volcano(plot)];

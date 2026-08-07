@@ -75,6 +75,13 @@ fn data(filename: &str) -> String {
     format!("{}/examples/data/{}", env!("CARGO_MANIFEST_DIR"), filename)
 }
 
+/// Return a test-specific temporary output path and remove stale residue.
+fn output_path(filename: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("kuva_test_{}_{}", std::process::id(), filename));
+    let _ = fs::remove_file(&path);
+    path
+}
+
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 /// Piping a TSV scatter through stdin should produce valid SVG on stdout.
@@ -132,6 +139,117 @@ fn test_bar_to_file() {
 
     let _ = fs::remove_file(&tmp);
     let _ = fs::remove_file(&input_path);
+}
+
+#[test]
+fn test_output_rejects_unsupported_extension_without_creating_file() {
+    let tsv = "x\ty\n1\t2\n3\t4\n";
+    let path = output_path("unsupported.txt");
+    let path_str = path.to_str().unwrap();
+
+    let (stdout, stderr, code) = run_with_stdin(&["scatter", "-o", path_str], tsv);
+    let file_exists = path.exists();
+    let _ = fs::remove_file(&path);
+
+    assert_ne!(code, 0, "unsupported output extension should fail");
+    assert!(stdout.is_empty(), "failure should not write to stdout");
+    assert!(
+        stderr.contains(".svg") && stderr.contains(".png") && stderr.contains(".pdf"),
+        "error should list supported output extensions; got: {stderr}"
+    );
+    assert!(!file_exists, "failure should not create an output file");
+}
+
+#[test]
+fn test_output_rejects_missing_extension_without_creating_file() {
+    let tsv = "x\ty\n1\t2\n3\t4\n";
+    let path = output_path("missing_extension");
+    let path_str = path.to_str().unwrap();
+
+    let (stdout, stderr, code) = run_with_stdin(&["scatter", "-o", path_str], tsv);
+    let file_exists = path.exists();
+    let _ = fs::remove_file(&path);
+
+    assert_ne!(code, 0, "extensionless output path should fail");
+    assert!(stdout.is_empty(), "failure should not write to stdout");
+    assert!(
+        stderr.contains(".svg") && stderr.contains(".png") && stderr.contains(".pdf"),
+        "error should list supported output extensions; got: {stderr}"
+    );
+    assert!(!file_exists, "failure should not create an output file");
+}
+
+#[test]
+fn test_output_validation_precedes_input_reading() {
+    let output = output_path("unsupported_before_input.txt");
+    let missing_input = output_path("missing_input.tsv");
+
+    let (_, stderr, code) = run_with_file(&[
+        "scatter",
+        missing_input.to_str().unwrap(),
+        "-o",
+        output.to_str().unwrap(),
+    ]);
+
+    assert_ne!(code, 0, "unsupported output extension should fail");
+    assert!(
+        stderr.contains(".svg") && stderr.contains(".png") && stderr.contains(".pdf"),
+        "output validation should fail before reading the missing input; got: {stderr}"
+    );
+    assert!(!output.exists(), "failure should not create an output file");
+}
+
+#[test]
+fn test_output_accepts_mixed_case_svg_extension() {
+    let tsv = "x\ty\n1\t2\n3\t4\n";
+    let path = output_path("mixed_case.SvG");
+    let path_str = path.to_str().unwrap();
+
+    let (_, stderr, code) = run_with_stdin(&["scatter", "-o", path_str], tsv);
+    let content = fs::read_to_string(&path);
+    let _ = fs::remove_file(&path);
+
+    assert_eq!(code, 0, "mixed-case SVG output failed: {stderr}");
+    assert!(
+        content.expect("SVG output file").starts_with("<svg"),
+        "mixed-case SVG extension should write SVG"
+    );
+}
+
+#[test]
+#[cfg(feature = "png")]
+fn test_output_accepts_mixed_case_png_extension() {
+    let tsv = "x\ty\n1\t2\n3\t4\n";
+    let path = output_path("mixed_case.PnG");
+    let path_str = path.to_str().unwrap();
+
+    let (_, stderr, code) = run_with_stdin(&["scatter", "-o", path_str], tsv);
+    let bytes = fs::read(&path);
+    let _ = fs::remove_file(&path);
+
+    assert_eq!(code, 0, "mixed-case PNG output failed: {stderr}");
+    let image = image::load_from_memory(&bytes.expect("PNG output file"))
+        .expect("mixed-case PNG extension should write a decodable PNG");
+    assert!(image.width() > 0 && image.height() > 0);
+}
+
+#[test]
+#[cfg(feature = "pdf")]
+fn test_output_accepts_mixed_case_pdf_extension() {
+    let tsv = "x\ty\n1\t2\n3\t4\n";
+    let path = output_path("mixed_case.PdF");
+    let path_str = path.to_str().unwrap();
+
+    let (_, stderr, code) = run_with_stdin(&["scatter", "-o", path_str], tsv);
+    let bytes = fs::read(&path);
+    let _ = fs::remove_file(&path);
+
+    assert_eq!(code, 0, "mixed-case PDF output failed: {stderr}");
+    let bytes = bytes.expect("PDF output file");
+    assert!(
+        bytes.starts_with(b"%PDF-") && bytes.len() > 5,
+        "mixed-case PDF extension should write a non-empty PDF"
+    );
 }
 
 /// Histogram with explicit bin count should produce SVG with rect elements (bars).
@@ -1847,6 +1965,84 @@ fn test_quiver_scale_auto_scale_exclusive() {
         stderr.to_ascii_lowercase().contains("cannot be used with")
             || stderr.to_ascii_lowercase().contains("conflict"),
         "expected conflict error; got: {stderr}"
+    );
+}
+
+// ── pareto ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_pareto_svg() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "pareto",
+        &data("pareto.tsv"),
+        "--label-col",
+        "category",
+        "--value-col",
+        "count",
+        "--title",
+        "Error Categories",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+    assert!(stdout.starts_with("<svg"), "output should start with <svg");
+    assert!(stdout.contains("<rect"), "should contain bars");
+    assert!(
+        stdout.contains("Missing field"),
+        "should contain a category label"
+    );
+}
+
+#[test]
+fn test_pareto_styled_options() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "pareto",
+        &data("pareto.tsv"),
+        "--label-col",
+        "category",
+        "--value-col",
+        "count",
+        "--color",
+        "seagreen",
+        "--line-color",
+        "darkorange",
+        "--threshold",
+        "90",
+        "--cumulative-labels",
+        "--legend",
+        "Count,Cumulative %",
+        "--title",
+        "Pareto Styled",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+    assert!(stdout.contains("Count"), "should contain bar legend label");
+    assert!(
+        stdout.contains("Cumulative %"),
+        "should contain line legend label"
+    );
+}
+
+#[test]
+fn test_pareto_horizontal_and_max_categories() {
+    let (stdout, stderr, code) = run_with_file(&[
+        "pareto",
+        &data("pareto.tsv"),
+        "--label-col",
+        "category",
+        "--value-col",
+        "count",
+        "--horizontal",
+        "--max-categories",
+        "4",
+        "--other-label",
+        "Misc",
+        "--title",
+        "Horizontal Pareto",
+    ]);
+    assert_eq!(code, 0, "exit code should be 0; stderr: {stderr}");
+    assert!(stdout.starts_with("<svg"), "output should start with <svg");
+    assert!(stdout.contains("Misc"), "bucketed bar label override");
+    assert!(
+        stdout.contains(">100%<"),
+        "secondary x-axis should reach 100%"
     );
 }
 

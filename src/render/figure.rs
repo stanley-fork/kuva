@@ -927,6 +927,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.x_label = l.x_label.clone();
     new.y_label = l.y_label.clone();
     new.title = l.title.clone();
+    new.subtitle = l.subtitle.clone();
     new.x_categories = l.x_categories.clone();
     new.y_categories = l.y_categories.clone();
     new.show_legend = l.show_legend;
@@ -955,6 +956,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.suppress_y_ticks = l.suppress_y_ticks;
     new.font_family = l.font_family.clone();
     new.title_size = l.title_size;
+    new.subtitle_size = l.subtitle_size;
     new.label_size = l.label_size;
     new.tick_size = l.tick_size;
     new.body_size = l.body_size;
@@ -974,10 +976,20 @@ fn clone_layout(l: &Layout) -> Layout {
     new.log_y2 = l.log_y2;
     new.y2_tick_format = l.y2_tick_format.clone();
     new.suppress_y2_ticks = l.suppress_y2_ticks;
+    new.x2_range = l.x2_range;
+    new.data_x2_range = l.data_x2_range;
+    new.x2_label = l.x2_label.clone();
+    new.log_x2 = l.log_x2;
+    new.x2_tick_format = l.x2_tick_format.clone();
+    new.suppress_x2_ticks = l.suppress_x2_ticks;
+    new.x2_label_offset = l.x2_label_offset;
+    new.x2_label_wrap = l.x2_label_wrap;
     new.x_axis_min = l.x_axis_min;
     new.x_axis_max = l.x_axis_max;
     new.y_axis_min = l.y_axis_min;
     new.y_axis_max = l.y_axis_max;
+    new.y2_axis_min = l.y2_axis_min;
+    new.y2_axis_max = l.y2_axis_max;
     new.x_datetime = l.x_datetime.clone();
     new.y_datetime = l.y_datetime.clone();
     new.x_tick_rotate = l.x_tick_rotate;
@@ -998,6 +1010,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.equal_aspect = l.equal_aspect;
     new.brick_notation_tiers = l.brick_notation_tiers;
     new.title_wrap = l.title_wrap;
+    new.subtitle_wrap = l.subtitle_wrap;
     new.x_label_wrap = l.x_label_wrap;
     new.y_label_wrap = l.y_label_wrap;
     new.y2_label_wrap = l.y2_label_wrap;
@@ -1005,6 +1018,7 @@ fn clone_layout(l: &Layout) -> Layout {
     new.horizon_right_annot_px = l.horizon_right_annot_px;
     new.gantt_right_annot_px = l.gantt_right_annot_px;
     new.bw_mode = l.bw_mode;
+    new.label_background = l.label_background;
     new
 }
 

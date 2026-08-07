@@ -36,7 +36,7 @@ pub fn run(args: UpSetArgs) -> Result<(), String> {
 
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &[],
     )?;
@@ -97,6 +97,22 @@ pub fn run(args: UpSetArgs) -> Result<(), String> {
 
     if let Some(n) = args.max_visible {
         plot = plot.with_max_visible(n);
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::UpSetPlot", "kuva::plot::UpSetSort"],
+                "UpSet",
+                &[crate::emit_code::emit_upset_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::UpSet(plot)];

@@ -1,13 +1,16 @@
 use crate::render::alluvial_order::optimize_sankey_alluvial_order;
 use crate::render::annotations::{add_reference_lines, add_shaded_regions, add_text_annotations};
-use crate::render::axis::{add_axes_and_grid, add_labels_and_title, add_y2_axis, XLabelPlacer};
-use crate::render::layout::{ComputedLayout, Layout, TickFormat};
+use crate::render::axis::{
+    add_axes_and_grid, add_labels_and_title, add_x2_axis, add_y2_axis, muted_subtitle_color,
+    XLabelPlacer,
+};
+use crate::render::layout::{ComputedLayout, Layout, TickFormat, SUBTITLE_SIZE_RATIO};
 use crate::render::palette::Palette;
 use crate::render::plots::Plot;
 use crate::render::render_utils::{self, linear_regression, pearson_corr, percentile};
 use crate::render::text_metrics::{
-    ascent, cap_height, center_offset, mean_char_width, measure_text_width, text_height,
-    widest_text_width, FontStyle,
+    ascent, cap_height, center_offset, descent, line_height, mean_char_width, measure_text_width,
+    text_height, widest_text_width, FontStyle,
 };
 use crate::render::theme::Theme;
 use std::collections::HashMap;
@@ -149,6 +152,161 @@ fn path_bw(
     }
 }
 
+/// Draw a semi-opaque background rect behind an in-fill value label, sized to
+/// the glyphs plus a small pad, so the label stays readable over a busy fill
+/// or BW-mode hatch pattern. Gated on `computed.label_background` (see
+/// `Layout::with_label_background`) — a no-op otherwise. `(x, y)` is the
+/// label's own anchor point (the same point passed to the paired
+/// `Primitive::Text`), `text_width` is the already-measured rendered width of
+/// the label content, and `rotate` mirrors the angle (if any) passed to that
+/// `Primitive::Text` so the background tilts with rotated labels (e.g.
+/// `SunburstPlot`'s `rotate_labels`).
+#[allow(clippy::too_many_arguments)]
+fn label_bg_rect(
+    scene: &mut Scene,
+    computed: &ComputedLayout,
+    x: f64,
+    y: f64,
+    anchor: TextAnchor,
+    text_width: f64,
+    size: u32,
+    bold: bool,
+    rotate: Option<f64>,
+) {
+    if !computed.label_background {
+        return;
+    }
+    let style = if bold {
+        FontStyle::Bold
+    } else {
+        FontStyle::Regular
+    };
+    let pad_x = size as f64 * 0.3;
+    let pad_y = size as f64 * 0.15;
+    let (dx_lo, dx_hi) = match anchor {
+        TextAnchor::Start => (-pad_x, text_width + pad_x),
+        TextAnchor::Middle => (-(text_width / 2.0 + pad_x), text_width / 2.0 + pad_x),
+        TextAnchor::End => (-(text_width + pad_x), pad_x),
+    };
+    let dy_lo = -ascent(size as f64, style) - pad_y;
+    let dy_hi = descent(size as f64, style) + pad_y;
+    let fill = Color::from(&computed.theme.legend_bg);
+
+    if let Some(angle_deg) = rotate {
+        let rad = angle_deg.to_radians();
+        let (sin_a, cos_a) = rad.sin_cos();
+        let corner = |dx: f64, dy: f64| -> (f64, f64) {
+            (
+                round2(x + dx * cos_a - dy * sin_a),
+                round2(y + dx * sin_a + dy * cos_a),
+            )
+        };
+        let (x0, y0) = corner(dx_lo, dy_lo);
+        let (x1, y1) = corner(dx_hi, dy_lo);
+        let (x2, y2) = corner(dx_hi, dy_hi);
+        let (x3, y3) = corner(dx_lo, dy_hi);
+        scene.add(Primitive::Path(Box::new(PathData {
+            d: format!("M {x0} {y0} L {x1} {y1} L {x2} {y2} L {x3} {y3} Z"),
+            fill: Some(fill),
+            stroke: Color::None,
+            stroke_width: 0.0,
+            opacity: Some(0.82),
+            stroke_dasharray: None,
+        })));
+    } else {
+        scene.add(Primitive::Rect {
+            x: round2(x + dx_lo),
+            y: round2(y + dy_lo),
+            width: round2(dx_hi - dx_lo),
+            height: round2(dy_hi - dy_lo),
+            fill,
+            stroke: None,
+            stroke_width: None,
+            opacity: Some(0.82),
+        });
+    }
+}
+
+/// Color for an in-fill value label's text: `fallback` (chosen for contrast
+/// against the plot's own fill, independent of theme — usually white) when no
+/// background rect is drawn, or the theme's paired `text_color` when
+/// `label_bg_rect` *is* drawing one, since the label then sits on
+/// `theme.legend_bg` instead of the fill and needs the color that's
+/// legible against *that* (white-on-white otherwise).
+fn in_fill_label_color(computed: &ComputedLayout, fallback: &str) -> Color {
+    if computed.label_background {
+        Color::from(computed.theme.text_color.as_str())
+    } else {
+        Color::from(fallback)
+    }
+}
+
+/// Draw an error whisker: a line from `(x1, y1)` to `(x2, y2)` with end caps.
+///
+/// When `vertical` is `true` the whisker line itself runs vertically (varying
+/// `y` at roughly fixed `x`) so caps are drawn as short horizontal segments;
+/// when `false` the whisker runs horizontally and caps are vertical.
+#[allow(clippy::too_many_arguments)]
+fn draw_whisker(
+    scene: &mut Scene,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    cap_half: f64,
+    vertical: bool,
+    stroke: Color,
+) {
+    scene.add(Primitive::Line {
+        x1,
+        y1,
+        x2,
+        y2,
+        stroke: stroke.clone(),
+        stroke_width: 1.5,
+        stroke_dasharray: None,
+    });
+    if vertical {
+        scene.add(Primitive::Line {
+            x1: x1 - cap_half,
+            y1,
+            x2: x1 + cap_half,
+            y2: y1,
+            stroke: stroke.clone(),
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+        scene.add(Primitive::Line {
+            x1: x2 - cap_half,
+            y1: y2,
+            x2: x2 + cap_half,
+            y2,
+            stroke,
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+    } else {
+        scene.add(Primitive::Line {
+            x1,
+            y1: y1 - cap_half,
+            x2: x1,
+            y2: y1 + cap_half,
+            stroke: stroke.clone(),
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+        scene.add(Primitive::Line {
+            x1: x2,
+            y1: y2 - cap_half,
+            x2,
+            y2: y2 + cap_half,
+            stroke,
+            stroke_width: 1.5,
+            stroke_dasharray: None,
+        });
+    }
+}
+
 use crate::plot::band::BandPlot;
 use crate::plot::bar::BarPlot;
 use crate::plot::bump::{BumpPlot, CurveStyle};
@@ -175,6 +333,7 @@ use crate::plot::manhattan::ManhattanPlot;
 use crate::plot::mosaic::MosaicPlot;
 use crate::plot::network::{NetworkPlot, NodeShape};
 use crate::plot::parallel::{ParallelPlot, ParallelRow};
+use crate::plot::pareto::ParetoPlot;
 use crate::plot::phylo::{PhyloTree, TreeBranchStyle, TreeOrientation};
 use crate::plot::pie::PieLabelPosition;
 use crate::plot::polar::{PolarMode, PolarPlot};
@@ -389,6 +548,12 @@ pub struct Scene {
     pub font_family: Option<String>,
     pub elements: Vec<Primitive>,
     /// Raw SVG strings to emit inside a `<defs>` block (e.g. linearGradients).
+    ///
+    /// **Not escaped.** kuva's own call sites only ever push algorithmically
+    /// generated SVG (gradients, clip paths, hatch patterns) here, never
+    /// data-derived text. If you populate this from a library consumer, you
+    /// are responsible for ensuring it never contains untrusted content —
+    /// it is emitted into the output verbatim.
     pub defs: Vec<String>,
     /// Set to `true` when any `GroupStart { title: Some(_) }` is added.
     /// The SVG backend uses this to inject hover-highlight CSS.
@@ -400,6 +565,12 @@ pub struct Scene {
     pub axis_meta: Option<AxisMeta>,
     /// Raw `<script>` blocks to emit just before `</svg>`.
     /// Used by pixel-space interactive plots (e.g. CalendarPlot).
+    ///
+    /// **Not escaped and executed as-is by any SVG viewer that runs
+    /// scripts.** kuva's own call sites only ever push a fixed, static JS
+    /// constant here, never data-derived text. If you populate this from a
+    /// library consumer, you are responsible for ensuring it never contains
+    /// untrusted content.
     pub scripts: Vec<String>,
 }
 
@@ -749,7 +920,7 @@ fn add_scatter(scatter: &ScatterPlot, scene: &mut Scene, computed: &ComputedLayo
                     .as_deref()
                     .or(scatter.legend_label.as_deref());
                 let group_attr = group
-                    .map(|g| format!(r#" data-group="{g}""#))
+                    .map(|g| format!(r#" data-group="{}""#, render_utils::escape_attr(g)))
                     .unwrap_or_default();
                 Some(format!(
                     r#"class="tt" data-x="{x}" data-y="{y}"{group_attr}"#,
@@ -926,7 +1097,10 @@ fn add_line(line: &LinePlot, scene: &mut Scene, computed: &ComputedLayout, bw_id
         scene.add(Primitive::GroupStart {
             transform: None,
             title: None,
-            extra_attrs: Some(format!("class=\"tt\" data-group=\"{}\"", group)),
+            extra_attrs: Some(format!(
+                "class=\"tt\" data-group=\"{}\"",
+                render_utils::escape_attr(group)
+            )),
         });
     }
 
@@ -1148,6 +1322,16 @@ fn add_series(series: &SeriesPlot, scene: &mut Scene, computed: &ComputedLayout,
 }
 
 fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
+    let err_stroke = if computed.bw_mode {
+        Color::from("#1a1a1a")
+    } else {
+        Color::from(bar.error_color.as_deref().unwrap_or("#1a1a1a"))
+    };
+    // Collected instead of drawn inline so every whisker is drawn *after* all
+    // bars — stacked segments are drawn back-to-front, so a whisker drawn
+    // right after its own segment gets its top half painted over by the next
+    // segment stacked on top of it.
+    let mut pending_whiskers: Vec<(f64, f64, f64, f64, f64, bool)> = Vec::new();
     let mut flat_i: usize = 0;
     for (i, group) in bar.groups.iter().enumerate() {
         let group_cat = i as f64 + 1.0;
@@ -1195,6 +1379,14 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let center = x_accum + bar_val.value;
+                        let xl = computed.map_x(center - lo);
+                        let xh = computed.map_x(center + hi);
+                        let y_mid = (y0 + y1) / 2.0;
+                        let cap_half = bar.error_cap_width * (y1 - y0).abs() / 2.0;
+                        pending_whiskers.push((xl, y_mid, xh, y_mid, cap_half, false));
+                    }
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1246,6 +1438,13 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let xl = computed.map_x(bar_val.value - lo);
+                        let xh = computed.map_x(bar_val.value + hi);
+                        let y_mid = (y0 + y1) / 2.0;
+                        let cap_half = bar.error_cap_width * (y1 - y0).abs() / 2.0;
+                        pending_whiskers.push((xl, y_mid, xh, y_mid, cap_half, false));
+                    }
                     if tip.is_some() {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1277,7 +1476,9 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     let extra = if computed.interactive {
                         Some(format!(
                             "class=\"tt\" data-group=\"{}\" data-x=\"{}\" data-y=\"{:.4}\"",
-                            series_label, group.label, bar_val.value
+                            render_utils::escape_attr(series_label),
+                            render_utils::escape_attr(&group.label),
+                            bar_val.value
                         ))
                     } else {
                         None
@@ -1303,6 +1504,14 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let center = y_accum + bar_val.value;
+                        let yl = computed.map_y(center - lo);
+                        let yh = computed.map_y(center + hi);
+                        let x_mid = (x0 + x1) / 2.0;
+                        let cap_half = bar.error_cap_width * (x1 - x0).abs() / 2.0;
+                        pending_whiskers.push((x_mid, yl, x_mid, yh, cap_half, true));
+                    }
                     if bar.show_tooltips || computed.interactive {
                         scene.add(Primitive::GroupEnd);
                     }
@@ -1339,7 +1548,9 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     let extra = if computed.interactive {
                         Some(format!(
                             "class=\"tt\" data-group=\"{}\" data-x=\"{}\" data-y=\"{:.4}\"",
-                            series_label, group.label, bar_val.value
+                            render_utils::escape_attr(series_label),
+                            render_utils::escape_attr(&group.label),
+                            bar_val.value
                         ))
                     } else {
                         None
@@ -1365,12 +1576,258 @@ fn add_bar(bar: &BarPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         None,
                         None,
                     );
+                    if let Some((lo, hi)) = bar.errors.as_ref().and_then(|e| e.get(flat_i)) {
+                        let yl = computed.map_y(bar_val.value - lo);
+                        let yh = computed.map_y(bar_val.value + hi);
+                        let x_mid = (x0 + x1) / 2.0;
+                        let cap_half = bar.error_cap_width * (x1 - x0).abs() / 2.0;
+                        pending_whiskers.push((x_mid, yl, x_mid, yh, cap_half, true));
+                    }
                     if bar.show_tooltips || computed.interactive {
                         scene.add(Primitive::GroupEnd);
                     }
                     flat_i += 1;
                 }
             }
+        }
+    }
+
+    // Drawn last so a whisker's cap is never painted over by a later bar or
+    // (in stacked mode) by the next segment stacked directly on top of it.
+    for (x1, y1, x2, y2, cap_half, vertical) in pending_whiskers {
+        draw_whisker(
+            scene,
+            x1,
+            y1,
+            x2,
+            y2,
+            cap_half,
+            vertical,
+            err_stroke.clone(),
+        );
+    }
+}
+
+// ── ParetoPlot ──────────────────────────────────────────────────────────────
+// Bars on the primary axis (values), cumulative-percentage line + markers on
+// the secondary axis (always 0..100). Vertical mode (default) puts values on Y
+// and the cumulative line on the secondary Y-axis (`map_y2`, right side);
+// horizontal mode puts values on X and the cumulative line on the secondary
+// X-axis (`map_x2`, top) instead, since the secondary axis always pairs with
+// whichever axis carries values. Single series each — bars share `bw_idx` 0
+// (not meant to be distinguished from each other, matching `BarPlot`'s own
+// single-color convention), the line uses `bw_idx` 1 so it gets a different BW
+// dash than a `bw_idx` 0 line would, though the two are already visually
+// distinct (fill vs. stroke) regardless.
+fn add_pareto(pp: &ParetoPlot, scene: &mut Scene, computed: &ComputedLayout) {
+    use crate::plot::pareto::ParetoBar;
+    use crate::render::palette::Palette;
+
+    if pp.categories.is_empty() {
+        return;
+    }
+    let bars = pp.render_bars();
+    let cum_pct = pp.cumulative_percentages();
+    let half_w = pp.width / 2.0;
+    let palette = Palette::category10();
+    let h = pp.horizontal;
+
+    // Single screen-space coordinate along the *value* axis for value `v`, and
+    // along the *category* axis for position `s` — abstracts the value/category
+    // axis swap so the bar-drawing loop below doesn't need two full copies.
+    let map_value = |v: f64| -> f64 {
+        if h {
+            computed.map_x(v)
+        } else {
+            computed.map_y(v)
+        }
+    };
+    let map_cat = |s: f64| -> f64 {
+        if h {
+            computed.map_y(s)
+        } else {
+            computed.map_x(s)
+        }
+    };
+
+    for (i, bar) in bars.iter().enumerate() {
+        let group_cat = i as f64 + 1.0;
+        let c0 = map_cat(group_cat - half_w);
+        let c1 = map_cat(group_cat + half_w);
+        match bar {
+            ParetoBar::Single(cat) => {
+                let v0 = map_value(0.0);
+                let v1 = map_value(cat.value);
+                let (x0, x1, y0, y1) = if h {
+                    (v0, v1, c0, c1)
+                } else {
+                    (c0, c1, v0, v1)
+                };
+                rect_bw(
+                    scene,
+                    computed,
+                    0,
+                    &pp.color,
+                    x0.min(x1),
+                    y0.min(y1),
+                    (x1 - x0).abs(),
+                    (y1 - y0).abs(),
+                    None,
+                    None,
+                    None,
+                );
+            }
+            ParetoBar::Bucketed { segments, .. } => {
+                // Stack the hidden categories within this one slot, largest at
+                // the base, so the bucket's composition is still visible (and
+                // legend-decodable) instead of collapsing into one opaque total.
+                let mut accum = 0.0;
+                for (seg_idx, seg) in segments.iter().enumerate() {
+                    let v0 = map_value(accum);
+                    let v1 = map_value(accum + seg.value);
+                    let (x0, x1, y0, y1) = if h {
+                        (v0, v1, c0, c1)
+                    } else {
+                        (c0, c1, v0, v1)
+                    };
+                    rect_bw(
+                        scene,
+                        computed,
+                        seg_idx,
+                        &palette[seg_idx % palette.len()],
+                        x0.min(x1),
+                        y0.min(y1),
+                        (x1 - x0).abs(),
+                        (y1 - y0).abs(),
+                        None,
+                        None,
+                        None,
+                    );
+                    accum += seg.value;
+                }
+            }
+        }
+    }
+
+    if pp.show_threshold {
+        if h {
+            let tx = computed.map_x2(pp.threshold);
+            scene.add(Primitive::Line {
+                x1: tx,
+                y1: computed.margin_top,
+                x2: tx,
+                y2: computed.margin_top + computed.plot_height(),
+                stroke: Color::from("#888888"),
+                stroke_width: computed.axis_stroke_width,
+                stroke_dasharray: Some("4,3".into()),
+            });
+            scene.add(Primitive::Text {
+                x: tx + 4.0,
+                y: computed.margin_top + 12.0,
+                content: format!("{:.0}%", pp.threshold),
+                size: computed.tick_size.saturating_sub(1).max(8),
+                anchor: TextAnchor::Start,
+                rotate: None,
+                bold: false,
+                color: Some(Color::from("#888888")),
+            });
+        } else {
+            let ty = computed.map_y2(pp.threshold);
+            scene.add(Primitive::Line {
+                x1: computed.margin_left,
+                y1: ty,
+                x2: computed.margin_left + computed.plot_width(),
+                y2: ty,
+                stroke: Color::from("#888888"),
+                stroke_width: computed.axis_stroke_width,
+                stroke_dasharray: Some("4,3".into()),
+            });
+            // Label the line with its percentage. The primary and secondary axes
+            // commonly have unrelated scales (e.g. primary 0..50 counts, secondary
+            // a fixed 0..100 percentage), so an unlabeled dashed line can be
+            // misread against the *primary* axis's gridlines/values — e.g. it can
+            // coincide in pixel position with a primary-axis tick that has nothing
+            // to do with it.
+            scene.add(Primitive::Text {
+                x: computed.margin_left + computed.plot_width() - 4.0,
+                y: ty - 4.0,
+                content: format!("{:.0}%", pp.threshold),
+                size: computed.tick_size.saturating_sub(1).max(8),
+                anchor: TextAnchor::End,
+                rotate: None,
+                bold: false,
+                color: Some(Color::from("#888888")),
+            });
+        }
+    }
+
+    let screen_pts: Vec<(f64, f64)> = (0..bars.len())
+        .map(|i| {
+            let cat = i as f64 + 1.0;
+            if h {
+                (computed.map_x2(cum_pct[i]), computed.map_y(cat))
+            } else {
+                (computed.map_x(cat), computed.map_y2(cum_pct[i]))
+            }
+        })
+        .collect();
+
+    let (line_stroke, line_da, marker_fill) = if computed.bw_mode {
+        use crate::render::bw::bw_dash;
+        (Color::from("#1a1a1a"), bw_dash(1).dasharray(), "#1a1a1a")
+    } else {
+        (Color::from(&pp.line_color), None, pp.line_color.as_str())
+    };
+
+    if screen_pts.len() >= 2 {
+        scene.add(Primitive::PolyLine {
+            points: screen_pts.clone(),
+            stroke: line_stroke.clone(),
+            stroke_width: 2.0,
+            stroke_dasharray: line_da,
+        });
+    }
+    for (i, &(x, y)) in screen_pts.iter().enumerate() {
+        draw_marker(
+            scene,
+            MarkerShape::Circle,
+            x,
+            y,
+            3.5,
+            marker_fill,
+            None,
+            Some(Color::from("#ffffff")),
+            Some(1.0),
+        );
+        if pp.show_cumulative_labels {
+            // In horizontal mode the label grows rightward from the point —
+            // fine everywhere except the guaranteed-100% last point, which sits
+            // at the plot's own right edge (the x2 axis headroom only clears
+            // the marker, not a further ~30px of label text) and would get cut
+            // off by the plot's clip region. Flip that one label to grow
+            // leftward (back into the plot) instead. Vertical mode doesn't need
+            // the same treatment: its label only needs modest vertical
+            // clearance, comfortably inside the headroom already reserved.
+            let is_last = i == screen_pts.len() - 1;
+            let (lx, ly, anchor) = if h {
+                if is_last {
+                    (x - 10.0, y, TextAnchor::End)
+                } else {
+                    (x + 10.0, y, TextAnchor::Start)
+                }
+            } else {
+                (x, y - 10.0, TextAnchor::Middle)
+            };
+            scene.add(Primitive::Text {
+                x: lx,
+                y: ly,
+                content: format!("{:.0}%", cum_pct[i]),
+                size: computed.tick_size,
+                anchor,
+                rotate: None,
+                bold: false,
+                color: None,
+            });
         }
     }
 }
@@ -1483,6 +1940,44 @@ fn add_histogram(hist: &Histogram, scene: &mut Scene, computed: &ComputedLayout,
         );
         if tip.is_some() {
             scene.add(Primitive::GroupEnd);
+        }
+    }
+
+    if hist.show_kde && hist.data.len() >= 2 {
+        let bw = hist
+            .kde_bandwidth
+            .unwrap_or_else(|| render_utils::silverman_bandwidth(&hist.data));
+        let n = hist.data.len() as f64;
+        let density_norm = 1.0 / (n * bw * (2.0 * std::f64::consts::PI).sqrt());
+        let kde = render_utils::simple_kde(&hist.data, bw, hist.kde_samples);
+        if !kde.is_empty() {
+            let kde_color = hist.kde_color.as_deref().unwrap_or("firebrick");
+            let mut path = String::with_capacity(kde.len() * 16);
+            let mut rb = ryu::Buffer::new();
+            for (i, &(x, d)) in kde.iter().enumerate() {
+                let height = d * density_norm * n * bin_width * norm;
+                let px = computed.map_x(x);
+                let py = computed.map_y(height);
+                path.push(if i == 0 { 'M' } else { 'L' });
+                path.push(' ');
+                path.push_str(rb.format(round2(px)));
+                path.push(' ');
+                path.push_str(rb.format(round2(py)));
+                path.push(' ');
+            }
+            let stroke = if computed.bw_mode {
+                Color::from("#1a1a1a")
+            } else {
+                Color::from(kde_color)
+            };
+            scene.add(Primitive::Path(Box::new(PathData {
+                d: path,
+                fill: None,
+                stroke,
+                stroke_width: 2.0,
+                opacity: None,
+                stroke_dasharray: None,
+            })));
         }
     }
 }
@@ -1601,6 +2096,17 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
         let cat = i as f64 + 1.0;
         let w = boxplot.width / 2.0;
 
+        // Notch half-width in data units: ~95% CI on the median (McGill et al.
+        // 1978) scaled by `notch_width`, clamped so it never crosses the
+        // opposite hinge.
+        let notch_half = if boxplot.notch {
+            let n = sorted.len() as f64;
+            let half = 1.58 * iqr / n.sqrt() * boxplot.notch_width;
+            half.min(q3 - q2).max(0.0).min((q2 - q1).max(0.0))
+        } else {
+            0.0
+        };
+
         if boxplot.horizontal {
             // Groups on Y-axis, data values on X-axis
             let y0 = computed.map_y(cat - w);
@@ -1612,19 +2118,37 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             let xhigh = computed.map_x(upper_whisker);
             let ymid = computed.map_y(cat);
 
-            rect_bw(
-                scene,
-                computed,
-                i,
-                color,
-                xq1.min(xq3),
-                y0.min(y1),
-                (xq3 - xq1).abs(),
-                (y1 - y0).abs(),
-                None,
-                None,
-                None,
-            );
+            if boxplot.notch {
+                let y_top = y0.min(y1);
+                let y_bot = y0.max(y1);
+                let x_notch_lo = computed.map_x(q2 - notch_half);
+                let x_notch_hi = computed.map_x(q2 + notch_half);
+                // The pinch only cuts partway toward the vertical center
+                // (`ymid`), not all the way — depth `1.0` would reach it.
+                let half_box = (y_bot - y_top) / 2.0;
+                let pinch_top = y_top + boxplot.notch_depth * half_box;
+                let pinch_bot = y_bot - boxplot.notch_depth * half_box;
+                let d = format!(
+                    "M {xq1} {y_top} L {x_notch_lo} {y_top} L {xmed} {pinch_top} L {x_notch_hi} {y_top} \
+                     L {xq3} {y_top} L {xq3} {y_bot} L {x_notch_hi} {y_bot} L {xmed} {pinch_bot} \
+                     L {x_notch_lo} {y_bot} L {xq1} {y_bot} Z"
+                );
+                path_bw(scene, computed, i, color, d, Color::None, 0.0, None, None);
+            } else {
+                rect_bw(
+                    scene,
+                    computed,
+                    i,
+                    color,
+                    xq1.min(xq3),
+                    y0.min(y1),
+                    (xq3 - xq1).abs(),
+                    (y1 - y0).abs(),
+                    None,
+                    None,
+                    None,
+                );
+            }
             // Median: vertical line
             scene.add(Primitive::Line {
                 x1: xmed,
@@ -1677,19 +2201,35 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
             let xmid = computed.map_x(cat);
 
             // Box
-            rect_bw(
-                scene,
-                computed,
-                i,
-                color,
-                x0,
-                yq3.min(yq1),
-                (x1 - x0).abs(),
-                (yq1 - yq3).abs(),
-                None,
-                None,
-                None,
-            );
+            if boxplot.notch {
+                let y_notch_top = computed.map_y(q2 + notch_half);
+                let y_notch_bot = computed.map_y(q2 - notch_half);
+                // The pinch only cuts partway toward the horizontal center
+                // (`xmid`), not all the way — depth `1.0` would reach it.
+                let half_box = (x1 - x0) / 2.0;
+                let pinch_left = x0 + boxplot.notch_depth * half_box;
+                let pinch_right = x1 - boxplot.notch_depth * half_box;
+                let d = format!(
+                    "M {x0} {yq3} L {x1} {yq3} L {x1} {y_notch_top} L {pinch_right} {ymed} L {x1} {y_notch_bot} \
+                     L {x1} {yq1} L {x0} {yq1} L {x0} {y_notch_bot} L {pinch_left} {ymed} \
+                     L {x0} {y_notch_top} Z"
+                );
+                path_bw(scene, computed, i, color, d, Color::None, 0.0, None, None);
+            } else {
+                rect_bw(
+                    scene,
+                    computed,
+                    i,
+                    color,
+                    x0,
+                    yq3.min(yq1),
+                    (x1 - x0).abs(),
+                    (yq1 - yq3).abs(),
+                    None,
+                    None,
+                    None,
+                );
+            }
 
             // Median line
             scene.add(Primitive::Line {
@@ -1763,8 +2303,159 @@ fn add_boxplot(boxplot: &BoxPlot, scene: &mut Scene, computed: &ComputedLayout) 
     }
 }
 
+/// Build one half of a split-violin polygon: the KDE curve on one side of
+/// `pivot_px`, closed by a straight edge back along the pivot line.
+///
+/// `sign` is `-1.0` for the "first" half (left in vertical mode, top in
+/// horizontal mode) and `+1.0` for the "second" half (right / bottom).
+fn build_half_violin_path(
+    kde: &[(f64, f64)],
+    scale: f64,
+    sign: f64,
+    pivot_px: f64,
+    horizontal: bool,
+    computed: &ComputedLayout,
+) -> String {
+    let mut path_data = String::with_capacity(kde.len() * 32 + 64);
+    let mut rb = ryu::Buffer::new();
+    for (j, (val, d)) in kde.iter().enumerate() {
+        let (px, py) = if horizontal {
+            (computed.map_x(*val), pivot_px + sign * d * scale)
+        } else {
+            (pivot_px + sign * d * scale, computed.map_y(*val))
+        };
+        path_data.push(if j == 0 { 'M' } else { 'L' });
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(px)));
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(py)));
+        path_data.push(' ');
+    }
+    if let (Some((first_val, _)), Some((last_val, _))) = (kde.first(), kde.last()) {
+        let (lx, ly) = if horizontal {
+            (computed.map_x(*last_val), pivot_px)
+        } else {
+            (pivot_px, computed.map_y(*last_val))
+        };
+        let (fx, fy) = if horizontal {
+            (computed.map_x(*first_val), pivot_px)
+        } else {
+            (pivot_px, computed.map_y(*first_val))
+        };
+        path_data.push_str("L ");
+        path_data.push_str(rb.format(round2(lx)));
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(ly)));
+        path_data.push(' ');
+        path_data.push_str("L ");
+        path_data.push_str(rb.format(round2(fx)));
+        path_data.push(' ');
+        path_data.push_str(rb.format(round2(fy)));
+        path_data.push(' ');
+    }
+    path_data.push('Z');
+    path_data
+}
+
 fn add_violin(violin: &ViolinPlot, scene: &mut Scene, computed: &ComputedLayout) {
     let theme = &computed.theme;
+
+    if violin.split {
+        for (i, group) in violin.groups.iter().enumerate() {
+            if group.values.is_empty() {
+                continue;
+            }
+            let color = violin
+                .group_colors
+                .as_ref()
+                .and_then(|c| c.get(i).map(|s| s.as_str()))
+                .unwrap_or(&violin.color);
+            let h = violin
+                .bandwidth
+                .unwrap_or_else(|| render_utils::silverman_bandwidth(&group.values));
+            let kde = render_utils::simple_kde(&group.values, h, violin.kde_samples);
+            if kde.is_empty() {
+                continue;
+            }
+            let max_density = kde
+                .iter()
+                .map(|(_, y)| *y)
+                .fold(f64::NEG_INFINITY, f64::max);
+
+            let (pivot_px, scale) = if violin.horizontal {
+                let y_center = computed.map_y((i + 1) as f64);
+                let slot_py = (computed.map_y(2.0) - computed.map_y(1.0)).abs();
+                (y_center, violin.width * slot_py / 2.0 / max_density)
+            } else {
+                let x_center = computed.map_x((i + 1) as f64);
+                let slot_px = (computed.map_x(2.0) - computed.map_x(1.0)).abs();
+                (x_center, violin.width * slot_px / 2.0 / max_density)
+            };
+
+            let path_data =
+                build_half_violin_path(&kde, scale, -1.0, pivot_px, violin.horizontal, computed);
+            path_bw(
+                scene,
+                computed,
+                i * 2,
+                color,
+                path_data,
+                Color::from(&theme.violin_border),
+                0.5,
+                None,
+                None,
+            );
+
+            if let Some(split_group) = violin.split_groups.get(i) {
+                if split_group.values.is_empty() {
+                    continue;
+                }
+                let split_color = violin
+                    .split_group_colors
+                    .as_ref()
+                    .and_then(|c| c.get(i).map(|s| s.as_str()))
+                    .unwrap_or(&violin.split_color);
+                let h2 = violin
+                    .bandwidth
+                    .unwrap_or_else(|| render_utils::silverman_bandwidth(&split_group.values));
+                let kde2 = render_utils::simple_kde(&split_group.values, h2, violin.kde_samples);
+                if kde2.is_empty() {
+                    continue;
+                }
+                let max_density2 = kde2
+                    .iter()
+                    .map(|(_, y)| *y)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let scale2 = if violin.horizontal {
+                    let slot_py = (computed.map_y(2.0) - computed.map_y(1.0)).abs();
+                    violin.width * slot_py / 2.0 / max_density2
+                } else {
+                    let slot_px = (computed.map_x(2.0) - computed.map_x(1.0)).abs();
+                    violin.width * slot_px / 2.0 / max_density2
+                };
+                let path_data2 = build_half_violin_path(
+                    &kde2,
+                    scale2,
+                    1.0,
+                    pivot_px,
+                    violin.horizontal,
+                    computed,
+                );
+                path_bw(
+                    scene,
+                    computed,
+                    i * 2 + 1,
+                    split_color,
+                    path_data2,
+                    Color::from(&theme.violin_border),
+                    0.5,
+                    None,
+                    None,
+                );
+            }
+        }
+        return;
+    }
 
     for (i, group) in violin.groups.iter().enumerate() {
         if group.values.is_empty() {
@@ -2818,7 +3509,7 @@ fn add_strip_points(
         if computed.interactive {
             Some(format!(
                 "class=\"tt\" data-group=\"{}\" data-y=\"{v}\"",
-                group_label
+                render_utils::escape_attr(group_label)
             ))
         } else {
             None
@@ -3483,14 +4174,56 @@ fn draw_3d_box(
     proj
 }
 
-fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout, bw_idx: usize) {
-    let ranges = match s.data_ranges() {
-        Some(r) => r,
-        None => return,
-    };
-    let (z_min, z_max) = ranges.z;
+/// Union of 3D data ranges across every `Scatter3D`/`Surface3D` instance in
+/// `plots`, so multiple 3D plots combined in one `render_multiple` call are
+/// normalized to one shared coordinate box instead of each instance computing
+/// its own independent bounding box (which projects different instances'
+/// points onto the same screen coordinates regardless of their actual values).
+fn merged_3d_ranges(plots: &[Plot]) -> Option<DataRanges3D> {
+    plots
+        .iter()
+        .filter_map(|p| match p {
+            Plot::Scatter3D(s) => s.data_ranges(),
+            Plot::Surface3D(s) => s.data_ranges(),
+            _ => None,
+        })
+        .reduce(|a, r| DataRanges3D {
+            x: (a.x.0.min(r.x.0), a.x.1.max(r.x.1)),
+            y: (a.y.0.min(r.y.0), a.y.1.max(r.y.1)),
+            z: (a.z.0.min(r.z.0), a.z.1.max(r.z.1)),
+        })
+}
 
-    let proj = draw_3d_box(ranges, &s.box3d, scene, computed);
+/// The `Box3DConfig` (view angles, grid, box/labels) of the first 3D plot
+/// instance in `plots`. Multiple 3D instances share one drawn box, so only one
+/// config can apply — the first instance's wins, matching how other combined
+/// chrome (e.g. axis titles) takes the first plot's setting.
+fn first_3d_box_config(plots: &[Plot]) -> Option<Box3DConfig> {
+    plots.iter().find_map(|p| match p {
+        Plot::Scatter3D(s) => Some(s.box3d.clone()),
+        Plot::Surface3D(s) => Some(s.box3d.clone()),
+        _ => None,
+    })
+}
+
+/// Renders one `Scatter3DPlot` instance's points into an already-drawn 3D box.
+///
+/// `ranges` and `proj` are shared across every `Scatter3D`/`Surface3D` instance in
+/// the same `render_multiple` call (computed once by the caller) so multiple 3D
+/// plots combined in one panel are normalized to one coordinate system instead of
+/// each instance projecting against its own independent bounding box.
+fn add_scatter3d(
+    s: &Scatter3DPlot,
+    scene: &mut Scene,
+    computed: &ComputedLayout,
+    bw_idx: usize,
+    ranges: DataRanges3D,
+    proj: &Projection3D,
+) {
+    if s.data.is_empty() {
+        return;
+    }
+    let (z_min, z_max) = ranges.z;
 
     // ── Data points (depth-sorted, back to front) ──────────────────────
     let z_span = (z_max - z_min).max(f64::EPSILON);
@@ -3621,14 +4354,19 @@ fn add_scatter3d(s: &Scatter3DPlot, scene: &mut Scene, computed: &ComputedLayout
     }
 }
 
-fn add_surface3d(s: &Surface3DPlot, scene: &mut Scene, computed: &ComputedLayout) {
-    let ranges = match s.data_ranges() {
-        Some(r) => r,
-        None => return,
-    };
+/// Renders one `Surface3DPlot` instance's mesh into an already-drawn 3D box.
+/// See [`add_scatter3d`] for why `ranges`/`proj` are shared across instances.
+fn add_surface3d(
+    s: &Surface3DPlot,
+    scene: &mut Scene,
+    computed: &ComputedLayout,
+    ranges: DataRanges3D,
+    proj: &Projection3D,
+) {
+    if s.nrows() < 2 || s.ncols() < 2 {
+        return;
+    }
     let (z_min, z_max) = ranges.z;
-
-    let proj = draw_3d_box(ranges, &s.box3d, scene, computed);
 
     let nrows = s.nrows();
     let ncols = s.ncols();
@@ -8180,7 +8918,7 @@ fn add_legend_with_offset(
         if computed.interactive {
             let grp_attr = format!(
                 r#"class="legend-entry" data-group="{lbl}""#,
-                lbl = entry.label
+                lbl = render_utils::escape_attr(&entry.label)
             );
             scene.add(Primitive::GroupStart {
                 transform: None,
@@ -10863,6 +11601,43 @@ pub fn collect_legend_entries(plots: &[Plot]) -> Vec<LegendEntry> {
                     });
                 }
             }
+            Plot::Pareto(pareto) => {
+                if pareto.show_legend {
+                    if let Some(ref label) = pareto.bar_legend_label {
+                        entries.push(LegendEntry {
+                            label: label.clone(),
+                            color: pareto.color.clone(),
+                            shape: LegendShape::Rect,
+                            dasharray: None,
+                        });
+                    }
+                    if let Some(ref label) = pareto.line_legend_label {
+                        entries.push(LegendEntry {
+                            label: label.clone(),
+                            color: pareto.line_color.clone(),
+                            shape: LegendShape::Line,
+                            dasharray: None,
+                        });
+                    }
+                    // Decode the bucketed "Other" stack, if any -- one entry per
+                    // hidden category, colored to match its segment in add_pareto.
+                    use crate::plot::pareto::ParetoBar;
+                    use crate::render::palette::Palette;
+                    let palette = Palette::category10();
+                    for bar in pareto.render_bars() {
+                        if let ParetoBar::Bucketed { segments, .. } = bar {
+                            for (i, seg) in segments.iter().enumerate() {
+                                entries.push(LegendEntry {
+                                    label: seg.label.clone(),
+                                    color: palette[i % palette.len()].to_string(),
+                                    shape: LegendShape::Rect,
+                                    dasharray: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             Plot::Scatter(scatter) => {
                 if let Some(label) = &scatter.legend_label {
                     entries.push(LegendEntry {
@@ -10932,6 +11707,14 @@ pub fn collect_legend_entries(plots: &[Plot]) -> Vec<LegendEntry> {
                     entries.push(LegendEntry {
                         label: label.clone(),
                         color: violin.color.clone(),
+                        shape: LegendShape::Rect,
+                        dasharray: None,
+                    });
+                }
+                if let Some(label) = &violin.split_legend_label {
+                    entries.push(LegendEntry {
+                        label: label.clone(),
+                        color: violin.split_color.clone(),
                         shape: LegendShape::Rect,
                         dasharray: None,
                     });
@@ -14827,6 +15610,9 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
         if layout.y2_range.is_some() {
             add_y2_axis(&mut scene, &computed, &layout);
         }
+        if layout.x2_range.is_some() {
+            add_x2_axis(&mut scene, &computed, &layout);
+        }
     }
 
     // For DicePlot: precompute the actual grid extents so that axis labels and
@@ -14937,6 +15723,12 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
     let mut density_bw_idx = 0usize;
     let mut histogram_bw_idx = 0usize;
     let mut scatter3d_bw_idx = 0usize;
+    // Shared coordinate box for every Scatter3D/Surface3D instance in this call —
+    // see `merged_3d_ranges` for why this can't be computed independently per
+    // instance. The box is drawn lazily on the first 3D plot encountered below.
+    let ranges_3d = merged_3d_ranges(&plots);
+    let box3d_cfg_3d = first_3d_box_config(&plots);
+    let mut proj_3d: Option<Projection3D> = None;
     for plot in plots.iter() {
         match plot {
             Plot::Scatter(s) => {
@@ -14953,6 +15745,9 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
             }
             Plot::Bar(b) => {
                 add_bar(b, &mut scene, &computed);
+            }
+            Plot::Pareto(pp) => {
+                add_pareto(pp, &mut scene, &computed);
             }
             Plot::Histogram(h) => {
                 add_histogram(h, &mut scene, &computed, histogram_bw_idx);
@@ -15039,11 +15834,19 @@ pub fn render_multiple(plots: Vec<Plot>, layout: Layout) -> Scene {
                 add_forest(f, &mut scene, &computed);
             }
             Plot::Scatter3D(s) => {
-                add_scatter3d(s, &mut scene, &computed, scatter3d_bw_idx);
-                scatter3d_bw_idx += 1;
+                if let (Some(ranges), Some(cfg)) = (ranges_3d, box3d_cfg_3d.as_ref()) {
+                    let proj = proj_3d
+                        .get_or_insert_with(|| draw_3d_box(ranges, cfg, &mut scene, &computed));
+                    add_scatter3d(s, &mut scene, &computed, scatter3d_bw_idx, ranges, proj);
+                    scatter3d_bw_idx += 1;
+                }
             }
             Plot::Surface3D(s) => {
-                add_surface3d(s, &mut scene, &computed);
+                if let (Some(ranges), Some(cfg)) = (ranges_3d, box3d_cfg_3d.as_ref()) {
+                    let proj = proj_3d
+                        .get_or_insert_with(|| draw_3d_box(ranges, cfg, &mut scene, &computed));
+                    add_surface3d(s, &mut scene, &computed, ranges, proj);
+                }
             }
             Plot::Clustermap(c) => {
                 add_clustermap(c, &mut scene, &computed);
@@ -17043,11 +17846,33 @@ fn joint_draw_right_marginal(
 /// size plus symmetric padding, so a larger `title_size` reserves proportionally
 /// more and never clips (the old fixed 35px band ignored `title_size`).
 fn jointplot_title_height(layout: &Layout) -> f64 {
-    if layout.title.is_some() {
-        let ts = layout.title_size as f64;
+    let ts = layout.title_size as f64;
+    let title_h = if layout.title.is_some() {
         text_height(ts, FontStyle::Regular) + 2.0 * (ts * 0.2)
     } else {
         0.0
+    };
+    // Reserve the subtitle band too, so the marginal plots start below it (the
+    // Plot::Joint path draws the subtitle via add_labels_and_title; the
+    // standalone path draws it below, in render_jointplot).
+    let subtitle_h = match &layout.subtitle {
+        Some(s) => {
+            let lines = render_utils::wrap_or_single(s, layout.subtitle_wrap).len();
+            lines as f64 * line_height(jointplot_subtitle_size(layout), FontStyle::Regular)
+        }
+        None => 0.0,
+    };
+    title_h + subtitle_h
+}
+
+/// Subtitle font size for a JointPlot: an explicit `with_subtitle_size`, else
+/// `round(0.7 × title_size)` — mirrors `ComputedLayout::from_layout`.
+fn jointplot_subtitle_size(layout: &Layout) -> f64 {
+    match layout.subtitle_size {
+        Some(px) => px as f64,
+        None => (layout.title_size as f64 * SUBTITLE_SIZE_RATIO)
+            .round()
+            .max(1.0),
     }
 }
 
@@ -17377,6 +18202,40 @@ pub fn render_jointplot(jp: crate::plot::jointplot::JointPlot, layout: Layout) -
         });
     }
 
+    // Subtitle: muted line(s) below the title. The standalone jointplot path
+    // renders its own title/subtitle (unlike the Plot::Joint path via
+    // render_multiple, which goes through add_labels_and_title);
+    // `jointplot_title_height` reserves the matching band above.
+    if let Some(ref subtitle) = layout.subtitle {
+        let ts = layout.title_size as f64;
+        let sts = jointplot_subtitle_size(&layout);
+        let slh = line_height(sts, FontStyle::Regular);
+        // Bottom of the title (baseline + descent), or the very top when there is
+        // no title; then drop the first subtitle baseline by its own ascent.
+        let title_bottom = if layout.title.is_some() {
+            jointplot_title_baseline(&layout) + descent(ts, FontStyle::Regular)
+        } else {
+            0.0
+        };
+        let start_y = title_bottom + ascent(sts, FontStyle::Regular);
+        let color = muted_subtitle_color(&scene);
+        for (i, line) in render_utils::wrap_or_single(subtitle, layout.subtitle_wrap)
+            .iter()
+            .enumerate()
+        {
+            scene.add(Primitive::Text {
+                x: scene_width / 2.0,
+                y: start_y + i as f64 * slh,
+                content: line.clone(),
+                size: sts as u32,
+                anchor: TextAnchor::Middle,
+                rotate: None,
+                bold: false,
+                color: Some(color.clone()),
+            });
+        }
+    }
+
     // Build a ComputedLayout using width/height so add_jointplot can access theme etc.
     let mut stub_layout = Layout::new((0.0, 1.0), (0.0, 1.0))
         .with_width(width)
@@ -17516,13 +18375,24 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     format!("{}", val)
                 };
                 // Only show if text fits width (measure the widest line for multi-line labels)
-                if widest_text_width(label.split('\n'), label_size as f64, FontStyle::Regular)
-                    < col_w * 0.9
-                {
+                let widest =
+                    widest_text_width(label.split('\n'), label_size as f64, FontStyle::Regular);
+                if widest < col_w * 0.9 {
                     let cx = col_x + col_w / 2.0;
                     let cy = seg_top
                         + seg_h / 2.0
                         + center_offset(label_size as f64, FontStyle::Regular);
+                    label_bg_rect(
+                        scene,
+                        computed,
+                        cx,
+                        cy,
+                        TextAnchor::Middle,
+                        widest,
+                        label_size,
+                        false,
+                        None,
+                    );
                     scene.add(Primitive::Text {
                         x: cx,
                         y: cy,
@@ -17531,7 +18401,7 @@ fn add_mosaic(mp: &MosaicPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         anchor: TextAnchor::Middle,
                         rotate: None,
                         bold: false,
-                        color: Some(Color::from("white")),
+                        color: Some(in_fill_label_color(computed, "white")),
                     });
                 }
             }
@@ -19793,6 +20663,15 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     )
                 };
 
+                let label_style = if bold {
+                    FontStyle::Bold
+                } else {
+                    FontStyle::Regular
+                };
+                let label_w = measure_text_width(&label, font_size as f64, label_style);
+                label_bg_rect(
+                    scene, computed, lx, ly, anchor, label_w, font_size, bold, None,
+                );
                 scene.add(Primitive::Text {
                     x: round2(lx),
                     y: round2(ly),
@@ -19801,7 +20680,7 @@ fn add_treemap(tm: &TreemapPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     anchor,
                     rotate: None,
                     bold,
-                    color: Some(Color::from("#ffffff")),
+                    color: Some(in_fill_label_color(computed, "#ffffff")),
                 });
             }
         }
@@ -20247,6 +21126,18 @@ fn add_sunburst(sb: &SunburstPlot, scene: &mut Scene, computed: &ComputedLayout)
                 None
             };
 
+            let label_w = measure_text_width(&label, font_size as f64, FontStyle::Regular);
+            label_bg_rect(
+                scene,
+                computed,
+                lx,
+                ly,
+                TextAnchor::Middle,
+                label_w,
+                font_size,
+                false,
+                rotate,
+            );
             scene.add(Primitive::Text {
                 x: round2(lx),
                 y: round2(ly),
@@ -20255,7 +21146,7 @@ fn add_sunburst(sb: &SunburstPlot, scene: &mut Scene, computed: &ComputedLayout)
                 anchor: TextAnchor::Middle,
                 rotate,
                 bold: false,
-                color: Some(Color::from("#ffffff")),
+                color: Some(in_fill_label_color(computed, "#ffffff")),
             });
         }
 
@@ -20798,7 +21689,7 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     (
                         bar_x + bar_w / 2.0,
                         TextAnchor::Middle,
-                        Color::from("#ffffff"),
+                        in_fill_label_color(computed, "#ffffff"),
                     )
                 } else {
                     let rx = if is_mirror {
@@ -20813,9 +21704,17 @@ fn add_funnel(fp: &FunnelPlot, scene: &mut Scene, computed: &ComputedLayout) {
                     };
                     (rx, anc, Color::from("#333333"))
                 };
+                let label_y =
+                    bar_y + bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular);
+                if text_fits {
+                    let label_w = measure_text_width(&label, font_size as f64, FontStyle::Regular);
+                    label_bg_rect(
+                        scene, computed, lx, label_y, anchor, label_w, font_size, false, None,
+                    );
+                }
                 scene.add(Primitive::Text {
                     x: lx,
-                    y: bar_y + bar_h / 2.0 + center_offset(font_size as f64, FontStyle::Regular),
+                    y: label_y,
                     content: label,
                     size: font_size,
                     anchor,
@@ -23267,15 +24166,28 @@ fn add_gantt(gp: &GanttPlot, scene: &mut Scene, computed: &ComputedLayout) {
                         let est_text_w =
                             measure_text_width(&task.label, label_size as f64, FontStyle::Regular);
                         if bar_width >= gp.label_min_width && bar_width > est_text_w + 6.0 {
+                            let label_y =
+                                y_center + center_offset(label_size as f64, FontStyle::Regular);
+                            label_bg_rect(
+                                scene,
+                                computed,
+                                x_start + bar_width * 0.5,
+                                label_y,
+                                TextAnchor::Middle,
+                                est_text_w,
+                                label_size,
+                                false,
+                                None,
+                            );
                             scene.add(Primitive::Text {
                                 x: x_start + bar_width * 0.5,
-                                y: y_center + center_offset(label_size as f64, FontStyle::Regular),
+                                y: label_y,
                                 content: task.label.clone(),
                                 size: label_size,
                                 anchor: TextAnchor::Middle,
                                 rotate: None,
                                 bold: false,
-                                color: Some(Color::from("white")),
+                                color: Some(in_fill_label_color(computed, "white")),
                             });
                         }
                         // Outside labels drawn post-clip via add_gantt_labels

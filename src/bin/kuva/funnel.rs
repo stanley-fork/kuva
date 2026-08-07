@@ -85,7 +85,7 @@ pub fn run(args: FunnelArgs) -> Result<(), String> {
     }
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -143,6 +143,26 @@ pub fn run(args: FunnelArgs) -> Result<(), String> {
                 plot = plot.with_mirror_labels(ll.clone(), rl.clone());
             }
         }
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &[
+                    "kuva::plot::FunnelPlot",
+                    "kuva::plot::FunnelOrientation",
+                    "kuva::plot::FunnelColorMode",
+                ],
+                "Funnel",
+                &[crate::emit_code::emit_funnel_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Funnel(plot)];

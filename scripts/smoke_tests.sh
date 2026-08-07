@@ -89,7 +89,7 @@ check_error() {
 # ── scatter ───────────────────────────────────────────────────────────────────
 check "scatter basic" \
     "$BIN" scatter "$DATA/scatter.tsv" --x x --y y \
-        --title "Scatter Plot" --x-label "X" --y-label "Y"
+        --title "Scatter Plot" --subtitle "n = 240 points" --subtitle-wrap 8 --x-label "X" --y-label "Y"
 
 check "scatter color-by" \
     "$BIN" scatter "$DATA/scatter.tsv" --x x --y y --color-by group --legend \
@@ -126,10 +126,19 @@ check "scatter multi-y three columns no legend" \
 check_error "scatter multi-y color-by conflict" \
     "$BIN" scatter "$DATA/measurements.tsv" --x time --y value,time --color-by group
 
+check "scatter date x-axis auto" \
+    "$BIN" scatter "$DATA/candlestick.tsv" --x date --y close \
+        --x-date-format "%Y-%m-%d" --title "Close price over time"
+
+check "scatter date x-axis explicit unit" \
+    "$BIN" scatter "$DATA/candlestick.tsv" --x date --y close \
+        --x-date-format "%Y-%m-%d" --x-date-unit months --x-date-tick-format "%b %y" \
+        --title "Close price by month"
+
 # ── line ──────────────────────────────────────────────────────────────────────
 check "line color-by" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value --color-by group \
-        --title "Growth Curves" --x-label "Time" --y-label "Value"
+        --title "Growth Curves" --subtitle "coloured by group" --x-label "Time" --y-label "Value"
 
 check "line color-by legend" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value --color-by group --legend \
@@ -142,6 +151,10 @@ check "line multi-y two columns" \
 check "line multi-y with fill" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value,time --fill --legend \
         --title "Line Multi-Y Filled" --x-label "Time" --y-label "Value"
+
+check "line date x-axis auto" \
+    "$BIN" line "$DATA/candlestick.tsv" --x date --y close \
+        --x-date-format "%Y-%m-%d" --title "Close price over time"
 
 check "line multi-y dashed" \
     "$BIN" line "$DATA/measurements.tsv" --x time --y value,time --dashed \
@@ -878,6 +891,24 @@ check "parallel curved" \
         --group-col species \
         --curved --show-mean --legend "Species" --title "Parallel Curved"
 
+# ── pareto ────────────────────────────────────────────────────────────────────
+check "pareto basic" \
+    "$BIN" pareto "$DATA/pareto.tsv" \
+        --label-col category --value-col count \
+        --title "Error Categories"
+
+check "pareto styled" \
+    "$BIN" pareto "$DATA/pareto.tsv" \
+        --label-col category --value-col count \
+        --color seagreen --line-color darkorange --threshold 90 \
+        --cumulative-labels --legend "Count,Cumulative %" --title "Pareto Styled"
+
+check "pareto horizontal with bucketing" \
+    "$BIN" pareto "$DATA/pareto.tsv" \
+        --label-col category --value-col count \
+        --horizontal --max-categories 4 --other-label "Misc" \
+        --cumulative-labels --title "Pareto Horizontal Bucketed"
+
 # ── venn ──────────────────────────────────────────────────────────────────────
 check "venn basic" \
     "$BIN" venn "$DATA/venn.tsv" \
@@ -1142,6 +1173,33 @@ check "minor gridlines log coverage" \
         --minor-ticks 9 --minor-grid \
         --title "Minor Gridlines (log Y)" --x-label "X" --y-label "Y (log)"
 rm -f "$MINOR_LOG_DATA"
+
+# ── twin-y ────────────────────────────────────────────────────────────────────
+TWIN_Y_DATA="${TMPDIR:-/tmp}/kuva_twin_y_$$.tsv"
+printf 'month\ttemp\train\n1\t5\t80\n2\t8\t60\n3\t14\t45\n4\t20\t30\n5\t24\t20\n6\t22\t35\n' > "$TWIN_Y_DATA"
+
+check "twin-y basic" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --y-label "Temperature (C)" --y2-label "Rainfall (mm)" \
+        --title "Temperature & Rainfall"
+
+check "twin-y styled with legend" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --primary-color "#e69f00" --secondary-color "#0072b2" \
+        --primary-legend "Temperature" --secondary-legend "Rainfall" --legend
+
+check "twin-y scatter+line mix" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --primary-type scatter --secondary-type line
+
+check "twin-y explicit y2 range and log" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain \
+        --y2-min 1 --y2-max 200 --log-y2
+
+check_error "twin-y unsupported plot type" \
+    "$BIN" twin-y "$TWIN_Y_DATA" --x month --y temp --y2 rain --primary-type bar
+
+rm -f "$TWIN_Y_DATA"
 
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""

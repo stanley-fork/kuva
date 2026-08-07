@@ -2,6 +2,7 @@ use crate::render::color::Color;
 use crate::render::datetime::DateTimeAxis;
 use crate::render::layout::{
     AxisLabelOverlap, AxisLine, ComputedLayout, Layout, TickAlign, TickFormat, TickPos,
+    SUBTITLE_MUTE,
 };
 use crate::render::render::{Primitive, Scene, TextAnchor};
 use crate::render::render_utils;
@@ -792,6 +793,99 @@ pub fn add_y2_axis(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout
     }
 }
 
+/// Draws the secondary X-axis on top of the plot, mirroring [`add_y2_axis`] (which
+/// draws the secondary Y-axis on the right) — used by horizontal `ParetoPlot` for
+/// its cumulative-% line, since horizontal mode puts categories on Y and values on
+/// X, so the cumulative line needs its own X-axis rather than the Y-based `y2`.
+pub fn add_x2_axis(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout) {
+    let Some((x2_min, x2_max)) = computed.x2_range else {
+        return;
+    };
+    let theme = &computed.theme;
+    let axis_y = computed.margin_top;
+
+    // Top x-axis line
+    scene.add(Primitive::Line {
+        x1: computed.margin_left,
+        y1: axis_y,
+        x2: computed.width - computed.margin_right,
+        y2: axis_y,
+        stroke: Color::from(&theme.axis_color),
+        stroke_width: computed.axis_line_width,
+        stroke_dasharray: None,
+    });
+
+    if layout.suppress_x2_ticks {
+        return;
+    }
+
+    let x2_ticks = if layout.log_x2 {
+        render_utils::generate_ticks_log(x2_min, x2_max)
+    } else {
+        render_utils::generate_ticks(x2_min, x2_max, computed.x_ticks)
+    };
+
+    for tx in x2_ticks.iter() {
+        let x = computed.map_x2(*tx);
+
+        let (ty1, ty2) = match layout.tick_align {
+            TickAlign::Inside => (axis_y, axis_y + computed.tick_mark_major),
+            TickAlign::Outside => (axis_y - computed.tick_mark_major, axis_y),
+            TickAlign::Center => (
+                axis_y - computed.tick_mark_major * 0.5,
+                axis_y + computed.tick_mark_major * 0.5,
+            ),
+        };
+
+        scene.add(Primitive::Line {
+            x1: x,
+            y1: ty1,
+            x2: x,
+            y2: ty2,
+            stroke: Color::from(&theme.tick_color),
+            stroke_width: computed.tick_stroke_width,
+            stroke_dasharray: None,
+        });
+
+        let label = if layout.log_x2 && matches!(computed.x2_tick_format, TickFormat::Auto) {
+            render_utils::format_log_tick(*tx)
+        } else {
+            computed.x2_tick_format.format(*tx)
+        };
+        scene.add(Primitive::Text {
+            x,
+            y: axis_y - computed.tick_label_margin,
+            content: label,
+            size: computed.tick_size,
+            anchor: TextAnchor::Middle,
+            rotate: None,
+            bold: false,
+            color: None,
+        });
+    }
+
+    if let Some(ref label) = layout.x2_label {
+        let lines = render_utils::wrap_or_single(label, computed.x2_label_wrap);
+        let ls = computed.label_size as f64;
+        let lh = line_height(ls, FontStyle::Regular);
+        let (dx, dy) = layout.x2_label_offset;
+        let base_x = computed.margin_left + computed.plot_width() / 2.0 + dx;
+        let base_y = axis_y - computed.x2_axis_height + ls * 0.5 + dy;
+        for (i, line) in lines.iter().enumerate() {
+            scene.add(Primitive::Text {
+                x: base_x,
+                y: base_y + i as f64 * lh,
+                content: line.clone(),
+                size: computed.label_size,
+                anchor: TextAnchor::Middle,
+                rotate: None,
+                bold: false,
+                color: None,
+            });
+        }
+    }
+}
+
 pub fn add_labels_and_title(scene: &mut Scene, computed: &ComputedLayout, layout: &Layout) {
     let ls = computed.label_size as f64;
     // Real line height for stacking wrapped label lines (1.0em let them overlap).
@@ -885,6 +979,69 @@ pub fn add_labels_and_title(scene: &mut Scene, computed: &ComputedLayout, layout
                 color: None,
             });
         }
+    }
+
+    // Subtitle: a smaller, muted line (or lines) just below the title block.
+    // Positioned with the same real DejaVu metrics as the title above (line
+    // height + ascent); the height reserved in `ComputedLayout::from_layout`
+    // uses the same line height, so the plot is pushed down, not overlapped.
+    if let Some(subtitle) = &layout.subtitle {
+        let lines = render_utils::wrap_or_single(subtitle, computed.subtitle_wrap);
+        let ts = computed.title_size as f64;
+        let sts = computed.subtitle_size as f64;
+        let slh = line_height(sts, FontStyle::Regular);
+        let cx = computed.margin_left + computed.plot_width() / 2.0;
+        // The title occupies `title_lines · line_height(ts)` centred on `title_y`,
+        // so its bottom edge is `title_y + that / 2`. Drop the first subtitle
+        // baseline by its ascent so the line clears the title. `title_lines` is
+        // computed once in `from_layout` and reused here to stay in lockstep with
+        // the height it reserved.
+        let title_block_h = computed.title_lines as f64 * line_height(ts, FontStyle::Regular);
+        let start_y = computed.title_y + title_block_h / 2.0 + ascent(sts, FontStyle::Regular);
+        let color = muted_subtitle_color(scene);
+        for (i, line) in lines.iter().enumerate() {
+            scene.add(Primitive::Text {
+                x: cx,
+                y: start_y + i as f64 * slh,
+                content: line.clone(),
+                size: sts as u32,
+                anchor: TextAnchor::Middle,
+                rotate: None,
+                bold: false,
+                color: Some(color.clone()),
+            });
+        }
+    }
+}
+
+/// The subtitle colour: the effective title colour (the scene's text colour, or
+/// black) blended `SUBTITLE_MUTE` of the way toward the background (the scene's
+/// background, or white), so it reads as a muted version of the title in both
+/// light and dark themes rather than a fixed grey.
+///
+/// Muting needs both colours as solid RGB. If either is a CSS colour kuva can't
+/// resolve (e.g. an `hsl()`/functional-notation theme), fall back to the title's
+/// own colour un-muted — correct hue and readable, just not dimmed — rather than
+/// fabricating a wrong grey.
+pub(crate) fn muted_subtitle_color(scene: &Scene) -> Color {
+    let title_color = scene
+        .text_color
+        .as_deref()
+        .map(Color::from)
+        .unwrap_or(Color::Rgb(0, 0, 0));
+    let background = scene
+        .background_color
+        .as_deref()
+        .map(Color::from)
+        .unwrap_or(Color::Rgb(255, 255, 255));
+    match (&title_color, &background) {
+        (Color::Rgb(tr, tg, tb), Color::Rgb(br, bg, bb)) => {
+            let mix = |from: u8, to: u8| {
+                (from as f64 * (1.0 - SUBTITLE_MUTE) + to as f64 * SUBTITLE_MUTE).round() as u8
+            };
+            Color::Rgb(mix(*tr, *br), mix(*tg, *bg), mix(*tb, *bb))
+        }
+        _ => title_color,
     }
 }
 

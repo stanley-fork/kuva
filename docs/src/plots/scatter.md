@@ -451,3 +451,42 @@ let svg = SvgBackend.render_scene(&render_multiple(plots, layout));
 ### `TrendLine` variants
 
 `Linear` — fits y = mx + b by ordinary least squares.
+
+**See also:** [Line Plot](./line.md) for connected/ordered data, [Hexbin Plot](./hexbin.md) for large-N density, [Joint Plot](./jointplot.md) for scatter with marginal distributions.
+
+---
+
+## CLI
+
+Scatter plot of (x, y) point pairs. Supports multi-series coloring, trend lines, log scale, and [`.parquet` input](../cli/index.md#parquet-input) (like every other subcommand, not just this one).
+
+**Input:** any tabular file with two numeric columns.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--x <COL>` | `0` | X-axis column |
+| `--y <COL>` | `1` | Y-axis column |
+| `--color-by <COL>` | — | Group by this column; each group gets a distinct color |
+| `--color <CSS>` | `steelblue` | Point color (single-series only) |
+| `--size <PX>` | `3.0` | Point radius in pixels |
+| `--trend` | off | Overlay a linear trend line |
+| `--equation` | off | Annotate with regression equation (requires `--trend`) |
+| `--correlation` | off | Annotate with Pearson R² (requires `--trend`) |
+| `--legend` | off | Show legend |
+| `--x-date-format <FMT>` | — | Parse the X column as a date/time (see [Date/time X axis](../cli/index.md#datetime-x-axis-scatter-line)) |
+
+```bash
+kuva scatter measurements.tsv --x time --y value --color steelblue
+
+kuva scatter measurements.tsv --x time --y value \
+    --color-by group --legend --title "Expression over time"
+
+kuva scatter measurements.tsv --x time --y value \
+    --trend --equation --correlation --log-y
+
+kuva scatter prices.tsv --x date --y close --x-date-format "%Y-%m-%d"
+```
+
+---
+
+*See also: [Shared flags](../cli/index.md#shared-flags) — output, appearance, axes, log scale.*

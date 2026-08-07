@@ -70,7 +70,7 @@ pub fn run(args: ViolinArgs) -> Result<(), String> {
     if args.y.len() > 1 {
         let table = DataTable::parse(
             args.input.input.as_deref(),
-            args.input.no_header,
+            args.input.header_mode(),
             args.input.delimiter,
             &args.y,
         )?;
@@ -98,6 +98,23 @@ pub fn run(args: ViolinArgs) -> Result<(), String> {
         if args.horizontal {
             plot = plot.with_horizontal(true);
         }
+
+        #[cfg(feature = "emit_code")]
+        if args.base.emit_code {
+            print!(
+                "{}",
+                crate::emit_code::assemble(
+                    &["kuva::plot::ViolinPlot"],
+                    "Violin",
+                    &[crate::emit_code::emit_violin_plot(&plot)],
+                    &args.base,
+                    Some(&args.axis),
+                    None,
+                )
+            );
+            return Ok(());
+        }
+
         let plots = vec![Plot::Violin(plot)];
         let layout = Layout::auto_from_plots(&plots);
         let layout = apply_base_args(layout, &args.base);
@@ -117,7 +134,7 @@ pub fn run(args: ViolinArgs) -> Result<(), String> {
     ];
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -148,6 +165,22 @@ pub fn run(args: ViolinArgs) -> Result<(), String> {
 
     if args.horizontal {
         plot = plot.with_horizontal(true);
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::ViolinPlot"],
+                "Violin",
+                &[crate::emit_code::emit_violin_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Violin(plot)];

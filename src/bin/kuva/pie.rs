@@ -72,7 +72,7 @@ pub fn run(args: PieArgs) -> Result<(), String> {
     }
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -125,6 +125,22 @@ pub fn run(args: PieArgs) -> Result<(), String> {
 
     for ((label, value), color) in labels.into_iter().zip(values).zip(colors) {
         plot = plot.with_slice(label, value, color);
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::PiePlot", "kuva::plot::PieLabelPosition"],
+                "Pie",
+                &[crate::emit_code::emit_pie_plot(&plot)],
+                &args.base,
+                None,
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Pie(plot)];

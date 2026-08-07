@@ -30,7 +30,7 @@
 //! | Feature      | Description |
 //! |--------------|-------------|
 //! | `png`        | Enables [`RasterBackend`] (direct pixel-buffer rasteriser) and the [`PngBackend`] compatibility shim. |
-//! | `pdf`        | Enables [`PdfBackend`] for vector PDF output via `svg2pdf`. |
+//! | `pdf`        | Enables [`PdfBackend`] for vector PDF output via `krilla`. Requires Rust >= 1.92 (higher than the crate's own MSRV — see CHANGELOG.md). |
 //! | `embed_font` | Enables [`backend::svg::SvgBackend::with_embedded_font`] — bakes DejaVu Sans into the SVG as a base64 `@font-face`. Adds `flate2` as a dependency but does **not** pull in `png` or `pdf`. |
 //! | `cli`        | Enables the `kuva` CLI binary (pulls in `clap`). |
 //! | `full`       | Enables `embed_font` + `png` + `pdf`. |
@@ -73,7 +73,7 @@ pub use backend::png::PngBackend;
 pub use backend::raster::RasterBackend;
 
 #[cfg(feature = "pdf")]
-pub use backend::pdf::PdfBackend;
+pub use backend::pdf::{PageSize, PdfBackend};
 
 pub use render::datetime::{ymd, ymd_hms, DateTimeAxis, DateUnit};
 /// KDE bandwidth via Silverman's rule of thumb: `h = 1.06 σ n^{-1/5}`.
@@ -185,5 +185,24 @@ pub fn render_to_pdf(
     layout: render::layout::Layout,
 ) -> Result<Vec<u8>, String> {
     let scene = render::render::render_multiple(plots, layout);
-    backend::pdf::PdfBackend.render_scene(&scene)
+    backend::pdf::PdfBackend::new().render_scene(&scene)
+}
+
+/// Render several plot collections to a single multi-page PDF — one page per
+/// `(plots, layout)` pair — in one call (requires feature `pdf`).
+///
+/// Each page is sized to its own scene's natural dimensions. For fixed-size
+/// pages (e.g. US Letter), drive [`backend::pdf::PdfBackend`] directly with
+/// [`PdfBackend::with_page_size`](backend::pdf::PdfBackend::with_page_size).
+///
+/// Returns `Err(String)` if `pages` is empty or if any page fails to convert.
+#[cfg(feature = "pdf")]
+pub fn render_to_pdf_multi(
+    pages: Vec<(Vec<render::plots::Plot>, render::layout::Layout)>,
+) -> Result<Vec<u8>, String> {
+    let scenes: Vec<render::render::Scene> = pages
+        .into_iter()
+        .map(|(plots, layout)| render::render::render_multiple(plots, layout))
+        .collect();
+    backend::pdf::PdfBackend::new().render_scenes(&scenes)
 }

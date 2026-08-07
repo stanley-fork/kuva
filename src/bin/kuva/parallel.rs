@@ -61,7 +61,7 @@ pub fn run(args: ParallelArgs) -> Result<(), String> {
     }
     let table = DataTable::parse(
         args.input.input.as_deref(),
-        args.input.no_header,
+        args.input.header_mode(),
         args.input.delimiter,
         &proj,
     )?;
@@ -150,6 +150,22 @@ pub fn run(args: ParallelArgs) -> Result<(), String> {
                 .collect();
             plot = plot.with_row(values?);
         }
+    }
+
+    #[cfg(feature = "emit_code")]
+    if args.base.emit_code {
+        print!(
+            "{}",
+            crate::emit_code::assemble(
+                &["kuva::plot::ParallelPlot"],
+                "Parallel",
+                &[crate::emit_code::emit_parallel_plot(&plot)],
+                &args.base,
+                Some(&args.axis),
+                None,
+            )
+        );
+        return Ok(());
     }
 
     let plots = vec![Plot::Parallel(plot)];

@@ -32,9 +32,40 @@ pub struct InputArgs {
     #[arg(long)]
     pub no_header: bool,
 
+    /// Treat the first row as a header even if it looks like data (e.g. all-numeric
+    /// column names). Overrides the auto-detection.
+    #[arg(long, conflicts_with = "no_header")]
+    pub header: bool,
+
     /// Override the field delimiter (default: auto-detect from extension or content).
     #[arg(long, short = 'd')]
     pub delimiter: Option<char>,
+}
+
+impl InputArgs {
+    /// Resolve the `--header` / `--no-header` flags to a `HeaderMode`.
+    /// clap guarantees the two flags are mutually exclusive.
+    pub fn header_mode(&self) -> HeaderMode {
+        if self.header {
+            HeaderMode::Header
+        } else if self.no_header {
+            HeaderMode::NoHeader
+        } else {
+            HeaderMode::Auto
+        }
+    }
+}
+
+/// How the first row of a CSV/TSV input should be treated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeaderMode {
+    /// Auto-detect whether the first row is a header (the default).
+    #[default]
+    Auto,
+    /// Force the first row to be treated as a header.
+    Header,
+    /// Force the first row to be treated as data.
+    NoHeader,
 }
 
 /// Parsed tabular data.
@@ -60,7 +91,7 @@ impl DataTable {
     #[cfg_attr(not(feature = "parquet"), allow(unused_variables))]
     pub fn parse(
         input: Option<&Path>,
-        no_header: bool,
+        header: HeaderMode,
         delim_override: Option<char>,
         project: &[ColSpec],
     ) -> Result<Self, String> {
@@ -72,8 +103,8 @@ impl DataTable {
                     .map(|s| s.eq_ignore_ascii_case("parquet"))
                     .unwrap_or(false)
                 {
-                    if no_header {
-                        eprintln!("warning: --no-header is ignored for parquet input");
+                    if header != HeaderMode::Auto {
+                        eprintln!("warning: --header/--no-header is ignored for parquet input");
                     }
                     if delim_override.is_some() {
                         eprintln!("warning: --delimiter is ignored for parquet input");
@@ -84,7 +115,7 @@ impl DataTable {
                 }
                 let content = std::fs::read_to_string(p)
                     .map_err(|e| format!("Cannot read {}: {e}", p.display()))?;
-                Self::parse_str(&content, input, no_header, delim_override)
+                Self::parse_str(&content, input, header, delim_override)
             }
             _ => {
                 let mut buf = Vec::new();
@@ -94,8 +125,8 @@ impl DataTable {
 
                 #[cfg(feature = "parquet")]
                 if sniff_parquet(&buf) {
-                    if no_header {
-                        eprintln!("warning: --no-header is ignored for parquet input");
+                    if header != HeaderMode::Auto {
+                        eprintln!("warning: --header/--no-header is ignored for parquet input");
                     }
                     if delim_override.is_some() {
                         eprintln!("warning: --delimiter is ignored for parquet input");
@@ -105,7 +136,7 @@ impl DataTable {
 
                 let content =
                     String::from_utf8(buf).map_err(|e| format!("stdin is not valid UTF-8: {e}"))?;
-                Self::parse_str(&content, None, no_header, delim_override)
+                Self::parse_str(&content, None, header, delim_override)
             }
         }
     }
@@ -113,7 +144,7 @@ impl DataTable {
     pub(crate) fn parse_str(
         content: &str,
         input: Option<&Path>,
-        no_header: bool,
+        header: HeaderMode,
         delim_override: Option<char>,
     ) -> Result<Self, String> {
         let delim = if let Some(d) = delim_override {
@@ -146,13 +177,10 @@ impl DataTable {
             return Err("Input is empty".to_string());
         }
 
-        let has_header = if no_header {
-            false
-        } else {
-            all_records[0]
-                .first()
-                .map(|f| f.parse::<f64>().is_err())
-                .unwrap_or(false)
+        let has_header = match header {
+            HeaderMode::NoHeader => false,
+            HeaderMode::Header => true,
+            HeaderMode::Auto => detect_header(&all_records),
         };
 
         let (header, rows) = if has_header {
@@ -173,7 +201,7 @@ impl DataTable {
                 let header = self.header.as_ref().ok_or_else(|| {
                     format!(
                         "Column name '{name}' requested but no header row was detected. \
-                             Use --no-header to force treating the first row as data, or \
+                             Use --header to force treating the first row as a header, or \
                              use a 0-based integer index instead."
                     )
                 })?;
@@ -200,6 +228,28 @@ impl DataTable {
                         s.parse::<f64>()
                             .map_err(|_| format!("Row {row_i}: cannot parse '{s}' as a number"))
                     })
+            })
+            .collect()
+    }
+
+    /// Extract a column as f64 Unix timestamps (seconds), parsing each cell with
+    /// `format` (a chrono strftime pattern, e.g. `"%Y-%m-%d"` or `"%m/%d/%Y %H:%M"`).
+    ///
+    /// Tries a full datetime parse first, falling back to a date-only parse at
+    /// midnight UTC when `format` has no time component — the same UTC-midnight
+    /// convention as `kuva::render::datetime::ymd`.
+    pub fn col_date_f64(&self, col: &ColSpec, format: &str) -> Result<Vec<f64>, String> {
+        let idx = self.resolve(col)?;
+        self.rows
+            .iter()
+            .enumerate()
+            .map(|(row_i, row)| {
+                let s = row
+                    .get(idx)
+                    .ok_or_else(|| format!("Row {row_i}: no column at index {idx}"))?;
+                parse_date_to_timestamp(s, format).ok_or_else(|| {
+                    format!("Row {row_i}: cannot parse '{s}' as a date/time with format '{format}'")
+                })
             })
             .collect()
     }
@@ -263,6 +313,75 @@ impl DataTable {
             })
             .collect())
     }
+}
+
+/// Parse `s` as a date/time in `format`, returning a Unix timestamp (seconds).
+/// Tries a full datetime parse first; falls back to a date-only parse anchored
+/// at midnight UTC (so a pure-date format like `"%Y-%m-%d"` works without the
+/// caller needing to add a fake time-of-day to the format string).
+fn parse_date_to_timestamp(s: &str, format: &str) -> Option<f64> {
+    use chrono::{NaiveDate, NaiveDateTime};
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, format) {
+        return Some(dt.and_utc().timestamp() as f64);
+    }
+    let date = NaiveDate::parse_from_str(s, format).ok()?;
+    Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp() as f64)
+}
+
+/// Auto-detect whether the first row of a parsed table is a header.
+///
+/// Two independent signals, either of which marks row 0 as a header:
+///  1. The first cell of row 0 is non-numeric (the long-standing heuristic).
+///  2. Some column is non-numeric in row 0 but numeric in every non-empty cell
+///     below it, i.e. a text label sitting atop an otherwise numeric column.
+///
+/// Signal 2 catches cases the first-cell check alone misses, e.g. a leading
+/// numeric key column masking a header (`5,data` / `0,1` / `1,2` — issue #111).
+/// The rule is a strict superset of the old first-cell check, so it never
+/// *removes* a detection the old behaviour made; it only adds new ones.
+/// Genuinely ambiguous inputs (all-numeric headers, header-less all-text data)
+/// are what the explicit `--header` / `--no-header` flags are for.
+fn detect_header(records: &[Vec<String>]) -> bool {
+    let first = match records.first() {
+        Some(r) => r,
+        None => return false,
+    };
+
+    // Signal 1: leading cell is non-numeric.
+    if first
+        .first()
+        .map(|f| f.parse::<f64>().is_err())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    // Signal 2: a non-numeric label atop an all-numeric column.
+    let data = &records[1..];
+    for (col, cell) in first.iter().enumerate() {
+        if cell.parse::<f64>().is_ok() {
+            continue; // numeric header cell carries no signal
+        }
+        let mut numeric = 0usize;
+        let mut nonempty = 0usize;
+        for row in data {
+            if let Some(v) = row.get(col) {
+                let v = v.trim();
+                if v.is_empty() {
+                    continue;
+                }
+                nonempty += 1;
+                if v.parse::<f64>().is_ok() {
+                    numeric += 1;
+                }
+            }
+        }
+        if nonempty > 0 && numeric == nonempty {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn sniff_delim(content: &str) -> char {
@@ -576,6 +695,80 @@ pub fn parse_colormap(name: &str) -> kuva::plot::ColorMap {
     }
 }
 
+#[cfg(test)]
+mod header_tests {
+    use super::*;
+
+    fn parse(content: &str, mode: HeaderMode) -> DataTable {
+        DataTable::parse_str(content, None, mode, Some(',')).unwrap()
+    }
+
+    #[test]
+    fn auto_detects_header_masked_by_numeric_key_column() {
+        // issue #111: leading numeric column hid the header from the old
+        // first-cell-only check.
+        let t = parse("5,data\n0,1\n1,2\n", HeaderMode::Auto);
+        assert_eq!(t.header, Some(vec!["5".into(), "data".into()]));
+        assert_eq!(t.rows.len(), 2);
+    }
+
+    #[test]
+    fn auto_detects_standard_header() {
+        let t = parse("x,y\n1,2\n3,4\n", HeaderMode::Auto);
+        assert_eq!(t.header, Some(vec!["x".into(), "y".into()]));
+        assert_eq!(t.rows.len(), 2);
+    }
+
+    #[test]
+    fn auto_detects_all_text_header() {
+        // First cell non-numeric -> header, unchanged from the old behaviour.
+        let t = parse(
+            "country,region\nUSA,North\nCanada,North\n",
+            HeaderMode::Auto,
+        );
+        assert_eq!(t.header, Some(vec!["country".into(), "region".into()]));
+        assert_eq!(t.rows.len(), 2);
+    }
+
+    #[test]
+    fn auto_keeps_numeric_headerless_data() {
+        let t = parse("0,1\n1,2\n2,3\n", HeaderMode::Auto);
+        assert_eq!(t.header, None);
+        assert_eq!(t.rows.len(), 3);
+    }
+
+    #[test]
+    fn auto_keeps_categorical_headerless_data() {
+        // A text column that is text all the way down is not a header signal.
+        let t = parse("1,foo\n2,bar\n3,baz\n", HeaderMode::Auto);
+        assert_eq!(t.header, None);
+        assert_eq!(t.rows.len(), 3);
+    }
+
+    #[test]
+    fn force_header_on_all_numeric_row() {
+        let t = parse("2024,2025\n1,2\n3,4\n", HeaderMode::Header);
+        assert_eq!(t.header, Some(vec!["2024".into(), "2025".into()]));
+        assert_eq!(t.rows.len(), 2);
+    }
+
+    #[test]
+    fn force_no_header_on_header_looking_row() {
+        let t = parse("x,y\n1,2\n", HeaderMode::NoHeader);
+        assert_eq!(t.header, None);
+        assert_eq!(t.rows.len(), 2);
+    }
+
+    #[test]
+    fn single_row_numeric_is_data() {
+        let t = parse("5,data\n", HeaderMode::Auto);
+        // No data rows to compare against and the first cell is numeric, so the
+        // lone row stays as data.
+        assert_eq!(t.header, None);
+        assert_eq!(t.rows.len(), 1);
+    }
+}
+
 #[cfg(all(test, feature = "parquet"))]
 mod tests {
     use super::*;
@@ -625,7 +818,7 @@ mod tests {
             ColSpec::Name("a".to_string()),
             ColSpec::Name("b".to_string()),
         ];
-        let table = DataTable::parse(Some(&tmp), false, None, &project).unwrap();
+        let table = DataTable::parse(Some(&tmp), HeaderMode::Auto, None, &project).unwrap();
         std::fs::remove_file(&tmp).ok();
 
         let a = table.col_f64(&ColSpec::Name("a".to_string())).unwrap();
