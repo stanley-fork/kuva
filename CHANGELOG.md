@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-07
+
 ### Added
 
 - **PDF backend migrated from `svg2pdf` to `krilla`/`krilla-svg`, plus multi-page output** — `svg2pdf` was archived upstream by its own maintainer as unmaintained, recommending `krilla`/`krilla-svg` (same author, used by Typst) as the successor. `PdfBackend::render_scenes(&[Scene])` and the one-shot `render_to_pdf_multi(pages)` render one kuva canvas per PDF page into a single document (like R's `pdf()` device, e.g. for fgbio/Picard-style reports); nothing is rasterized. By default each page takes its scene's natural size; `PdfBackend::with_page_size(PageSize::inches(11.0, 8.5))` instead coerces every page to a fixed size, scaling each scene proportionally to fit and centering it, with the scene's own background color filling the letterbox margin. **The `pdf` feature now requires Rust >= 1.92** (krilla's MSRV) — higher than kuva's own crate-level `rust-version` (kept at 1.87 deliberately; see README.md's note on why), tracked separately as `[package.metadata.msrv] pdf_feature` in `Cargo.toml`. CI's `msrv` job now builds `cli,png,embed_font` (not `cli,full`) against `rust-version`, plus a new `pdf-msrv` job that builds `cli,full` against `pdf_feature` specifically — the pre-existing `msrv` job would otherwise have silently asserted a false claim (that `full` builds at 1.87) forever, since nothing else exercises that combination at the older toolchain. `PdfBackend` is no longer a zero-sized unit struct usable as a bare value (`PdfBackend.render_scene(...)`) — use `PdfBackend::new()`.
@@ -441,7 +443,8 @@ Initial release of kuva.
 
 ---
 
-[Unreleased]: https://github.com/Psy-Fer/kuva/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Psy-Fer/kuva/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Psy-Fer/kuva/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Psy-Fer/kuva/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Psy-Fer/kuva/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Psy-Fer/kuva/compare/v0.1.6...v0.2.0

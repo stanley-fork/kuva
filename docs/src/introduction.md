@@ -34,7 +34,7 @@ std::fs::write("my_plot.svg", svg).unwrap();
 
 ## Prelude
 
-`use kuva::prelude::*` brings all 60 plot structs, `Plot`, `Layout`, `Figure`, `Theme`, `Palette`, `render_to_svg`, and everything else you typically need into scope in one line.
+`use kuva::prelude::*` brings all 64 plot structs, `Plot`, `Layout`, `Figure`, `Theme`, `Palette`, `render_to_svg`, and everything else you typically need into scope in one line.
 
 Every plot struct implements `Into<Plot>`, so you can write `plot.into()` instead of `Plot::Scatter(plot)`.
 
